@@ -120,6 +120,16 @@ final class SweepTests: XCTestCase {
         searching.pendingLine = 19
         try SweepSupport.waitUntilLoaded(searching)
 
+        // E4 screen 8: replace with a preview of one file's changes.
+        let replacing = try SweepSupport.model(opening: repo)
+        replacing.showSearch()
+        replacing.search.query.text = "isSelected"
+        replacing.search.isReplaceOpen = true
+        replacing.search.replacement = "isActive"
+        replacing.rerunSearch()
+        SweepSupport.spin(until: 5) { if case .done = replacing.search.status { true } else { false } }
+        replacing.search.previewPath = "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift"
+
         // Screen 5: welcome, with recents (the sample repo has a worktree).
         let docs = MemoryDocs()
         let welcomeStore = ForgeStore(documents: docs)
@@ -143,6 +153,7 @@ final class SweepTests: XCTestCase {
                 ("e31-conflict", conflicted),
                 ("e32-settings-applied", tuned),
                 ("e41-search", searching),
+                ("e42-replace", replacing),
             ]
             for (name, model) in screens {
                 // The sweep window never becomes key, so an inline name field loses focus right after it shows

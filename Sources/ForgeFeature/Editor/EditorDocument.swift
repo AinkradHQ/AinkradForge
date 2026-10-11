@@ -76,6 +76,15 @@ final class EditorDocument {
 
     func moved(to url: URL) { self.url = url }
 
+    /// Replaces the whole buffer (a search-and-replace): unsaved, and the editor rebuilt so its syntax tree
+    /// re-parses. Saving writes it in the file's own encoding and line endings.
+    func replaceText(_ text: String) {
+        guard state == .ready, text != storage.string else { return }
+        storage.setAttributedString(NSAttributedString(string: text))
+        revision += 1
+        isDirty = true
+    }
+
     /// Called by the editor on every change.
     func didEdit() { isDirty = true }
 

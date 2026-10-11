@@ -17,11 +17,27 @@ struct SearchPanel: View {
             AinkradSearchField(text: $search.query.text, placeholder: "Search")
                 .focused($queryFocused)
             HStack(spacing: skin.size.s6) {
+                AinkradButton(
+                    title: "Replace", style: .ghost, icon: search.isReplaceOpen ? "chevron.down" : "chevron.right"
+                ) { search.isReplaceOpen.toggle() }
+                .fixedSize()
                 Spacer(minLength: 0)
                 // Symbols, not "Aa"/"ab": Neon upper-cases labels, which would make the two read the same.
                 AinkradToggleButton(isOn: $search.query.matchCase, systemName: "textformat").help("Match case")
                 AinkradToggleButton(isOn: $search.query.wholeWord, systemName: "text.word.spacing").help("Whole word")
                 AinkradToggleButton(isOn: $search.query.regex, systemName: "asterisk").help("Regular expression")
+            }
+            if search.isReplaceOpen {
+                GlassField(label: "replace", text: $search.replacement, placeholder: search.query.regex ? "$1 for a group" : "with")
+                HStack(spacing: skin.size.s6) {
+                    AinkradToggleButton(isOn: $search.preserveCase, title: "Preserve case")
+                        .help("isSelected → isActive, IsSelected → IsActive")
+                    Spacer(minLength: 0)
+                    AinkradButton(title: "Replace All", style: .primary) { search.confirmingReplaceAll = true }
+                        .fixedSize()
+                        .disabled(search.results.isEmpty)
+                        .help("Replace every match below (⌥⌘↵)")
+                }
             }
             GlassField(label: "include", text: $search.include, placeholder: "Sources/**, *.swift")
             GlassField(label: "exclude", text: $search.exclude, placeholder: ".build, *.min.js")
@@ -64,13 +80,28 @@ struct SearchPanel: View {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(search.results) { file in
                     let folded = search.collapsed.contains(file.path)
-                    ResultFileRow(path: file.path, count: file.matches.count, isFolded: folded) {
+                    ResultFileRow(
+                        path: file.path, count: file.matches.count, isFolded: folded,
+                        // While previewing a replace, the file is what is selected — not each of its lines,
+                        // whose strike-through would vanish under a solid selection fill.
+                        isSelected: search.isReplaceOpen && search.previewPath == file.path,
+                        onReplace: search.isReplaceOpen ? { model.replace(in: file.path) } : nil
+                    ) {
                         if folded { search.collapsed.remove(file.path) } else { search.collapsed.insert(file.path) }
                     }
                     if !folded {
                         ForEach(file.matches) { match in
-                            ResultLineRow(match: match, isSelected: model.tabs.active == file.path && model.activeDocument?.cursor.line == match.line) {
-                                open(file.path, line: match.line, pinned: false)
+                            ResultLineRow(
+                                match: match,
+                                isSelected: !search.isReplaceOpen
+                                    && model.tabs.active == file.path && model.activeDocument?.cursor.line == match.line,
+                                replacement: replacementText
+                            ) {
+                                if search.isReplaceOpen {
+                                    search.previewPath = file.path
+                                } else {
+                                    open(file.path, line: match.line, pinned: false)
+                                }
                             } onDoubleClick: {
                                 open(file.path, line: match.line, pinned: true)
                             }
@@ -80,6 +111,18 @@ struct SearchPanel: View {
             }
         }
         .scrollIndicators(.never)
+    }
+
+    /// While Replace is open: what a match on a line becomes (capture groups and preserve case applied).
+    private var replacementText: ((String, NSRange) -> String)? {
+        guard search.isReplaceOpen, let regex = try? search.query.compile() else { return nil }
+        let template = search.query.regex ? search.replacement : NSRegularExpression.escapedTemplate(for: search.replacement)
+        let preserve = search.preserveCase
+        return { line, range in
+            guard let match = regex.firstMatch(in: line, range: range) else { return search.replacement }
+            let piece = regex.replacementString(for: match, in: line, offset: 0, template: template)
+            return preserve ? TextSearch.adaptCase(piece, to: (line as NSString).substring(with: range)) : piece
+        }
     }
 
     private func open(_ path: String, line: Int, pinned: Bool) {
@@ -92,6 +135,9 @@ private struct ResultFileRow: View {
     let path: String
     let count: Int
     let isFolded: Bool
+    let isSelected: Bool
+    /// Replace in this file (only while Replace is open).
+    let onReplace: (() -> Void)?
     let toggle: () -> Void
     @State private var isHovered = false
     @Environment(\.ainkradSkin) private var skin
@@ -117,11 +163,14 @@ private struct ResultFileRow: View {
                 .lineLimit(1)
                 .truncationMode(.head)
             Spacer(minLength: skin.size.s4)
+            if let onReplace, isHovered {
+                AinkradIconButton(systemName: "arrow.left.arrow.right", size: skin.size.s18, tooltip: "Replace in this file", action: onReplace)
+            }
             AinkradBadge(text: "\(count)")
         }
         .padding(.vertical, skin.size.s4)
         .padding(.horizontal, skin.size.s6)
-        .ainkradRowBackground(isSelected: false, isHovered: isHovered)
+        .ainkradRowBackground(isSelected: isSelected, isHovered: isHovered)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .onTapGesture(perform: toggle)
@@ -132,6 +181,8 @@ private struct ResultFileRow: View {
 private struct ResultLineRow: View {
     let match: LineMatch
     let isSelected: Bool
+    /// While Replace is open: each match is shown struck through, followed by what it becomes.
+    let replacement: ((String, NSRange) -> String)?
     let onClick: () -> Void
     let onDoubleClick: () -> Void
     @State private var isHovered = false
@@ -171,9 +222,20 @@ private struct ResultLineRow: View {
         for range in match.ranges where range.location >= cursor {
             out += plain(ns.substring(with: NSRange(location: cursor, length: range.location - cursor)))
             var hit = AttributedString(ns.substring(with: range))
-            hit.foregroundColor = theme.foreground
-            hit.backgroundColor = status.warning.opacity(skin.opacity.o30)
-            out += hit
+            if let replacement {
+                hit.foregroundColor = status.danger
+                hit.strikethroughStyle = .single
+                hit.backgroundColor = status.danger.opacity(skin.opacity.o16)
+                var new = AttributedString(replacement(match.text, range))
+                new.foregroundColor = status.success
+                new.backgroundColor = status.success.opacity(skin.opacity.o16)
+                out += hit
+                out += new
+            } else {
+                hit.foregroundColor = theme.foreground
+                hit.backgroundColor = status.warning.opacity(skin.opacity.o30)
+                out += hit
+            }
             cursor = range.location + range.length
         }
         out += plain(ns.substring(from: min(cursor, ns.length)))

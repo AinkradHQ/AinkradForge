@@ -11,13 +11,17 @@ struct EditorArea: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            let layout = model.stacked ? AnyLayout(VStackLayout(spacing: skin.size.s10)) : AnyLayout(HStackLayout(spacing: skin.size.s10))
-            layout {
-                ForEach(model.panes.indices, id: \.self) { index in
-                    PaneView(model: model, index: index, palette: palette)
+            if let preview = model.search.previewPath, model.search.isReplaceOpen, model.sideTab == .search {
+                ReplacePreview(model: model, path: preview)
+            } else {
+                let layout = model.stacked ? AnyLayout(VStackLayout(spacing: skin.size.s10)) : AnyLayout(HStackLayout(spacing: skin.size.s10))
+                layout {
+                    ForEach(model.panes.indices, id: \.self) { index in
+                        PaneView(model: model, index: index, palette: palette)
+                    }
                 }
+                .padding(.horizontal, skin.size.s14)
             }
-            .padding(.horizontal, skin.size.s14)
             StatusRow(model: model, workspace: workspace)
         }
     }
