@@ -64,13 +64,36 @@ public struct EditorColors: Equatable, Sendable {
     }
 }
 
+/// The user's editor settings.
+public struct EditorOptions: Equatable, Sendable {
+    public var fontSize: Double
+    public var tabWidth: Int
+    /// Tab inserts spaces (`tabWidth` of them) rather than a tab character.
+    public var insertSpaces: Bool
+    public var wrapLines: Bool
+    public var showMinimap: Bool
+    public var showInvisibles: Bool
+
+    public init(
+        fontSize: Double = 13, tabWidth: Int = 4, insertSpaces: Bool = true, wrapLines: Bool = false,
+        showMinimap: Bool = false, showInvisibles: Bool = false
+    ) {
+        self.fontSize = fontSize
+        self.tabWidth = tabWidth
+        self.insertSpaces = insertSpaces
+        self.wrapLines = wrapLines
+        self.showMinimap = showMinimap
+        self.showInvisibles = showInvisibles
+    }
+}
+
 /// Edits `storage` in place (a large file is never copied per keystroke). Transparent, so the window's
 /// surface — Neon fill or Liquid Glass — shows through.
 public struct ForgeCodeEditor: View {
     let storage: NSTextStorage
     let language: EditorLanguage
     let colors: EditorColors
-    let fontSize: CGFloat
+    let options: EditorOptions
     let insets: NSEdgeInsets
     let onEdit: () -> Void
     /// 1-based line and column of the first caret.
@@ -82,7 +105,7 @@ public struct ForgeCodeEditor: View {
     let onFocusedCaret: () -> Void
 
     public init(
-        storage: NSTextStorage, language: EditorLanguage, colors: EditorColors, fontSize: CGFloat,
+        storage: NSTextStorage, language: EditorLanguage, colors: EditorColors, options: EditorOptions = EditorOptions(),
         insets: NSEdgeInsets, onEdit: @escaping () -> Void, onCursor: @escaping (Int, Int) -> Void,
         goToLine: Int? = nil, onGoToLineHandled: @escaping () -> Void = {},
         onFocusedCaret: @escaping () -> Void = {}
@@ -90,7 +113,7 @@ public struct ForgeCodeEditor: View {
         self.storage = storage
         self.language = language
         self.colors = colors
-        self.fontSize = fontSize
+        self.options = options
         self.insets = insets
         self.onEdit = onEdit
         self.onCursor = onCursor
@@ -102,7 +125,7 @@ public struct ForgeCodeEditor: View {
     public var body: AnyView {
         AnyView(
             EditorHost(
-                storage: storage, language: language, colors: colors, fontSize: fontSize, insets: insets,
+                storage: storage, language: language, colors: colors, options: options, insets: insets,
                 onEdit: onEdit, onCursor: onCursor, goToLine: goToLine, onGoToLineHandled: onGoToLineHandled,
                 onFocusedCaret: onFocusedCaret))
     }
@@ -112,7 +135,7 @@ struct EditorHost: View {
     let storage: NSTextStorage
     let language: EditorLanguage
     let colors: EditorColors
-    let fontSize: CGFloat
+    let options: EditorOptions
     let insets: NSEdgeInsets
     let onEdit: () -> Void
     /// 1-based line and column of the first caret.
@@ -129,10 +152,15 @@ struct EditorHost: View {
             language: language.code,
             configuration: SourceEditorConfiguration(
                 appearance: .init(
-                    theme: colors.theme, font: .monospacedSystemFont(ofSize: fontSize, weight: .regular),
-                    lineHeightMultiple: 1.45, wrapLines: false),
+                    theme: colors.theme, font: .monospacedSystemFont(ofSize: options.fontSize, weight: .regular),
+                    lineHeightMultiple: 1.45, wrapLines: options.wrapLines, tabWidth: options.tabWidth),
+                behavior: .init(indentOption: options.insertSpaces ? .spaces(count: options.tabWidth) : .tab),
                 layout: .init(contentInsets: insets),
-                peripherals: .init(showMinimap: false)),
+                peripherals: .init(
+                    showMinimap: options.showMinimap,
+                    invisibleCharactersConfiguration: options.showInvisibles
+                        ? InvisibleCharactersConfiguration(showSpaces: true, showTabs: true, showLineEndings: false)
+                        : .empty)),
             state: $state,
             coordinators: [coordinator]
         )

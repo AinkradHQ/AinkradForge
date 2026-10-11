@@ -1,4 +1,5 @@
 import AinkradAppKit
+import ForgeEditor
 import SwiftUI
 
 /// One or two editor panes and the status bar — one surface, no rules.
@@ -50,7 +51,7 @@ private struct PaneView: View {
                                 .padding(.bottom, skin.size.s6)
                         }
                         DocumentView(
-                            document: document, palette: palette,
+                            document: document, palette: palette, options: model.editorOptions,
                             goToLine: model.activePane == index ? model.pendingLine : nil,
                             onGoToLineHandled: { model.pendingLine = nil },
                             onCaret: { model.focus(pane: index) }
@@ -84,6 +85,7 @@ private struct PaneView: View {
 private struct DocumentView: View {
     let document: EditorDocument
     let palette: HostTerminalPalette?
+    let options: EditorOptions
     let goToLine: Int?
     let onGoToLineHandled: () -> Void
     /// The caret moved here — this pane is the one being worked in.
@@ -97,8 +99,8 @@ private struct DocumentView: View {
             AinkradEmptyState(icon: "doc.questionmark", title: "Can't show this file", message: why)
         case .ready:
             CodeEditor(
-                document: document, palette: palette, goToLine: goToLine, onGoToLineHandled: onGoToLineHandled,
-                onCaret: onCaret, onEdit: onEdit)
+                document: document, palette: palette, options: options, goToLine: goToLine,
+                onGoToLineHandled: onGoToLineHandled, onCaret: onCaret, onEdit: onEdit)
         }
     }
 }

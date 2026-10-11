@@ -99,6 +99,16 @@ final class SweepTests: XCTestCase {
         try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(5)], ofItemAtPath: crlf.path)
         SweepSupport.spin(until: 3) { conflicted.activeDocument?.conflict != nil }
 
+        // E3: editor settings applied — larger font, minimap and invisibles on.
+        let tuned = try SweepSupport.model(opening: repo)
+        var settings = EditorSettings()
+        settings.fontSize = 15
+        settings.showMinimap = true
+        settings.showInvisibles = true
+        tuned.editorSettings = settings
+        tuned.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift", pinned: true)
+        try SweepSupport.waitUntilLoaded(tuned)
+
         // Screen 5: welcome, with recents (the sample repo has a worktree).
         let docs = MemoryDocs()
         let welcomeStore = ForgeStore(documents: docs)
@@ -120,6 +130,7 @@ final class SweepTests: XCTestCase {
                 ("e23-split", split), ("e23-split-stacked", stacked),
                 ("e25-rename", renaming), ("e25-new-file", creating),
                 ("e31-conflict", conflicted),
+                ("e32-settings-applied", tuned),
             ]
             for (name, model) in screens {
                 // The sweep window never becomes key, so an inline name field loses focus right after it shows
