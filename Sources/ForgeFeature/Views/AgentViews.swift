@@ -97,3 +97,78 @@ struct ChangeChip: View {
         .help(keys.map { "\(title) (\($0))" } ?? title)
     }
 }
+
+/// Every change made from outside Forge since the last review, file by file; each change ticked (kept) —
+/// untick to undo it. Done undoes the unticked ones and clears the review.
+struct ReviewAllPane: View {
+    let model: ForgeModel
+    @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
+    @Environment(\.ainkradStatusColors) private var status
+
+    var body: some View {
+        let entries = model.reviewEntries
+        let changes = entries.reduce(0) { $0 + $1.diff.hunks.count }
+        let unticked = model.agent.unticked.values.reduce(0) { $0 + $1.count }
+        VStack(alignment: .leading, spacing: skin.size.s10) {
+            HStack(spacing: skin.size.s8) {
+                VStack(alignment: .leading, spacing: skin.size.s2) {
+                    Text("Changes outside Forge").font(skin.font(AinkradFontToken(sizeKey: "t14", weight: "semibold")))
+                    Text("\(entries.count) file\(entries.count == 1 ? "" : "s") · \(changes) change\(changes == 1 ? "" : "s")"
+                        + (unticked > 0 ? " · \(unticked) unticked — Done undoes \(unticked == 1 ? "it" : "them")" : ""))
+                        .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
+                        .foregroundStyle(skin.color(skin.text.muted))
+                }
+                Spacer(minLength: skin.size.s8)
+                AinkradButton(title: "Undo All", style: .secondary) { model.finishReview(undoAll: true) }.fixedSize()
+                AinkradButton(title: "Keep All", style: .secondary) { model.keepAllOutside() }.fixedSize()
+                AinkradButton(title: "Done", style: .primary) { model.finishReview() }.fixedSize()
+            }
+            if entries.isEmpty {
+                AinkradEmptyState(icon: "checkmark.circle", title: "Nothing to review", message: "No file has changed from outside Forge since the last review.")
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: skin.size.s14) {
+                    ForEach(entries, id: \.path) { entry in
+                        VStack(alignment: .leading, spacing: skin.size.s6) {
+                            if entry.isNew || entry.isDeleted {
+                                Text(entry.isNew ? "\(entry.path) — new file" : "\(entry.path) — deleted")
+                                    .font(skin.font(AinkradFontToken(sizeKey: "t12", weight: "medium")))
+                                    .foregroundStyle(entry.isNew ? status.success : status.danger)
+                            }
+                            AinkradDiffReview(
+                                fileDiff: entry.diff,
+                                rejectedHunkIDs: Binding(
+                                    get: { model.agent.unticked[entry.path] ?? [] },
+                                    set: { model.agent.unticked[entry.path] = $0 }))
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .padding(skin.size.s16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(RoundedRectangle(cornerRadius: skin.size.s10).fill(theme.surface.opacity(skin.opacity.o45)))
+        .padding(.horizontal, skin.size.s14)
+        .padding(.top, skin.size.s12)
+    }
+}
+
+/// "✦ 5 changed outside" — in the status bar and atop the Changes tab; opens Review All.
+struct OutsideChangesButton: View {
+    let model: ForgeModel
+    @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
+
+    var body: some View {
+        let count = model.agent.count
+        if count > 0 {
+            Label("\(count) changed outside", systemImage: "sparkle")
+                .foregroundStyle(theme.accentSecondary)
+                .contentShape(Rectangle())
+                .onTapGesture { model.agent.reviewingAll = true }
+                .help("Review changes made outside Forge")
+        }
+    }
+}
