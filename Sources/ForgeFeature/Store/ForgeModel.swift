@@ -176,7 +176,7 @@ final class ForgeModel {
         recentFiles = saved.recentFiles ?? []
         store.noteOpened(key)
         search.clear()
-        languages.begin(root: workspace.root)
+        beginLanguages(root: workspace.root)
         await workspace.refresh()
         await tasks.refresh(root: workspace.root, files: workspace.files)
         watcher = FolderWatcher(root: workspace.root) { [weak self] paths in

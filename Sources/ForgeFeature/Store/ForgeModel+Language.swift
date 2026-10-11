@@ -24,6 +24,22 @@ struct SignatureInfo: Equatable {
 
 /// Language-server requests from the editor: hover, go to definition, find references.
 extension ForgeModel {
+    /// Starts the window's language servers for a workspace, with the paths set in settings.
+    func beginLanguages(root: URL) {
+        languages.overrides = editorSettings.serverPaths
+        languages.begin(root: root)
+    }
+
+    /// Settings changed a server's path: it restarts from there, with the open files that need it.
+    func setServerPath(_ specID: String, _ path: String) {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        editorSettings.serverPaths[specID] = trimmed.isEmpty ? nil : (trimmed as NSString).expandingTildeInPath
+        languages.setOverride(specID, path: editorSettings.serverPaths[specID])
+        for (file, document) in documents where document.state == .ready && LanguageRegistry.server(for: file)?.0.id == specID {
+            languages.opened(path: file, text: document.storage.string)
+        }
+    }
+
     /// The pointer rested on `offset` in `path` (or stopped resting, with nil).
     func hover(pane: Int, path: String, at hit: (offset: Int, rect: CGRect)?) async {
         hoverRequest += 1

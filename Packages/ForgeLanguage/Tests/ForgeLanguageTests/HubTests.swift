@@ -158,6 +158,24 @@ struct HubTests {
         #expect(Snippet.plain("cost: \\$${1:price}") == "cost: $price")
     }
 
+    /// A path set in settings takes over at once: the running server stops and the next open uses the new place.
+    @Test func aNewPathTakesOverAtOnce() async throws {
+        guard ShellEnvironment.locate("sourcekit-lsp") != nil else { return }
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+        let hub = LanguageHub()
+        hub.begin(root: root)
+        hub.opened(path: "main.swift", text: "let a = 1\n")
+        #expect(hub.statuses["sourcekit-lsp"] == .starting)
+        hub.setOverride("sourcekit-lsp", path: "/nonexistent/sourcekit-lsp")
+        #expect(hub.statuses["sourcekit-lsp"] == nil)
+        hub.opened(path: "main.swift", text: "let a = 1\n")
+        #expect(hub.statuses["sourcekit-lsp"] == .notInstalled)
+        hub.setOverride("sourcekit-lsp", path: nil)
+        hub.opened(path: "main.swift", text: "let a = 1\n")
+        #expect(hub.statuses["sourcekit-lsp"] == .starting)
+        hub.end()
+    }
+
     @Test func aMissingServerIsReportedNotInstalled() async throws {
         let hub = LanguageHub()
         hub.overrides["gopls"] = "/nonexistent/gopls"

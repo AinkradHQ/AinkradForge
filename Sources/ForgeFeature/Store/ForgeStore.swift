@@ -40,6 +40,8 @@ struct EditorSettings: Codable, Equatable, Sendable {
     var wrapLines = false
     var showMinimap = false
     var showInvisibles = false
+    /// Language server id → the executable to run instead of the one on the login PATH.
+    var serverPaths: [String: String] = [:]
 
     init() {}
 
@@ -52,6 +54,7 @@ struct EditorSettings: Codable, Equatable, Sendable {
         wrapLines = (try? c.decodeIfPresent(Bool.self, forKey: .wrapLines)) ?? d.wrapLines
         showMinimap = (try? c.decodeIfPresent(Bool.self, forKey: .showMinimap)) ?? d.showMinimap
         showInvisibles = (try? c.decodeIfPresent(Bool.self, forKey: .showInvisibles)) ?? d.showInvisibles
+        serverPaths = (try? c.decodeIfPresent([String: String].self, forKey: .serverPaths)) ?? d.serverPaths
     }
 }
 
