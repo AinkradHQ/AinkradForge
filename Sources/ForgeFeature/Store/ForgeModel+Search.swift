@@ -11,6 +11,7 @@ extension ForgeModel {
         await workspace?.refresh()
         // A commit, checkout or stage moves what the gutter compares against.
         if let workspace {
+            await tasks.refresh(root: workspace.root, files: workspace.files)
             git.headMoved(
                 open: documents.compactMapValues { $0.state == .ready ? $0.storage.string : nil }, git: Git(directory: workspace.root))
         }

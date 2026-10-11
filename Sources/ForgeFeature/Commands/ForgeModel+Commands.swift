@@ -63,6 +63,8 @@ extension ForgeModel {
         case .toggleTerminal: terminals.toggle()
         case .newTerminal: terminals.add()
         case .toggleBlame: toggleBlame()
+        case .runTask: palette = "!"
+        case .rerunLastTask: rerunLastTask()
         case .maximiseTerminal:
             if !terminals.isOpen { terminals.toggle() }
             terminals.isMaximised.toggle()

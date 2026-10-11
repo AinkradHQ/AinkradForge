@@ -16,12 +16,13 @@ struct TerminalDrawerView: View {
         VStack(spacing: 0) {
             HStack(spacing: skin.size.s4) {
                 ForEach(drawer.tabs) { tab in
-                    DrawerTab(tab: tab, isActive: drawer.active == tab.id) { drawer.select(tab.id) } onClose: {
+                    DrawerTab(tab: tab, isActive: !drawer.showsTasks && drawer.active == tab.id) { drawer.select(tab.id) } onClose: {
                         drawer.requestClose(tab.id)
                     }
                 }
                 AinkradIconButton(systemName: "plus", size: skin.size.s20, tooltip: "New Terminal (⌃⇧`)") { drawer.add() }
                 Spacer(minLength: skin.size.s8)
+                TasksPill(isActive: drawer.showsTasks) { drawer.showsTasks = true }
                 AinkradIconButton(
                     systemName: drawer.isMaximised ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
                     size: skin.size.s20, tooltip: drawer.isMaximised ? "Restore (⇧⌘M)" : "Maximise (⇧⌘M)"
@@ -31,7 +32,12 @@ struct TerminalDrawerView: View {
             .padding(.horizontal, skin.size.s10)
             .padding(.top, skin.size.s8)
             .padding(.bottom, skin.size.s4)
-            if let id = drawer.active, let view = drawer.view(id) {
+            if drawer.showsTasks {
+                TaskListView(model: model)
+                    .padding(.horizontal, skin.size.s10)
+                    .padding(.bottom, skin.size.s8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let id = drawer.active, let view = drawer.view(id) {
                 TerminalHost(view: view, focusRequest: drawer.focusRequest)
                     .id(id)
                     .padding(.horizontal, skin.size.s10)
@@ -63,6 +69,29 @@ struct TerminalDrawerView: View {
                     }
                     .onEnded { _ in dragStart = nil })
             .animation(skin.animation(skin.motion.hover), value: isGrabHovered)
+    }
+}
+
+/// The Tasks tab, at the drawer's trailing end.
+private struct TasksPill: View {
+    let isActive: Bool
+    let action: () -> Void
+    @State private var isHovered = false
+    @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
+
+    var body: some View {
+        Label("Tasks", systemImage: "play")
+            .font(skin.font(AinkradFontToken(sizeKey: "t11", weight: isActive ? "medium" : "regular")))
+            .foregroundStyle(isActive ? theme.foreground : skin.color(skin.text.muted))
+            .padding(.vertical, skin.size.s4)
+            .padding(.horizontal, skin.size.s10)
+            .background(
+                Capsule().fill(isActive ? theme.foreground.opacity(skin.opacity.o10) : isHovered ? theme.foreground.opacity(skin.opacity.o05) : .clear))
+            .contentShape(Capsule())
+            .onHover { isHovered = $0 }
+            .onTapGesture(perform: action)
+            .help("Tasks (⇧⌘B to run one)")
     }
 }
 
