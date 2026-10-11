@@ -14,8 +14,7 @@ struct SearchPanel: View {
     var body: some View {
         @Bindable var search = model.search
         VStack(alignment: .leading, spacing: skin.size.s8) {
-            AinkradSearchField(text: $search.query.text, placeholder: "Search")
-                .focused($queryFocused)
+            AinkradSearchField(text: $search.query.text, placeholder: "Search", focus: $queryFocused)
             HStack(spacing: skin.size.s6) {
                 AinkradButton(
                     title: "Replace", style: .ghost, icon: search.isReplaceOpen ? "chevron.down" : "chevron.right"
@@ -44,7 +43,7 @@ struct SearchPanel: View {
             summary
             results
         }
-        .onAppear { queryFocused = true }
+        .onAppear { DispatchQueue.main.async { queryFocused = true } }  // see Palette's onAppear
         .onChange(of: model.searchFocusRequest) { _, _ in queryFocused = true }
         .onChange(of: search.query) { _, _ in rerun() }
         .onChange(of: search.include) { _, _ in rerun() }
