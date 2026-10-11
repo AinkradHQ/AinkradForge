@@ -60,6 +60,11 @@ extension ForgeModel {
         case .renameSymbol: beginRename()
         case .codeActions: showCodeActions()
         case .formatDocument: formatDocument()
+        case .toggleTerminal: terminals.toggle()
+        case .newTerminal: terminals.add()
+        case .maximiseTerminal:
+            if !terminals.isOpen { terminals.toggle() }
+            terminals.isMaximised.toggle()
         }
     }
 

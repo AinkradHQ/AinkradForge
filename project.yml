@@ -32,6 +32,10 @@ packages:
   # Language servers (ChimeHQ LanguageClient) behind Forge's own API — see its Package.swift.
   ForgeLanguage:
     path: Packages/ForgeLanguage
+  # The terminal: the same fork and pin as Rune (no reflow on resize).
+  SwiftTerm:
+    url: https://github.com/AhmedMElhalaby/SwiftTerm
+    revision: e44352494333686a5de418f85f7927b81c6a9fbe
 targets:
   ForgeFeature:
     type: library.static
@@ -42,6 +46,7 @@ targets:
         embed: false
       - package: ForgeEditor
       - package: ForgeLanguage
+      - package: SwiftTerm
   ForgePlugin:
     type: bundle
     platform: macOS
@@ -57,6 +62,7 @@ targets:
       # A static library does not carry its package dependencies; the bundle links them.
       - package: ForgeEditor
       - package: ForgeLanguage
+      - package: SwiftTerm
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ainkrad.plugin.forge
@@ -87,6 +93,7 @@ targets:
       - package: AinkradAppKit
       - package: ForgeEditor
       - package: ForgeLanguage
+      - package: SwiftTerm
 schemes:
   ForgePlugin:
     build: { targets: { ForgePlugin: all, ForgeFeatureTests: [test] } }

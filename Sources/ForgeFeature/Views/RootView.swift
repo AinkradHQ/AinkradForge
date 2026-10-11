@@ -50,6 +50,13 @@ struct RootView: View {
             message: "Open files change in their tabs and stay unsaved until ⌘S; the others are written now. Unticked preview changes are left as they are.",
             confirmTitle: "Replace All"
         ) { model.replaceAll() }
+        .ainkradConfirmDialog(
+            isPresented: Binding(
+                get: { model.terminals.confirmingClose != nil }, set: { if !$0 { model.terminals.confirmingClose = nil } }),
+            title: "End this terminal?",
+            message: "Something is still running in it. Closing the terminal stops it.",
+            confirmTitle: "End Terminal"
+        ) { if let id = model.terminals.confirmingClose { model.terminals.close(id) } }
         .background { NoticeToaster(model: model) }
         .ainkradToastHost()
         .ainkradHostTheme(theme)

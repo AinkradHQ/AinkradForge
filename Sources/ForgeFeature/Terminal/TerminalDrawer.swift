@@ -1,0 +1,223 @@
+import AinkradAppKit
+import AppKit
+import Darwin
+import Foundation
+import Observation
+@preconcurrency import SwiftTerm
+
+/// The terminals under the editors. The model owns each terminal view (and so its process): hiding the
+/// drawer or switching tabs only takes the view off screen, so terminals keep running until closed or the
+/// workspace closes.
+@MainActor
+@Observable
+final class TerminalDrawer {
+    struct Tab: Identifiable, Equatable {
+        let id: Int
+        let title: String
+        /// What a task tab runs; nil for an interactive shell.
+        let command: String?
+        var ended = false
+        var exitCode: Int32?
+    }
+
+    var isOpen = false
+    var isMaximised = false
+    var height: Double = 270
+    private(set) var tabs: [Tab] = []
+    var active: Int?
+    /// A busy terminal the user asked to close; the window confirms first.
+    var confirmingClose: Int?
+    /// Bumped to move the keyboard into the active terminal.
+    private(set) var focusRequest = 0
+    @ObservationIgnored private var views: [Int: ForgeTerminalView] = [:]
+    @ObservationIgnored private var events: [Int: TerminalEvents] = [:]
+    @ObservationIgnored private var nextID = 1
+    @ObservationIgnored private var root: URL?
+    @ObservationIgnored var palette: HostTerminalPalette?
+    /// The theme's text colour, for a palette that leaves the terminal's foreground unset (Liquid Glass does).
+    @ObservationIgnored var foreground: NSColor?
+
+    func begin(root: URL) {
+        end()
+        self.root = root
+    }
+
+    /// Ends every terminal (the workspace closed or switched).
+    func end() {
+        views.values.forEach { $0.terminate() }
+        views = [:]
+        events = [:]
+        tabs = []
+        active = nil
+        isOpen = false
+        isMaximised = false
+        root = nil
+    }
+
+    /// ⌃`: shows the drawer (with a shell, if it has none) and focuses it, or hides it.
+    func toggle() {
+        if isOpen {
+            isOpen = false
+        } else {
+            isOpen = true
+            if tabs.isEmpty { add() } else { focusRequest += 1 }
+        }
+    }
+
+    /// A new terminal in the workspace folder: the login shell, or `command` run by it (a task).
+    @discardableResult
+    func add(command: String? = nil, title: String? = nil) -> Int? {
+        guard let root else { return nil }
+        let id = nextID
+        nextID += 1
+        let view = ForgeTerminalView(frame: .zero)
+        let handler = TerminalEvents(id: id, drawer: self)
+        view.processDelegate = handler
+        Self.apply(palette, foreground: foreground, to: view)
+        let shell = Self.shell
+        // Spawned at the first real size, so the shell starts matching the drawer (no startup resize).
+        view.onReady = { [weak view] in
+            view?.startProcess(
+                executable: shell, args: command.map { ["-l", "-c", $0] } ?? ["-l"], environment: nil,
+                currentDirectory: root.path(percentEncoded: false))
+        }
+        views[id] = view
+        events[id] = handler
+        tabs.append(Tab(id: id, title: title ?? (shell as NSString).lastPathComponent, command: command))
+        active = id
+        isOpen = true
+        focusRequest += 1
+        return id
+    }
+
+    func view(_ id: Int) -> ForgeTerminalView? { views[id] }
+
+    func select(_ id: Int) {
+        active = id
+        focusRequest += 1
+    }
+
+    /// ✕: ends the terminal, after asking when something still runs in it.
+    func requestClose(_ id: Int) {
+        if isBusy(id) { confirmingClose = id } else { close(id) }
+    }
+
+    func close(_ id: Int) {
+        confirmingClose = nil
+        views.removeValue(forKey: id)?.terminate()
+        events[id] = nil
+        tabs.removeAll { $0.id == id }
+        if active == id { active = tabs.last?.id }
+        if tabs.isEmpty {
+            isOpen = false
+            isMaximised = false
+        }
+    }
+
+    /// The process ended: a shell's tab goes (as when typing `exit`); a task's stays, showing how it went.
+    func ended(_ id: Int, exitCode: Int32?) {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        guard tabs[index].command != nil else { return close(id) }
+        tabs[index].ended = true
+        tabs[index].exitCode = exitCode.map(Self.exitStatus)
+    }
+
+    /// SwiftTerm reports the raw wait status: the exit code is its second byte; a signal (low 7 bits) is
+    /// reported as 128 + the signal, as shells do.
+    static func exitStatus(_ status: Int32) -> Int32 {
+        let signal = status & 0x7F
+        return signal == 0 ? (status >> 8) & 0xFF : 128 + signal
+    }
+
+    /// Something still runs: a task that has not ended, or a shell with a child process.
+    func isBusy(_ id: Int) -> Bool {
+        guard let tab = tabs.first(where: { $0.id == id }), !tab.ended else { return false }
+        if tab.command != nil { return true }
+        guard let pid = views[id]?.process?.shellPid, pid > 0 else { return false }
+        return Self.hasChildren(pid)
+    }
+
+    /// Applies the theme's terminal palette to every terminal.
+    func restyle(_ palette: HostTerminalPalette?, foreground: NSColor) {
+        self.palette = palette
+        self.foreground = foreground
+        views.values.forEach { Self.apply(palette, foreground: foreground, to: $0) }
+    }
+
+    // MARK: - Support
+
+    /// `$SHELL` when /etc/shells lists it, else zsh — as Rune resolves it.
+    static var shell: String {
+        let listed = (try? String(contentsOfFile: "/etc/shells", encoding: .utf8))?
+            .split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) } ?? []
+        if let shell = ProcessInfo.processInfo.environment["SHELL"], listed.contains(shell) { return shell }
+        return "/bin/zsh"
+    }
+
+    private static func hasChildren(_ pid: pid_t) -> Bool {
+        var children = [pid_t](repeating: 0, count: 16)
+        let bytes = proc_listchildpids(pid, &children, Int32(children.count * MemoryLayout<pid_t>.size))
+        return bytes > 0
+    }
+
+    /// The theme's terminal colours (the ones Rune uses), on a clear background so the drawer's surface shows.
+    static func apply(_ palette: HostTerminalPalette?, foreground: NSColor?, to view: ForgeTerminalView) {
+        view.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        // Layer-backed with a clear layer, as Rune does: otherwise the view paints an opaque backdrop.
+        view.wantsLayer = true
+        view.layer?.isOpaque = false
+        view.layer?.backgroundColor = .clear
+        view.nativeBackgroundColor = NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.004)  // design-lint: allow raw-color near-clear terminal background
+        // ponytail: the scroller stays hidden (SwiftTerm's own, not an overlay one); Rune's reveal-on-scroll if missed.
+        view.subviews.compactMap { $0 as? NSScroller }.forEach { $0.isHidden = true }
+        let ansi = palette?.ansi.compactMap(color(hex:)) ?? []
+        if ansi.count == 16 { view.installColors(ansi) }
+        if let text = palette.flatMap({ EditorPalette.color(hex: $0.foreground) }) ?? foreground { view.nativeForegroundColor = text }
+        if let cursor = palette.flatMap({ EditorPalette.color(hex: $0.cursor) }) { view.caretColor = cursor }
+    }
+
+    private static func color(hex: String) -> SwiftTerm.Color? {
+        guard let color = EditorPalette.color(hex: hex)?.usingColorSpace(.sRGB) else { return nil }
+        func channel(_ value: CGFloat) -> UInt16 { UInt16(max(0, min(1, value)) * 65_535) }
+        return SwiftTerm.Color(  // design-lint: allow raw-color SwiftTerm ANSI from host.theme.terminalPalette
+            red: channel(color.redComponent), green: channel(color.greenComponent), blue: channel(color.blueComponent))
+    }
+}
+
+/// A terminal that starts its process at its first usable size (see `TerminalDrawer.add`).
+final class ForgeTerminalView: LocalProcessTerminalView {
+    var onReady: (() -> Void)?
+    private var started = false
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        // A usable size, not merely a non-zero one: a layout pass can hand out a sliver first, and a process
+        // started at two columns keeps that layout (the fork does not reflow).
+        guard !started, newSize.width > 100, newSize.height > 40 else { return }
+        started = true
+        onReady?()
+        onReady = nil
+    }
+}
+
+/// Process events for one terminal, back to the drawer on the main actor.
+private final class TerminalEvents: NSObject, LocalProcessTerminalViewDelegate, @unchecked Sendable {
+    let id: Int
+    weak var drawer: TerminalDrawer?
+
+    init(id: Int, drawer: TerminalDrawer) {
+        self.id = id
+        self.drawer = drawer
+    }
+
+    func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
+    func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}
+    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
+
+    func processTerminated(source: TerminalView, exitCode: Int32?) {
+        let id = id
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated { self?.drawer?.ended(id, exitCode: exitCode) }
+        }
+    }
+}

@@ -33,6 +33,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
     case lineEndingsLF, lineEndingsCRLF, saveAsUTF8
     case findInFiles, replaceAll
     case goToDefinition, findReferences, renameSymbol, codeActions, formatDocument
+    case toggleTerminal, newTerminal, maximiseTerminal
 
     var id: String { rawValue }
 
@@ -76,6 +77,9 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .renameSymbol: "Rename Symbol"
         case .codeActions: "Quick Fix…"
         case .formatDocument: "Format Document"
+        case .toggleTerminal: "Toggle Terminal"
+        case .newTerminal: "New Terminal"
+        case .maximiseTerminal: "Maximise Terminal"
         }
     }
 
@@ -115,6 +119,8 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .renameSymbol: "character.cursor.ibeam"
         case .codeActions: "lightbulb"
         case .formatDocument: "text.alignleft"
+        case .toggleTerminal, .newTerminal: "terminal"
+        case .maximiseTerminal: "arrow.up.left.and.arrow.down.right"
         }
     }
 
@@ -146,6 +152,9 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .renameSymbol: Shortcut(key: Shortcut.f2, modifiers: [])
         case .codeActions: Shortcut(key: ".", modifiers: .command)
         case .formatDocument: Shortcut(key: "f", modifiers: [.option, .shift])
+        case .toggleTerminal: Shortcut(key: "`", modifiers: .control)
+        case .newTerminal: Shortcut(key: "`", modifiers: [.control, .shift])
+        case .maximiseTerminal: Shortcut(key: "m", modifiers: [.command, .shift])
         case .closeWorkspace, .revealInTree, .refresh, .openTerminal, .splitDown, .closePane, .renameActiveFile,
             .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8:
             nil
@@ -156,7 +165,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         switch self {
         case .quickOpen, .commandPalette, .openFolder: .none
         case .closeWorkspace, .saveAll, .showFiles, .showChanges, .refresh, .openTerminal, .newFile, .newFolder,
-            .findInFiles, .replaceAll:
+            .findInFiles, .replaceAll, .toggleTerminal, .newTerminal, .maximiseTerminal:
             .workspace
         case .goToLine, .save, .closeTab, .nextTab, .previousTab, .revealInTree, .copyPath, .splitRight, .splitDown,
             .renameActiveFile, .revealInFinder, .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8,
