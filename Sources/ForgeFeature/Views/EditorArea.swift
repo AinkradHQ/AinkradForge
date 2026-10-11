@@ -1,27 +1,54 @@
 import AinkradAppKit
 import SwiftUI
 
-/// Tabs, the active file's breadcrumb and editor, and the status bar — one surface, no rules.
+/// One or two editor panes and the status bar — one surface, no rules.
 struct EditorArea: View {
     let model: ForgeModel
     let workspace: Workspace
     let palette: HostTerminalPalette?
     @Environment(\.ainkradSkin) private var skin
-    @Environment(\.ainkradTheme) private var theme
 
     var body: some View {
         VStack(spacing: 0) {
-            TabStrip(model: model)
+            let layout = model.stacked ? AnyLayout(VStackLayout(spacing: skin.size.s10)) : AnyLayout(HStackLayout(spacing: skin.size.s10))
+            layout {
+                ForEach(model.panes.indices, id: \.self) { index in
+                    PaneView(model: model, index: index, palette: palette)
+                }
+            }
+            .padding(.horizontal, skin.size.s14)
+            StatusRow(model: model, workspace: workspace)
+        }
+    }
+}
+
+/// A pane: its tabs, the visible file's breadcrumb and editor. The pane commands act on is told apart by
+/// the other one dimming slightly — never by a border.
+private struct PaneView: View {
+    let model: ForgeModel
+    let index: Int
+    let palette: HostTerminalPalette?
+    @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
+
+    private var tabs: Tabs { model.panes[index] }
+    private var isActive: Bool { model.activePane == index || model.panes.count == 1 }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TabStrip(model: model, pane: index)
             Group {
-                if let path = model.tabs.active, let document = model.documents[path] {
+                if let path = tabs.active, let document = model.documents[path] {
                     VStack(alignment: .leading, spacing: 0) {
                         AinkradBreadcrumb(items: path.split(separator: "/").map(String.init))
                             .padding(.horizontal, skin.size.s14)
                             .padding(.top, skin.size.s8)
                             .padding(.bottom, skin.size.s4)
                         DocumentView(
-                            document: document, palette: palette, goToLine: model.pendingLine,
-                            onGoToLineHandled: { model.pendingLine = nil }
+                            document: document, palette: palette,
+                            goToLine: model.activePane == index ? model.pendingLine : nil,
+                            onGoToLineHandled: { model.pendingLine = nil },
+                            onCaret: { model.focus(pane: index) }
                         ) { model.didEdit(path) }
                         .id(path)
                     }
@@ -32,16 +59,19 @@ struct EditorArea: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // CodeEdit's gutter is a sibling of its scroll view sized to the whole document: without a clip
+            // it draws past the pane (into the other pane when stacked).
+            .clipped()
             .background(
                 UnevenRoundedRectangle(
-                    topLeadingRadius: model.tabs.paths.isEmpty ? skin.size.s10 : 0, bottomLeadingRadius: skin.size.s10,
+                    topLeadingRadius: tabs.paths.isEmpty ? skin.size.s10 : 0, bottomLeadingRadius: skin.size.s10,
                     bottomTrailingRadius: skin.size.s10, topTrailingRadius: skin.size.s10
                 )
                 .fill(theme.surface.opacity(skin.opacity.o45))
             )
-            .padding(.horizontal, skin.size.s14)
-            StatusRow(model: model, workspace: workspace)
         }
+        .opacity(isActive ? 1 : skin.opacity.o82)
+        .animation(skin.animation(skin.motion.hover), value: isActive)
     }
 }
 
@@ -50,6 +80,8 @@ private struct DocumentView: View {
     let palette: HostTerminalPalette?
     let goToLine: Int?
     let onGoToLineHandled: () -> Void
+    /// The caret moved here — this pane is the one being worked in.
+    let onCaret: () -> Void
     let onEdit: () -> Void
 
     var body: some View {
@@ -60,29 +92,35 @@ private struct DocumentView: View {
         case .ready:
             CodeEditor(
                 document: document, palette: palette, goToLine: goToLine, onGoToLineHandled: onGoToLineHandled,
-                onEdit: onEdit)
+                onCaret: onCaret, onEdit: onEdit)
         }
     }
 }
 
-/// Open files. The active tab shares the editor pane's fill, so it reads as part of it.
+/// A pane's open files. The visible tab shares the pane's fill, so it reads as part of it.
 private struct TabStrip: View {
     let model: ForgeModel
+    let pane: Int
     @Environment(\.ainkradSkin) private var skin
+
+    private var tabs: Tabs { model.panes[pane] }
 
     var body: some View {
         ScrollView(.horizontal) {
             HStack(spacing: skin.size.s2) {
-                ForEach(model.tabs.paths, id: \.self) { path in
+                ForEach(tabs.paths, id: \.self) { path in
                     EditorTab(
                         name: (path as NSString).lastPathComponent,
-                        isActive: model.tabs.active == path, isPreview: model.tabs.preview == path,
+                        isActive: tabs.active == path, isPreview: tabs.preview == path,
                         isDirty: model.documents[path]?.isDirty == true
                     ) {
+                        model.focus(pane: pane)
                         model.activate(path)
                     } onDoubleClick: {
+                        model.focus(pane: pane)
                         model.pin(path)
                     } onClose: {
+                        model.focus(pane: pane)
                         model.close(path)
                     }
                     .help(path)

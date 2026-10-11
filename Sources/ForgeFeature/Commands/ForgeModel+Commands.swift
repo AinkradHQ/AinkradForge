@@ -5,7 +5,7 @@ import Foundation
 /// Runs `ForgeCommand`s — the single entry point the palette and the shortcut layer share.
 extension ForgeModel {
     var availableCommands: [ForgeCommand] {
-        ForgeCommand.available(hasWorkspace: workspace != nil, hasFile: tabs.active != nil)
+        ForgeCommand.available(hasWorkspace: workspace != nil, hasFile: tabs.active != nil, hasSplit: panes.count > 1)
     }
 
     func run(_ command: ForgeCommand) {
@@ -34,6 +34,11 @@ extension ForgeModel {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(url.path(percentEncoded: false), forType: .string)
         case .openTerminal: openTerminal()
+        case .splitRight: splitEditor(stacked: false)
+        case .splitDown: splitEditor(stacked: true)
+        case .focusFirstPane: focus(pane: 0)
+        case .focusSecondPane: focus(pane: 1)
+        case .closePane: closePane()
         }
     }
 

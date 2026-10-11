@@ -61,6 +61,23 @@ final class SweepTests: XCTestCase {
         try SweepSupport.waitUntilLoaded(commands)
         commands.palette = ">"
 
+        // Screen 4: the split editor — SidebarRow left, SidebarModel previewed right; and stacked.
+        let split = try SweepSupport.model(opening: repo)
+        for folder in ["Sources", "Sources/Ainkrad", "Sources/Ainkrad/Features", "Sources/Ainkrad/Features/Sidebar"] {
+            split.toggle(folder: folder)
+        }
+        split.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarView.swift", pinned: true)
+        split.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift", pinned: true)
+        split.splitEditor(stacked: false)
+        split.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarModel.swift", pinned: false)
+        split.focus(pane: 0)
+        SweepSupport.spin(until: 3) { split.documents.values.allSatisfy { $0.state == .ready } }
+        let stacked = try SweepSupport.model(opening: repo)
+        stacked.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift", pinned: true)
+        stacked.splitEditor(stacked: true)
+        stacked.open(file: "project.yml", pinned: true)
+        SweepSupport.spin(until: 3) { stacked.documents.values.allSatisfy { $0.state == .ready } }
+
         // Screen 5: welcome, with recents (the sample repo has a worktree).
         let docs = MemoryDocs()
         let welcomeStore = ForgeStore(documents: docs)
@@ -79,6 +96,7 @@ final class SweepTests: XCTestCase {
             let screens: [(String, ForgeModel)] = [
                 ("e21-window", window), ("e21-changes", changes), ("e21-unsaved", closing), ("e22-welcome", welcome),
                 ("e24-quick-open", quick), ("e24-command-palette", commands),
+                ("e23-split", split), ("e23-split-stacked", stacked),
             ]
             for (name, model) in screens {
                 try LiveCapture.shoot(

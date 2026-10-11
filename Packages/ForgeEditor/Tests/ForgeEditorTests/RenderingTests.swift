@@ -73,4 +73,37 @@ final class RenderingTests: XCTestCase {
         XCTAssertTrue(handled)
         XCTAssertEqual(caretLine, 250)
     }
+
+    /// The split editor shows one file in two panes: two editors on ONE storage. An edit made through the
+    /// storage reaches both text views (CodeEdit's MultiStorageDelegate), and nothing crashes.
+    func testTwoEditorsShareOneStorage() throws {
+        let storage = NSTextStorage(string: "let a = 1\n")
+        let gray = NSColor.gray
+        let colors = EditorColors(
+            text: gray, insertionPoint: gray, selection: gray, lineHighlight: gray, keywords: gray, commands: gray,
+            types: gray, attributes: gray, variables: gray, values: gray, numbers: gray, strings: gray, comments: gray)
+        func editor() -> ForgeCodeEditor {
+            ForgeCodeEditor(
+                storage: storage, language: .detect(url: URL(fileURLWithPath: "/a.swift")), colors: colors, fontSize: 13,
+                insets: NSEdgeInsets(), onEdit: {}, onCursor: { _, _ in })
+        }
+        let host = NSHostingView(rootView: HStack { editor(); editor() })
+        let window = NSWindow(
+            contentRect: NSRect(x: -3000, y: -3000, width: 800, height: 300), styleMask: .borderless,
+            backing: .buffered, defer: false)
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(1))
+        storage.replaceCharacters(in: NSRange(location: 0, length: 0), with: "// shared\n")
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        func textViews(in view: NSView) -> [TextView] {
+            ((view as? TextView).map { [$0] } ?? []) + view.subviews.flatMap(textViews(in:))
+        }
+        let views = textViews(in: host)
+        XCTAssertEqual(views.count, 2)
+        XCTAssertTrue(views.allSatisfy { $0.textStorage === storage && $0.string.hasPrefix("// shared") })
+    }
 }
