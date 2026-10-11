@@ -297,6 +297,18 @@ final class SweepTests: XCTestCase {
         await_(reviewing) { await $0.diskChanged(paths: [sort, "CHANGELOG.md"].map { repo.appendingPathComponent($0).path }) }
         reviewing.agent.reviewingAll = true
 
+        // E7 screen 17: ⌘I on a selection — the Ask Agent card.
+        let asking = try SweepSupport.model(opening: repo)
+        asking.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift", pinned: true)
+        try SweepSupport.waitUntilLoaded(asking)
+        if let document = asking.activeDocument {
+            let text = document.storage.string as NSString
+            document.selection = text.range(of: "HStack(spacing: skin.size.s8) {")
+            document.caretRect = CGRect(x: 80, y: 10 * 25.9 + 4, width: 1, height: 25)
+        }
+        asking.beginAsk()
+        asking.agent.ask?.prompt = "Make the selection capsule animate in with the motion budget"
+
         // Screen 5: welcome, with recents (the sample repo has a worktree).
         let docs = MemoryDocs()
         let welcomeStore = ForgeStore(documents: docs)
@@ -332,6 +344,7 @@ final class SweepTests: XCTestCase {
                 ("e63-tasks", tasking),
                 ("e71-agent-inline", agenting),
                 ("e72-review-all", reviewing),
+                ("e73-ask-agent", asking),
             ]
             for (name, model) in screens {
                 // The sweep window never becomes key, so an inline name field loses focus right after it shows

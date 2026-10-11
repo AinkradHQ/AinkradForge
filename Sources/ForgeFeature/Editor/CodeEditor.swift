@@ -49,7 +49,7 @@ struct CodeEditor: View {
             suggestionTriggers: suggestionTriggers, signatureTriggers: signatureTriggers, signatureShown: signatureShown,
             onSignature: onSignature, edits: edits, onEditsApplied: onEditsApplied, menu: menu, onMenuPick: onMenuPick,
             onCaretRect: onCaretRect, lineMarks: lineMarks, onLineMarkClick: onLineMarkClick, anchorLine: anchorLine,
-            onAnchor: onAnchor)
+            onAnchor: onAnchor, onSelection: { range in document.selection = range })
     }
 }
 

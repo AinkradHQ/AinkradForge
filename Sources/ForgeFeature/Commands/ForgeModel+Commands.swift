@@ -70,6 +70,7 @@ extension ForgeModel {
         case .keepChange: if let at = agentChangeAtCaret { keepChange(at.path, hunk: at.hunk) }
         case .undoChange: if let at = agentChangeAtCaret { undoChange(at.path, hunk: at.hunk) }
         case .keepAllChanges: if let path = tabs.active { keepAllChanges(path) }
+        case .askAgent: beginAsk()
         case .undoAllChanges: if let path = tabs.active { undoAllChanges(path) }
         case .maximiseTerminal:
             if !terminals.isOpen { terminals.toggle() }

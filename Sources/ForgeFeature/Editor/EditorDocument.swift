@@ -40,6 +40,8 @@ final class EditorDocument {
     @ObservationIgnored var caretRect = CGRect.zero
     /// Where the caret line's text ends (x), for the blame note.
     @ObservationIgnored var caretLineEnd: CGFloat = 0
+    /// The first selection (UTF-16), for Ask Agent.
+    @ObservationIgnored var selection = NSRange(location: 0, length: 0)
     /// Told after every successful save (the language server hears about it).
     @ObservationIgnored var onSaved: (EditorDocument) -> Void = { _ in }
     /// What the file looked like when last read or written by Forge, to tell outside changes from our own saves.
