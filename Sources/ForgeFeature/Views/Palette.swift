@@ -52,8 +52,9 @@ struct Palette: View {
 
     private var panel: some View {
         VStack(alignment: .leading, spacing: skin.size.s8) {
-            AinkradSearchField(text: $query, placeholder: placeholder)
-                .focused($focused)
+            // `focus:`, not `.focused`: the kit field focuses its inner TextField with its own state, so an outer
+            // `.focused` never reached it — with Full Keyboard Access the title-bar bell kept focus (E0 FD2).
+            AinkradSearchField(text: $query, placeholder: placeholder, focus: $focused)
                 .onSubmit(activateHighlighted)
                 // ⌫ on an empty field leaves command / line mode for files, as in VS Code.
                 .onKeyPress(.delete) {
@@ -85,7 +86,9 @@ struct Palette: View {
         .ainkradPanel()
         .onAppear {
             (prefix, query) = Self.split(start)
-            focused = true
+            // Next turn: on appear the field is not in the window yet, and the request fell to the first key view
+            // (the host's title-bar bell under Full Keyboard Access) — E0 FD2.
+            DispatchQueue.main.async { focused = true }
             highlight = items.isEmpty ? nil : 0
         }
         .onChange(of: query) { _, typed in
