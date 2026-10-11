@@ -13,6 +13,12 @@ struct AskRequest: Equatable {
     let code: String
     var prompt = ""
 
+    /// The launch payload Grimoire reads (its `AskLaunch`): the project folder and the request.
+    func payload(root: URL) -> String? {
+        let body = ["kind": "askAgent", "path": root.path(percentEncoded: false), "prompt": message]
+        return (try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])).map { String(decoding: $0, as: UTF8.self) }
+    }
+
     /// What goes to the agent: the place, the code, the words.
     var message: String {
         let place = lines.count == 1 ? "line \(lines.lowerBound)" : "lines \(lines.lowerBound)–\(lines.upperBound)"
@@ -35,21 +41,21 @@ extension ForgeModel {
         agent.ask = AskRequest(pane: activePane, path: path, rect: document.caretRect, lines: first...last, code: code)
     }
 
-    /// Ask: the request on the clipboard (Grimoire does not take one from another app yet), Grimoire opened on
-    /// this workspace.
+    /// Ask: Grimoire opens a new thread on this workspace with the request (to start once the agent is chosen).
+    /// The request also goes on the clipboard, for a Grimoire too old to read it.
     func sendAsk() {
         guard let request = agent.ask, !request.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         agent.ask = nil
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(request.message, forType: .string)
         guard let apps, let root = workspace?.root else { return }
-        let payload = AinkradLaunchIntent(kind: Self.openDirectoryKind, path: root.path(percentEncoded: false)).json
+        let payload = request.payload(root: root)
         guard let reporting = apps as? PluginAppLauncherResult else {
             apps.open(appID: Self.grimoireAppID, payload: payload)
-            return notice = "The request is on the clipboard — paste it into Grimoire's thread."
+            return notice = "Grimoire opens a new thread with the request — choose the agent and start it."
         }
         switch reporting.openReportingOutcome(appID: Self.grimoireAppID, payload: payload) {
-        case .opened: notice = "The request is on the clipboard — paste it into Grimoire's thread."
+        case .opened: notice = "Grimoire opens a new thread with the request — choose the agent and start it."
         case .unknownApp: notice = "The request is on the clipboard. Install Grimoire from the Ainkrad store to ask an agent here."
         case .disabled: notice = "The request is on the clipboard. Grimoire is turned off — enable it in Ainkrad."
         case .refused(let reason): notice = "The request is on the clipboard. Grimoire didn't open: \(reason)"
