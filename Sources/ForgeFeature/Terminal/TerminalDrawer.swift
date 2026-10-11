@@ -22,6 +22,8 @@ final class TerminalDrawer {
 
     var isOpen = false
     var isMaximised = false
+    /// The drawer shows the task list instead of a terminal.
+    var showsTasks = false
     var height: Double = 270
     private(set) var tabs: [Tab] = []
     var active: Int?
@@ -34,6 +36,9 @@ final class TerminalDrawer {
     @ObservationIgnored private var nextID = 1
     @ObservationIgnored private var root: URL?
     @ObservationIgnored var palette: HostTerminalPalette?
+    /// A command's process ended (tab, exit code) / a tab was closed — for the task runner.
+    @ObservationIgnored var onEnded: (Int, Int32?) -> Void = { _, _ in }
+    @ObservationIgnored var onClosed: (Int) -> Void = { _ in }
     /// The theme's text colour, for a palette that leaves the terminal's foreground unset (Liquid Glass does).
     @ObservationIgnored var foreground: NSColor?
 
@@ -86,6 +91,7 @@ final class TerminalDrawer {
         tabs.append(Tab(id: id, title: title ?? (shell as NSString).lastPathComponent, command: command))
         active = id
         isOpen = true
+        showsTasks = false
         focusRequest += 1
         return id
     }
@@ -94,6 +100,7 @@ final class TerminalDrawer {
 
     func select(_ id: Int) {
         active = id
+        showsTasks = false
         focusRequest += 1
     }
 
@@ -107,8 +114,9 @@ final class TerminalDrawer {
         views.removeValue(forKey: id)?.terminate()
         events[id] = nil
         tabs.removeAll { $0.id == id }
+        onClosed(id)
         if active == id { active = tabs.last?.id }
-        if tabs.isEmpty {
+        if tabs.isEmpty && !showsTasks {
             isOpen = false
             isMaximised = false
         }
@@ -120,6 +128,7 @@ final class TerminalDrawer {
         guard tabs[index].command != nil else { return close(id) }
         tabs[index].ended = true
         tabs[index].exitCode = exitCode.map(Self.exitStatus)
+        onEnded(id, tabs[index].exitCode)
     }
 
     /// SwiftTerm reports the raw wait status: the exit code is its second byte; a signal (low 7 bits) is

@@ -7,6 +7,7 @@ struct PaletteItem: Hashable, Identifiable {
         case file(String)
         case command(ForgeCommand)
         case line(Int)
+        case task(WorkspaceTask)
     }
 
     let id: String
@@ -89,7 +90,7 @@ struct Palette: View {
         }
         .onChange(of: query) { _, typed in
             // Typing ">" or ":" first switches mode.
-            if prefix.isEmpty, let first = typed.first, first == ">" || first == ":" { (prefix, query) = Self.split(typed) }
+            if prefix.isEmpty, let first = typed.first, first == ">" || first == ":" || first == "!" { (prefix, query) = Self.split(typed) }
             // Re-ranking moves rows: a highlight left at row 7 would point at a different file.
             highlight = items.isEmpty ? nil : 0
         }
@@ -111,18 +112,18 @@ struct Palette: View {
     }
 
     private var placeholder: String {
-        prefix == ">" ? "Run a command…" : prefix == ":" ? "Type a line number…" : "Go to file…"
+        prefix == ">" ? "Run a command…" : prefix == ":" ? "Type a line number…" : prefix == "!" ? "Run a task…" : "Go to file…"
     }
 
     private var hint: String {
         if prefix == ":" { return "↵ go to the line · ⌫ to search files" }
-        if prefix == ">" { return "↵ run · ⌫ to search files" }
+        if prefix == ">" || prefix == "!" { return "↵ run · ⌫ to search files" }
         return "↵ open · type > for commands · : for a line"
     }
 
     /// ">open" → (">", "open"); "side" → ("", "side").
     static func split(_ text: String) -> (prefix: String, query: String) {
-        guard let first = text.first, first == ">" || first == ":" else { return ("", text) }
+        guard let first = text.first, first == ">" || first == ":" || first == "!" else { return ("", text) }
         return (String(first), String(text.dropFirst()))
     }
 
@@ -145,6 +146,7 @@ struct Palette: View {
             model.open(file: path, pinned: true)
         case .command(let command): model.run(command)
         case .line(let line): model.goTo(line: line)
+        case .task(let task): model.runTask(task)
         }
     }
 
@@ -156,6 +158,19 @@ struct Palette: View {
                     id: "command:\($0.rawValue)", title: $0.title, systemName: $0.systemName,
                     detail: nil, value: $0.shortcut?.display, payload: .command($0))
             }
+        }
+        if query.hasPrefix("!") {
+            let needle = Array(query.dropFirst().lowercased().filter { !$0.isWhitespace })
+            return model.tasks.tasks
+                .compactMap { task in
+                    needle.isEmpty ? (task, 0) : QuickOpen.subsequenceScore(needle, in: "\(task.name) \(task.group)").map { (task, $0) }
+                }
+                .sorted { $0.1 > $1.1 }
+                .map { task, _ in
+                    PaletteItem(
+                        id: "task:\(task.id)", title: task.name, systemName: "play", detail: task.group, value: task.shows,
+                        payload: .task(task))
+                }
         }
         if query.hasPrefix(":") {
             guard let line = Int(query.dropFirst().trimmingCharacters(in: .whitespaces)), line > 0,

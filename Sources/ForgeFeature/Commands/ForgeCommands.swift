@@ -33,7 +33,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
     case lineEndingsLF, lineEndingsCRLF, saveAsUTF8
     case findInFiles, replaceAll
     case goToDefinition, findReferences, renameSymbol, codeActions, formatDocument
-    case toggleTerminal, newTerminal, maximiseTerminal, toggleBlame
+    case toggleTerminal, newTerminal, maximiseTerminal, toggleBlame, runTask, rerunLastTask
 
     var id: String { rawValue }
 
@@ -81,6 +81,8 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .newTerminal: "New Terminal"
         case .maximiseTerminal: "Maximise Terminal"
         case .toggleBlame: "Toggle Blame"
+        case .runTask: "Run Task…"
+        case .rerunLastTask: "Rerun Last Task"
         }
     }
 
@@ -123,6 +125,8 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .toggleTerminal, .newTerminal: "terminal"
         case .maximiseTerminal: "arrow.up.left.and.arrow.down.right"
         case .toggleBlame: "person.text.rectangle"
+        case .runTask: "play"
+        case .rerunLastTask: "arrow.clockwise"
         }
     }
 
@@ -158,6 +162,9 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .newTerminal: Shortcut(key: "`", modifiers: [.control, .shift])
         case .maximiseTerminal: Shortcut(key: "m", modifiers: [.command, .shift])
         case .toggleBlame: Shortcut(key: "b", modifiers: [.command, .option])
+        // ⇧⌘B is VS Code's Run Build Task (⌥⌘R stays Reveal in Finder).
+        case .runTask: Shortcut(key: "b", modifiers: [.command, .shift])
+        case .rerunLastTask: Shortcut(key: "b", modifiers: [.command, .shift, .control])
         case .closeWorkspace, .revealInTree, .refresh, .openTerminal, .splitDown, .closePane, .renameActiveFile,
             .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8:
             nil
@@ -168,7 +175,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         switch self {
         case .quickOpen, .commandPalette, .openFolder: .none
         case .closeWorkspace, .saveAll, .showFiles, .showChanges, .refresh, .openTerminal, .newFile, .newFolder,
-            .findInFiles, .replaceAll, .toggleTerminal, .newTerminal, .maximiseTerminal:
+            .findInFiles, .replaceAll, .toggleTerminal, .newTerminal, .maximiseTerminal, .runTask, .rerunLastTask:
             .workspace
         case .goToLine, .save, .closeTab, .nextTab, .previousTab, .revealInTree, .copyPath, .splitRight, .splitDown,
             .renameActiveFile, .revealInFinder, .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8,

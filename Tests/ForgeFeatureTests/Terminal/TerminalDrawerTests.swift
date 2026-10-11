@@ -54,4 +54,22 @@ final class TerminalDrawerTests: XCTestCase {
         XCTAssertTrue(drawer.tabs.isEmpty)
         XCTAssertFalse(drawer.isOpen)
     }
+
+    /// A task runs in its own tab and keeps how it went once it ends.
+    func testATaskRunKeepsItsResult() throws {
+        let drawer = TerminalDrawer()
+        let runner = TaskRunner()
+        runner.follow(drawer)
+        drawer.begin(root: URL(fileURLWithPath: NSTemporaryDirectory()))
+        let task = WorkspaceTask(group: "Makefile", name: "fail", shows: "make fail", command: "exit 2")
+        runner.run(task, in: drawer)
+        let tab = try XCTUnwrap(runner.running[task.id])
+        XCTAssertEqual(drawer.tabs.map(\.title), ["make fail"])
+        show(drawer, tab)
+        wait { runner.results[task.id] != nil }
+        XCTAssertEqual(runner.results[task.id]?.exitCode, 2)
+        XCTAssertEqual(runner.results[task.id]?.succeeded, false)
+        XCTAssertNil(runner.running[task.id])
+        XCTAssertEqual(runner.last, task)
+    }
 }

@@ -234,6 +234,19 @@ final class SweepTests: XCTestCase {
         gitting.toggleBlame()
         SweepSupport.spin(until: 10) { gitting.git.blame != nil }
 
+        // E6 screen 14: the drawer's Tasks tab — Makefile targets and a package's scripts.
+        try "build: generate ; xcodebuild\ntest: ; xcodebuild test\ngenerate: ; xcodegen\nabi-check: ; scripts/abi.sh\n"
+            .write(to: repo.appendingPathComponent("Makefile"), atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(at: repo.appendingPathComponent("apps/site"), withIntermediateDirectories: true)
+        try #"{"scripts": {"dev": "next dev", "lint": "eslint ."}}"#
+            .write(to: repo.appendingPathComponent("apps/site/package.json"), atomically: true, encoding: .utf8)
+        let tasking = try SweepSupport.model(opening: repo)
+        tasking.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift", pinned: true)
+        try SweepSupport.waitUntilLoaded(tasking)
+        SweepSupport.spin(until: 10) { tasking.tasks.tasks.count >= 6 }
+        tasking.terminals.add()
+        tasking.showTasks()
+
         // Screen 5: welcome, with recents (the sample repo has a worktree).
         let docs = MemoryDocs()
         let welcomeStore = ForgeStore(documents: docs)
@@ -266,6 +279,7 @@ final class SweepTests: XCTestCase {
                 ("e54-rename-preview", previewing),
                 ("e61-terminal", terminal),
                 ("e62-git", gitting),
+                ("e63-tasks", tasking),
             ]
             for (name, model) in screens {
                 // The sweep window never becomes key, so an inline name field loses focus right after it shows
