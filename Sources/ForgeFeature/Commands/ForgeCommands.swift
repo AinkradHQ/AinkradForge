@@ -12,7 +12,7 @@ struct Shortcut: Equatable {
         if modifiers.contains(.option) { text += "⌥" }
         if modifiers.contains(.shift) { text += "⇧" }
         if modifiers.contains(.command) { text += "⌘" }
-        return text + String(key).uppercased()
+        return text + (key == "\r" ? "↵" : String(key).uppercased())
     }
 }
 
@@ -27,7 +27,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
     case splitRight, splitDown, focusFirstPane, focusSecondPane, closePane
     case newFile, newFolder, renameActiveFile, revealInFinder, trashActiveFile
     case lineEndingsLF, lineEndingsCRLF, saveAsUTF8
-    case findInFiles
+    case findInFiles, replaceAll
 
     var id: String { rawValue }
 
@@ -65,6 +65,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .lineEndingsCRLF: "Convert Line Endings to CRLF"
         case .saveAsUTF8: "Save as UTF-8"
         case .findInFiles: "Find in Files"
+        case .replaceAll: "Replace All in Files"
         }
     }
 
@@ -98,6 +99,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .lineEndingsLF, .lineEndingsCRLF: "return"
         case .saveAsUTF8: "textformat"
         case .findInFiles: "magnifyingglass"
+        case .replaceAll: "arrow.left.arrow.right"
         }
     }
 
@@ -123,6 +125,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .newFolder: Shortcut(key: "n", modifiers: [.command, .option])
         case .revealInFinder: Shortcut(key: "r", modifiers: [.command, .option])
         case .findInFiles: Shortcut(key: "f", modifiers: [.command, .shift])
+        case .replaceAll: Shortcut(key: "\r", modifiers: [.command, .option])
         case .closeWorkspace, .revealInTree, .refresh, .openTerminal, .splitDown, .closePane, .renameActiveFile,
             .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8:
             nil
@@ -133,7 +136,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         switch self {
         case .quickOpen, .commandPalette, .openFolder: .none
         case .closeWorkspace, .saveAll, .showFiles, .showChanges, .refresh, .openTerminal, .newFile, .newFolder,
-            .findInFiles:
+            .findInFiles, .replaceAll:
             .workspace
         case .goToLine, .save, .closeTab, .nextTab, .previousTab, .revealInTree, .copyPath, .splitRight, .splitDown,
             .renameActiveFile, .revealInFinder, .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8:

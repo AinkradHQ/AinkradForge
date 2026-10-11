@@ -44,6 +44,12 @@ struct RootView: View {
                 message: "\(model.unsavedPaths.count) file(s) have unsaved changes: \(model.unsavedPaths.joined(separator: ", "))",
                 saveTitle: "Save All", resolve: model.resolvePendingLeave(saveAll:))
         }
+        .ainkradConfirmDialog(
+            isPresented: Binding(get: { model.search.confirmingReplaceAll }, set: { model.search.confirmingReplaceAll = $0 }),
+            title: "Replace \(model.search.lineCount == SearchModel.cap ? "\(SearchModel.cap)+" : "\(model.search.lineCount)") lines in \(model.search.results.count) files?",
+            message: "Open files change in their tabs and stay unsaved until ⌘S; the others are written now. Unticked preview changes are left as they are.",
+            confirmTitle: "Replace All"
+        ) { model.replaceAll() }
         .background { NoticeToaster(model: model) }
         .ainkradToastHost()
         .ainkradHostTheme(theme)

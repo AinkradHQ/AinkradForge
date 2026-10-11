@@ -51,6 +51,10 @@ extension ForgeModel {
         case .lineEndingsCRLF: activeDocument?.convertLineEndings(to: .crlf)
         case .saveAsUTF8: activeDocument?.setEncoding(.utf8)
         case .findInFiles: showSearch()
+        case .replaceAll:
+            showSearch()
+            search.isReplaceOpen = true
+            if !search.results.isEmpty { search.confirmingReplaceAll = true }
         }
     }
 

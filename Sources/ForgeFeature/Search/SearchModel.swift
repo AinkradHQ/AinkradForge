@@ -31,6 +31,12 @@ final class SearchModel {
     private(set) var status: Status = .idle
     /// Files whose rows are folded.
     var collapsed: Set<String> = []
+    /// The file whose replace preview is open in the editor area.
+    var previewPath: String?
+    /// Per file, the preview hunks the user unticked: Replace leaves those lines as they are.
+    var rejected: [String: Set<Int>] = [:]
+    /// Replace All was asked for; the window confirms first.
+    var confirmingReplaceAll = false
     @ObservationIgnored private var running: Task<Void, Never>?
 
     var lineCount: Int { results.reduce(0) { $0 + $1.matches.count } }
