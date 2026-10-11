@@ -44,13 +44,19 @@ private struct PaneView: View {
                             .padding(.horizontal, skin.size.s14)
                             .padding(.top, skin.size.s8)
                             .padding(.bottom, skin.size.s4)
+                        if let conflict = document.conflict {
+                            ConflictBar(document: document, conflict: conflict) { model.close(path) }
+                                .padding(.horizontal, skin.size.s10)
+                                .padding(.bottom, skin.size.s6)
+                        }
                         DocumentView(
                             document: document, palette: palette,
                             goToLine: model.activePane == index ? model.pendingLine : nil,
                             onGoToLineHandled: { model.pendingLine = nil },
                             onCaret: { model.focus(pane: index) }
                         ) { model.didEdit(path) }
-                        .id(path)
+                        // A wholesale buffer change (reload, line endings) rebuilds the editor so it re-parses.
+                        .id("\(path)#\(document.revision)")
                     }
                 } else {
                     AinkradEmptyState(
@@ -180,7 +186,36 @@ private struct EditorTab: View {
     }
 }
 
-/// Branch, cursor and language. Encoding, line endings and language-server state join with E3 and E5.
+/// The file changed on disk while it had unsaved edits, or disappeared: keep the buffer, or take the disk.
+private struct ConflictBar: View {
+    let document: EditorDocument
+    let conflict: EditorDocument.Conflict
+    let close: () -> Void
+
+    var body: some View {
+        let name = document.url.lastPathComponent
+        switch conflict {
+        case .modified:
+            AinkradDecisionBar(
+                icon: "exclamationmark.arrow.triangle.2.circlepath", iconTint: .primary, caption: "Changed on disk",
+                title: "\(name) was changed outside Forge while you had unsaved edits.",
+                actions: [
+                    .init(title: "Keep Mine", style: .ghost) { Task { await document.resolveConflict(reload: false) } },
+                    .init(title: "Reload", style: .primary) { Task { await document.resolveConflict(reload: true) } },
+                ])
+        case .deleted:
+            AinkradDecisionBar(
+                icon: "trash", iconTint: .secondary, caption: "Deleted on disk",
+                title: "\(name) no longer exists. Saving writes it back.",
+                actions: [
+                    .init(title: "Close", style: .ghost, perform: close),
+                    .init(title: "Keep Editing", style: .primary) { Task { await document.resolveConflict(reload: false) } },
+                ])
+        }
+    }
+}
+
+/// Branch, cursor, line endings, encoding and language. Language-server state joins with E5.
 private struct StatusRow: View {
     let model: ForgeModel
     let workspace: Workspace
@@ -195,6 +230,16 @@ private struct StatusRow: View {
             Spacer(minLength: skin.size.s8)
             if let document = model.activeDocument, document.state == .ready {
                 Text("Ln \(document.cursor.line), Col \(document.cursor.column)")
+                StatusMenu(title: document.format.lineEnding.rawValue, items: TextFormat.LineEnding.allCases.map { ending in
+                    AinkradMenuItem(title: "Convert to \(ending.rawValue)", systemName: ending == document.format.lineEnding ? "checkmark" : nil) {
+                        document.convertLineEndings(to: ending)
+                    }
+                })
+                StatusMenu(title: document.format.encoding.rawValue, items: TextFormat.Encoding.allCases.map { encoding in
+                    AinkradMenuItem(title: "Save as \(encoding.rawValue)", systemName: encoding == document.format.encoding ? "checkmark" : nil) {
+                        document.setEncoding(encoding)
+                    }
+                })
                 Text(document.language.name)
             }
         }
@@ -205,3 +250,21 @@ private struct StatusRow: View {
         .padding(.vertical, skin.size.s8)
     }
 }
+
+/// A status-bar item that opens a pull-down menu — plain text until hovered, like the rest of the bar.
+private struct StatusMenu: View {
+    let title: String
+    let items: [AinkradMenuItem]
+    @State private var isHovered = false
+    @Environment(\.ainkradTheme) private var theme
+    @Environment(\.ainkradSkin) private var skin
+
+    var body: some View {
+        AinkradMenuButton(items: items) {
+            Text(title)
+                .foregroundStyle(isHovered ? theme.foreground : skin.color(skin.text.muted))
+                .onHover { isHovered = $0 }
+        }
+    }
+}
+

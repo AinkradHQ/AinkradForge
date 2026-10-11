@@ -88,6 +88,17 @@ final class SweepTests: XCTestCase {
         try SweepSupport.waitUntilLoaded(creating)
         creating.beginNew(folder: false, in: "Sources/Ainkrad/Features/Sidebar")
 
+        // E3: a file changed outside Forge while it had unsaved edits, shown with its CRLF / UTF-16 format.
+        let conflicted = try SweepSupport.model(opening: repo)
+        let crlf = repo.appendingPathComponent("Sources/Ainkrad/Core/Log.swift")
+        try (Data([0xFF, 0xFE]) + "import os\r\n\r\nlet log = Logger()\r\n".data(using: .utf16LittleEndian)!).write(to: crlf)
+        conflicted.open(file: "Sources/Ainkrad/Core/Log.swift", pinned: true)
+        try SweepSupport.waitUntilLoaded(conflicted)
+        conflicted.didEdit("Sources/Ainkrad/Core/Log.swift")
+        try (Data([0xFF, 0xFE]) + "import os\r\n".data(using: .utf16LittleEndian)!).write(to: crlf)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(5)], ofItemAtPath: crlf.path)
+        SweepSupport.spin(until: 3) { conflicted.activeDocument?.conflict != nil }
+
         // Screen 5: welcome, with recents (the sample repo has a worktree).
         let docs = MemoryDocs()
         let welcomeStore = ForgeStore(documents: docs)
@@ -108,6 +119,7 @@ final class SweepTests: XCTestCase {
                 ("e24-quick-open", quick), ("e24-command-palette", commands),
                 ("e23-split", split), ("e23-split-stacked", stacked),
                 ("e25-rename", renaming), ("e25-new-file", creating),
+                ("e31-conflict", conflicted),
             ]
             for (name, model) in screens {
                 // The sweep window never becomes key, so an inline name field loses focus right after it shows
