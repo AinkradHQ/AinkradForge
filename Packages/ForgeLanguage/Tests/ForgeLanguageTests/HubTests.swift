@@ -108,6 +108,50 @@ struct HubTests {
         hub.end()
     }
 
+    /// Rename, a quick fix and formatting, end to end — each comes back as changes Forge makes itself.
+    @Test func sourcekitRenamesFixesAndFormats() async throws {
+        guard ShellEnvironment.locate("sourcekit-lsp") != nil else { return }
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("forge-lsp-\(UUID().uuidString.prefix(8))")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let text = "func run() {\n    var count = 1\n    print(count + count)\n}\n"
+        try text.write(to: root.appending(path: "main.swift"), atomically: true, encoding: .utf8)
+
+        let hub = LanguageHub()
+        hub.begin(root: root)
+        hub.opened(path: "main.swift", text: text)
+        for _ in 0..<150 where hub.issues["main.swift"] == nil { try await Task.sleep(for: .milliseconds(100)) }
+
+        // `count` on line 1: three places, all in this file.
+        let renamed = await hub.rename(path: "main.swift", line: 1, character: 9, to: "total")
+        #expect(renamed["main.swift"]?.count == 3)
+        let after = TextChange.apply(renamed["main.swift"] ?? [], to: text)
+        #expect(after == "func run() {\n    var total = 1\n    print(total + total)\n}\n")
+
+        // "never mutated; consider changing to 'let'" — its fix-it as a quick fix.
+        let actions = await hub.codeActions(path: "main.swift", from: (1, 0), to: (2, 0))
+        let fix = try #require(actions.first { $0.title.contains("let") }, "\(actions.map { ($0.title, $0.kind ?? "-") }) issues: \(hub.issues["main.swift"]?.map(\.message) ?? [])")
+        #expect(fix.kind?.hasPrefix("quickfix") == true)
+        let fixed = await hub.perform(fix, path: "main.swift")
+        #expect(TextChange.apply(fixed["main.swift"] ?? [], to: text).contains("    let count = 1"))
+
+        let messy = "func run( ) {\nlet  a=1\n    print(a)}\n"
+        hub.changed(path: "main.swift") { messy }
+        let formatting = await hub.format(path: "main.swift", tabSize: 4, insertSpaces: true)
+        #expect(TextChange.apply(formatting, to: messy) == "func run() {\n    let a = 1\n    print(a)\n}\n")
+        hub.end()
+    }
+
+    @Test func changesApplyAgainstTheOriginal() {
+        let text = "let a = 1\nlet b = a + a\n"
+        let changes = [
+            TextChange(start: (0, 4), end: (0, 5), newText: "first"),
+            TextChange(start: (1, 8), end: (1, 9), newText: "first"),
+            TextChange(start: (1, 12), end: (1, 13), newText: "first"),
+        ]
+        #expect(TextChange.apply(changes, to: text) == "let first = 1\nlet b = first + first\n")
+    }
+
     @Test func snippetsBecomeTheirDefaults() {
         #expect(Snippet.plain("start(at: ${1:date})$0") == "start(at: date)")
         #expect(Snippet.plain("bump(${1:n}, by: ${2:step})") == "bump(n, by: step)")

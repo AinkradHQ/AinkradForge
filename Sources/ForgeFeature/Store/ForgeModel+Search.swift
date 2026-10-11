@@ -65,26 +65,31 @@ extension ForgeModel {
     @discardableResult
     func replace(in path: String, rerun: Bool = true) -> Int {
         guard let plan = replacePlan(for: path), plan.count > 0, let workspace else { return 0 }
-        let text = plan.text(rejecting: search.rejected[path] ?? [])
-        if let document = documents[path], document.state == .ready {
-            document.replaceText(text)
-            languages.changed(path: path) { document.storage.string }
-        } else {
-            let url = workspace.url(for: path)
-            do {
-                guard let data = try? Data(contentsOf: url), case .text(_, let format) = TextFile.decode(data) else {
-                    throw FileOps.Failure(message: "\(path) could not be read.")
-                }
-                try TextFile.encode(text, as: format).write(to: url, options: .atomic)
-            } catch {
-                notice = error.localizedDescription
-                return 0
-            }
-        }
+        guard write(plan.text(rejecting: search.rejected[path] ?? []), to: path, in: workspace) else { return 0 }
         search.rejected[path] = nil
         if search.previewPath == path { search.previewPath = nil }
         if rerun { rerunSearch() }
         return plan.count
+    }
+
+    /// Puts `text` in `path`: its open buffer (unsaved), else the file in its own encoding and line endings.
+    func write(_ text: String, to path: String, in workspace: Workspace) -> Bool {
+        if let document = documents[path], document.state == .ready {
+            document.replaceText(text)
+            languages.changed(path: path) { document.storage.string }
+            return true
+        }
+        let url = workspace.url(for: path)
+        do {
+            guard let data = try? Data(contentsOf: url), case .text(_, let format) = TextFile.decode(data) else {
+                throw FileOps.Failure(message: "\(path) could not be read.")
+            }
+            try TextFile.encode(text, as: format).write(to: url, options: .atomic)
+            return true
+        } catch {
+            notice = error.localizedDescription
+            return false
+        }
     }
 
     /// Replace All, after the window's confirmation.

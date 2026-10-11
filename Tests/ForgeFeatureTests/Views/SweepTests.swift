@@ -182,6 +182,26 @@ final class SweepTests: XCTestCase {
         referencing.findReferences()
         SweepSupport.spin(until: 15) { if case .done = referencing.search.status { true } else { false } }
 
+        // E5 screen 11: F2 on `count` — the rename field with its reach; and ↵'s preview of renaming it to `value`.
+        let renamingSymbol = try SweepSupport.model(opening: repo)
+        renamingSymbol.open(file: broken, pinned: true)
+        try SweepSupport.waitUntilLoaded(renamingSymbol)
+        SweepSupport.spin(until: 30) { renamingSymbol.languages.issues[broken] != nil }
+        renamingSymbol.activeDocument?.cursor = (4, 13)
+        renamingSymbol.activeDocument?.caretRect = CGRect(x: 145, y: 69, width: 1, height: 22)
+        renamingSymbol.beginRename()
+        SweepSupport.spin(until: 15) { renamingSymbol.rename?.places != nil }
+        renamingSymbol.rename?.newName = "value"
+        let previewing = try SweepSupport.model(opening: repo)
+        previewing.open(file: broken, pinned: true)
+        try SweepSupport.waitUntilLoaded(previewing)
+        SweepSupport.spin(until: 30) { previewing.languages.issues[broken] != nil }
+        previewing.activeDocument?.cursor = (4, 13)
+        previewing.beginRename()
+        previewing.rename?.newName = "value"
+        previewing.commitRename(preview: true)
+        SweepSupport.spin(until: 15) { previewing.pendingEdit != nil }
+
         // Screen 5: welcome, with recents (the sample repo has a worktree).
         let docs = MemoryDocs()
         let welcomeStore = ForgeStore(documents: docs)
@@ -210,6 +230,8 @@ final class SweepTests: XCTestCase {
                 ("e52-hover", hovering),
                 ("e52-references", referencing),
                 ("e53-signature", typing),
+                ("e54-rename", renamingSymbol),
+                ("e54-rename-preview", previewing),
             ]
             for (name, model) in screens {
                 // The sweep window never becomes key, so an inline name field loses focus right after it shows

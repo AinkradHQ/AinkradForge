@@ -24,6 +24,11 @@ struct CodeEditor: View {
     var signatureTriggers: Set<String> = []
     var signatureShown = false
     var onSignature: ((Int, CGRect)?) -> Void = { _ in }
+    var edits: EditorEdits?
+    var onEditsApplied: (Int) -> Void = { _ in }
+    var menu: EditorMenu?
+    var onMenuPick: (Int?) -> Void = { _ in }
+    var onCaretRect: (CGRect) -> Void = { _ in }
     let onEdit: () -> Void
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
@@ -38,7 +43,8 @@ struct CodeEditor: View {
             goToLine: goToLine, onGoToLineHandled: onGoToLineHandled, onFocusedCaret: onCaret, marks: marks,
             definitions: definitions, onOpenLink: onOpenLink, onHover: onHover, suggest: suggest,
             suggestionTriggers: suggestionTriggers, signatureTriggers: signatureTriggers, signatureShown: signatureShown,
-            onSignature: onSignature)
+            onSignature: onSignature, edits: edits, onEditsApplied: onEditsApplied, menu: menu, onMenuPick: onMenuPick,
+            onCaretRect: onCaretRect)
     }
 }
 

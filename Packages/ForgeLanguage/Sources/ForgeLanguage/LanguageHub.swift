@@ -43,6 +43,11 @@ public final class LanguageHub {
     /// Server id → the characters after which it offers completions / signature help.
     public private(set) var completionTriggers: [String: Set<String>] = [:]
     public private(set) var signatureTriggers: [String: Set<String>] = [:]
+    /// Makes an edit a server asked for (after a code action's command): workspace-relative path → changes.
+    /// Returns whether it was made.
+    @ObservationIgnored public var onApplyEdit: (@MainActor ([String: [TextChange]]) -> Bool)?
+    /// Each file's diagnostics as the server sent them, handed back with a code-action request.
+    @ObservationIgnored private var diagnostics: [String: [Diagnostic]] = [:]
     /// Path overrides from settings (server id → executable).
     public var overrides: [String: String] = [:]
 
@@ -76,6 +81,7 @@ public final class LanguageHub {
         statuses = [:]
         completionTriggers = [:]
         signatureTriggers = [:]
+        diagnostics = [:]
         root = nil
     }
 
@@ -194,6 +200,58 @@ public final class LanguageHub {
         }
     }
 
+    /// Every place renaming the symbol at the position would change (workspace-relative path → changes).
+    public func rename(path: String, line: Int, character: Int, to newName: String) async -> [String: [TextChange]] {
+        let edit = await request(path) { await $0.rename(uri: $1, line: line, character: character, to: newName) } ?? nil
+        return edit.map { relative($0.textChanges) } ?? [:]
+    }
+
+    /// Fixes and refactors for a range: quick fixes first (the preferred one leading), then the rest.
+    public func codeActions(
+        path: String, from start: (line: Int, character: Int), to end: (line: Int, character: Int)
+    ) async -> [CodeActionItem] {
+        let range = LSPRange(start: Position(line: start.line, character: start.character), end: Position(line: end.line, character: end.character))
+        let touching = (diagnostics[path] ?? []).filter { $0.range.start.line <= end.line && $0.range.end.line >= start.line }
+        let found = await request(path) { await $0.codeActions(uri: $1, range: range, diagnostics: touching) } ?? []
+        let items = found.compactMap { option -> CodeActionItem? in
+            switch option {
+            case .optionA(let command): CodeActionItem(title: command.title, kind: nil, isPreferred: false, action: option)
+            case .optionB(let action):
+                action.disabled == nil
+                    ? CodeActionItem(title: action.title, kind: action.kind, isPreferred: action.isPreferred == true, action: option)
+                    : nil
+            }
+        }
+        return items.filter { $0.isQuickFix && $0.isPreferred } + items.filter { $0.isQuickFix && !$0.isPreferred }
+            + items.filter { !$0.isQuickFix }
+    }
+
+    /// Carries out a code action: its edit comes back to be made; its command (if any) runs on the server, which
+    /// may send further edits through `onApplyEdit`.
+    public func perform(_ item: CodeActionItem, path: String) async -> [String: [TextChange]] {
+        switch item.action {
+        case .optionA(let command):
+            _ = await request(path) { session, _ in await session.execute(command) }
+            return [:]
+        case .optionB(let action):
+            if let command = action.command { _ = await request(path) { session, _ in await session.execute(command) } }
+            return action.edit.map { relative($0.textChanges) } ?? [:]
+        }
+    }
+
+    /// The edits that would format the whole file.
+    public func format(path: String, tabSize: Int, insertSpaces: Bool) async -> [TextChange] {
+        let edits = await request(path) { await $0.format(uri: $1, tabSize: tabSize, insertSpaces: insertSpaces) } ?? []
+        return edits.map(TextChange.init)
+    }
+
+    /// Changes by URI → by workspace-relative path; files outside the workspace are left alone.
+    private func relative(_ changes: [String: [TextChange]]) -> [String: [TextChange]] {
+        var out: [String: [TextChange]] = [:]
+        for (uri, list) in changes { if let path = path(for: uri) { out[path, default: []] += list } }
+        return out
+    }
+
     /// Runs a request after everything queued for the file's server, the latest edit included.
     private func request<T: Sendable>(
         _ path: String, _ operation: @escaping @Sendable (LanguageSession, String) async -> T
@@ -279,6 +337,10 @@ public final class LanguageHub {
                     source: d.source)
             }
             issues[path] = mapped.isEmpty ? nil : mapped.sorted { ($0.severity, $0.start.line) < ($1.severity, $1.start.line) }
+            self.diagnostics[path] = diagnostics.isEmpty ? nil : diagnostics
+        case .applyEdit(let edit, let reply):
+            let applied = onApplyEdit?(relative(edit.textChanges)) ?? false
+            Task { await reply(applied) }
         }
     }
 

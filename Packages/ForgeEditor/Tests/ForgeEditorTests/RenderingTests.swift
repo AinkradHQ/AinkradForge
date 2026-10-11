@@ -156,4 +156,32 @@ final class RenderingTests: XCTestCase {
         let emphases = try XCTUnwrap(textView(in: host)?.emphasisManager).getEmphases(for: "forge.marks")
         XCTAssertEqual(emphases.map(\.range), [NSRange(location: 13, length: 6)])
     }
+
+    /// A rename's edits go through the editor: the buffer changes, they apply once, the editor says so.
+    func testEditsApplyThroughTheEditorOnce() throws {
+        let gray = NSColor.gray
+        let colors = EditorColors(
+            text: gray, insertionPoint: gray, selection: gray, lineHighlight: gray, keywords: gray, commands: gray,
+            types: gray, attributes: gray, variables: gray, values: gray, numbers: gray, strings: gray, comments: gray)
+        let storage = NSTextStorage(string: "let a = 1\nlet b = a + a\n")
+        var applied: [Int] = []
+        let edits = EditorEdits(id: 7, changes: [
+            (NSRange(location: 4, length: 1), "first"), (NSRange(location: 18, length: 1), "first"),
+            (NSRange(location: 22, length: 1), "first"),
+        ])
+        let host = NSHostingView(
+            rootView: ForgeCodeEditor(
+                storage: storage, language: .detect(url: URL(fileURLWithPath: "/a.swift")), colors: colors,
+                insets: NSEdgeInsets(), onEdit: {}, onCursor: { _, _ in }, edits: edits, onEditsApplied: { applied.append($0) }))
+        let window = NSWindow(
+            contentRect: NSRect(x: -3000, y: -3000, width: 400, height: 200), styleMask: .borderless,
+            backing: .buffered, defer: false)
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        XCTAssertEqual(storage.string, "let first = 1\nlet b = first + first\n")
+        XCTAssertEqual(applied, [7])
+    }
 }

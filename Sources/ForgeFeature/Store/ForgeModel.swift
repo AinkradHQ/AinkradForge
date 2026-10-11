@@ -34,6 +34,14 @@ final class ForgeModel {
     /// The signature hint over the caret, while it is in a call.
     var signature: SignatureInfo?
     @ObservationIgnored var signatureRequest = 0
+    /// The rename field, while open; a rename (or a server's edit) waiting in its preview.
+    var rename: RenameState?
+    var pendingEdit: PendingEdit?
+    /// Edits for the editor showing each file to make (undoable there), and the code-action menu to open.
+    var editorEdits: [String: EditorEdits] = [:]
+    var actionMenu: EditorMenu?
+    @ObservationIgnored var menuActions: [CodeActionItem] = []
+    @ObservationIgnored var editSequence = 0
     /// One editor pane, or two side by side (or stacked). Each has its own tabs.
     private(set) var panes: [Tabs] = [Tabs()]
     /// The pane keyboard commands and the palette act on.
@@ -83,6 +91,7 @@ final class ForgeModel {
     init(store: ForgeStore, apps: PluginAppLauncher? = nil) {
         self.store = store
         self.apps = apps
+        languages.onApplyEdit = { [weak self] changes in self?.apply(changes) ?? false }
     }
 
     /// Opens what another app asked for (`launch`: a folder, or a file — its folder, with the file in a tab);

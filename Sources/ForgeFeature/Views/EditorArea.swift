@@ -12,7 +12,9 @@ struct EditorArea: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let preview = model.search.previewPath, model.search.isReplaceOpen, model.sideTab == .search {
+            if let pending = model.pendingEdit {
+                EditPreview(model: model, pending: pending)
+            } else if let preview = model.search.previewPath, model.search.isReplaceOpen, model.sideTab == .search {
                 ReplacePreview(model: model, path: preview)
             } else {
                 let layout = model.stacked ? AnyLayout(VStackLayout(spacing: skin.size.s10)) : AnyLayout(HStackLayout(spacing: skin.size.s10))
@@ -107,6 +109,7 @@ private struct DocumentView: View {
     let goToLine: Int?
 
     private var issues: [Issue] { model.languages.issues[path] ?? [] }
+    private var isFirstPane: Bool { model.panes.firstIndex { $0.active == path } == pane }
 
     var body: some View {
         switch document.state {
@@ -126,7 +129,13 @@ private struct DocumentView: View {
                 suggestionTriggers: model.triggers(for: path).completion,
                 signatureTriggers: model.triggers(for: path).signature,
                 signatureShown: model.signature?.pane == pane && model.signature?.path == path,
-                onSignature: { [model, pane, path] hit in Task { await model.signature(pane: pane, path: path, at: hit) } }
+                onSignature: { [model, pane, path] hit in Task { await model.signature(pane: pane, path: path, at: hit) } },
+                // Edits and the action menu go to the first pane showing the file only: panes share its buffer.
+                edits: isFirstPane ? model.editorEdits[path] : nil,
+                onEditsApplied: { [model, path] id in if model.editorEdits[path]?.id == id { model.editorEdits[path] = nil } },
+                menu: pane == model.activePane ? model.actionMenu : nil,
+                onMenuPick: { [model] index in model.pickCodeAction(index) },
+                onCaretRect: { [document] rect in document.caretRect = rect }
             ) { model.didEdit(path) }
             .overlay {
                 if let hover = model.hover, hover.pane == pane, hover.path == path {
@@ -136,6 +145,13 @@ private struct DocumentView: View {
             .overlay {
                 if let signature = model.signature, signature.pane == pane, signature.path == path {
                     EditorCardLayer(rect: signature.rect, prefersAbove: true) { SignatureCard(hint: signature.hint) }
+                }
+            }
+            .overlay {
+                if let rename = model.rename, rename.pane == pane, rename.path == path {
+                    EditorCardLayer(rect: rename.rect, prefersAbove: false, interactive: true) {
+                        RenameField(model: model, state: rename)
+                    }
                 }
             }
         }

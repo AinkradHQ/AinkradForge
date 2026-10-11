@@ -57,6 +57,9 @@ extension ForgeModel {
             if !search.results.isEmpty { search.confirmingReplaceAll = true }
         case .goToDefinition: goToDefinition()
         case .findReferences: findReferences()
+        case .renameSymbol: beginRename()
+        case .codeActions: showCodeActions()
+        case .formatDocument: formatDocument()
         }
     }
 

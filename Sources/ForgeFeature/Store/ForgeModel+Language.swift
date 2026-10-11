@@ -174,7 +174,7 @@ extension ForgeModel {
     }
 
     /// An open file's buffer, else the file on disk.
-    private func text(of path: String) -> String? {
+    func text(of path: String) -> String? {
         if let document = documents[path] { return document.storage.string }
         return workspace.flatMap { SearchModel.readText($0.root.appending(path: path)) }
     }
