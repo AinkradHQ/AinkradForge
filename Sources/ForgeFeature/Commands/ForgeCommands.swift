@@ -26,6 +26,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
     case copyPath, openTerminal
     case splitRight, splitDown, focusFirstPane, focusSecondPane, closePane
     case newFile, newFolder, renameActiveFile, revealInFinder, trashActiveFile
+    case lineEndingsLF, lineEndingsCRLF, saveAsUTF8
 
     var id: String { rawValue }
 
@@ -59,6 +60,9 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .renameActiveFile: "Rename Active File…"
         case .revealInFinder: "Reveal Active File in Finder"
         case .trashActiveFile: "Move Active File to Trash"
+        case .lineEndingsLF: "Convert Line Endings to LF"
+        case .lineEndingsCRLF: "Convert Line Endings to CRLF"
+        case .saveAsUTF8: "Save as UTF-8"
         }
     }
 
@@ -89,6 +93,8 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .renameActiveFile: "pencil"
         case .revealInFinder: "folder"
         case .trashActiveFile: "trash"
+        case .lineEndingsLF, .lineEndingsCRLF: "return"
+        case .saveAsUTF8: "textformat"
         }
     }
 
@@ -114,7 +120,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .newFolder: Shortcut(key: "n", modifiers: [.command, .option])
         case .revealInFinder: Shortcut(key: "r", modifiers: [.command, .option])
         case .closeWorkspace, .revealInTree, .refresh, .openTerminal, .splitDown, .closePane, .renameActiveFile,
-            .trashActiveFile:
+            .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8:
             nil
         }
     }
@@ -124,7 +130,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .quickOpen, .commandPalette, .openFolder: .none
         case .closeWorkspace, .saveAll, .showFiles, .showChanges, .refresh, .openTerminal, .newFile, .newFolder: .workspace
         case .goToLine, .save, .closeTab, .nextTab, .previousTab, .revealInTree, .copyPath, .splitRight, .splitDown,
-            .renameActiveFile, .revealInFinder, .trashActiveFile:
+            .renameActiveFile, .revealInFinder, .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8:
             .file
         case .focusFirstPane, .focusSecondPane, .closePane: .split
         }

@@ -41,6 +41,8 @@ final class ForgeModel {
     var pendingClose: String?
     /// Leaving the workspace (open another, or close it) while files are unsaved: the window asks first.
     var pendingLeave: Leave?
+    /// Watches the workspace on disk: outside edits reach open buffers, the tree and git marks refresh.
+    @ObservationIgnored private var watcher: FolderWatcher?
     /// A name being typed in the tree: a rename, or a new file / folder in a folder ("" = the root).
     var treeEdit: TreeEdit?
 
@@ -138,6 +140,10 @@ final class ForgeModel {
         recentFiles = saved.recentFiles ?? []
         store.noteOpened(key)
         await workspace.refresh()
+        watcher = FolderWatcher(root: workspace.root) { [weak self] paths in
+            guard paths.contains(where: FolderWatcher.isRelevant) else { return }
+            Task { @MainActor in await self?.diskChanged() }
+        }
         // Tabs whose files are gone since last time are dropped.
         for index in panes.indices {
             for path in panes[index].paths
@@ -151,6 +157,7 @@ final class ForgeModel {
     }
 
     private func closeWorkspace() {
+        watcher = nil
         persist()
         workspace = nil
         documents = [:]
@@ -434,6 +441,16 @@ extension ForgeModel {
         }
         expanded = Set(expanded.map { FileOps.remap($0, from: old, to: new) ?? $0 })
         recentFiles = recentFiles.map { FileOps.remap($0, from: old, to: new) ?? $0 }
+    }
+}
+
+/// Changes made outside Forge — an agent, git, another editor.
+extension ForgeModel {
+    /// Refreshes the tree and git marks, and lets every open buffer compare itself with its file: a clean one
+    /// reloads, a dirty one raises its conflict banner.
+    func diskChanged() async {
+        await workspace?.refresh()
+        for document in documents.values { await document.checkDisk() }
     }
 }
 

@@ -47,6 +47,9 @@ extension ForgeModel {
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             }
         case .trashActiveFile: if let path = tabs.active { trash(path) }
+        case .lineEndingsLF: activeDocument?.convertLineEndings(to: .lf)
+        case .lineEndingsCRLF: activeDocument?.convertLineEndings(to: .crlf)
+        case .saveAsUTF8: activeDocument?.setEncoding(.utf8)
         }
     }
 

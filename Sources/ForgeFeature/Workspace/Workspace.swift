@@ -47,7 +47,7 @@ final class Workspace {
             }.value
             // `git status` paths are repo-relative; the tree is relative to this folder, which may be a subfolder.
             let prefix = (try? await git.run(["rev-parse", "--show-prefix"]))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            marks = GitParse.relative(GitParse.status((try? await git.run(["status", "--porcelain=v1", "-z", "--untracked-files=all"])) ?? ""), to: prefix)
+            marks = GitParse.relative(GitParse.status((try? await git.run(["--no-optional-locks", "status", "--porcelain=v1", "-z", "--untracked-files=all"])) ?? ""), to: prefix)
             branch = (try? await git.run(["rev-parse", "--abbrev-ref", "HEAD"]))?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             worktrees = GitParse.worktrees((try? await git.run(["worktree", "list", "--porcelain"])) ?? "")
