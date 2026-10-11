@@ -11,12 +11,12 @@
     <key>NSPrincipalClass</key><string>ForgePluginEntryPoint</string>
     <key>AinkradAppID</key><string>forge</string>
     <key>AinkradDisplayName</key><string>Forge</string>
-    <key>AinkradIconSymbol</key><string>book.closed</string>
+    <key>AinkradIconSymbol</key><string>hammer</string>
     <!-- Placeholder: scripts/stamp-api-version.sh writes the linked SDK's
          generation into the BUILT bundle, and `ainkrad new` substitutes this
          exact line. Never hand-edit the number. -->
     <key>AinkradAPIVersion</key><integer>11</integer>
     <key>AinkradAuthor</key><string>Ahmed Elhalaby</string>
-    <key>description</key><string>Claude Code, Codex, OpenCode and agy in one native app.</string>
+    <key>description</key><string>A native code editor: workspaces, search, language servers, terminal, git and review of agents&apos; edits.</string>
 </dict>
 </plist>
