@@ -14,6 +14,14 @@ struct HoverInfo: Equatable {
     let server: String
 }
 
+/// The signature of the call the caret is in, pinned over the caret.
+struct SignatureInfo: Equatable {
+    let pane: Int
+    let path: String
+    let rect: CGRect
+    let hint: SignatureHint
+}
+
 /// Language-server requests from the editor: hover, go to definition, find references.
 extension ForgeModel {
     /// The pointer rested on `offset` in `path` (or stopped resting, with nil).
@@ -33,6 +41,57 @@ extension ForgeModel {
         let markdown = await languages.hover(path: path, line: position.line, character: position.character)
         guard request == hoverRequest, issues.count + (markdown == nil ? 0 : 1) > 0 else { return }
         hover = HoverInfo(pane: pane, path: path, rect: hit.rect, issues: issues, markdown: markdown, server: spec.command)
+    }
+
+    /// Completions at `offset`, for the editor's suggestion window.
+    func suggestions(path: String, offset: Int) async -> [EditorSuggestion] {
+        guard let document = documents[path] else { return [] }
+        let index = LineIndex(document.storage.string)
+        let position = index.position(of: offset)
+        let found = await languages.completions(path: path, line: position.line, character: position.character)
+        // ponytail: the first 500 only; a server's full list for an empty prefix can run to thousands.
+        return found.prefix(500).map { item in
+            EditorSuggestion(
+                label: item.label, kind: Self.kind(item.kind), detail: item.detail, documentation: item.documentation,
+                insertText: item.insertText, filterText: item.filterText,
+                replaceStart: item.replaceStart.map { index.offset(line: $0.line, character: $0.character) },
+                deprecated: item.deprecated)
+        }
+    }
+
+    /// The caret moved after a signature trigger, or while the hint shows (nil: hide it).
+    func signature(pane: Int, path: String, at hit: (offset: Int, rect: CGRect)?) async {
+        signatureRequest += 1
+        let request = signatureRequest
+        guard let hit, let document = documents[path] else {
+            signature = nil
+            return
+        }
+        let position = LineIndex(document.storage.string).position(of: hit.offset)
+        let hint = await languages.signatureHelp(path: path, line: position.line, character: position.character)
+        guard request == signatureRequest else { return }
+        signature = hint.map { SignatureInfo(pane: pane, path: path, rect: hit.rect, hint: $0) }
+    }
+
+    /// The characters after which `path`'s server offers completions and signature help.
+    func triggers(for path: String) -> (completion: Set<String>, signature: Set<String>) {
+        guard let (spec, _) = LanguageRegistry.server(for: path) else { return ([], []) }
+        return (languages.completionTriggers[spec.id] ?? [], languages.signatureTriggers[spec.id] ?? [])
+    }
+
+    private static func kind(_ kind: Completion.Kind) -> EditorSuggestion.Kind {
+        switch kind {
+        case .method: .method
+        case .function: .function
+        case .property: .property
+        case .variable: .variable
+        case .type: .type
+        case .keyword: .keyword
+        case .snippet: .snippet
+        case .module: .module
+        case .constant: .constant
+        case .other: .other
+        }
     }
 
     /// ⌘-click: definitions of the symbol at `offset`, as links the editor can list and open.

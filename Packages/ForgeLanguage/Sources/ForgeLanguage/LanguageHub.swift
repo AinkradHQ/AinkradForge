@@ -40,6 +40,9 @@ public final class LanguageHub {
     public private(set) var issues: [String: [Issue]] = [:]
     /// Server id → state, for every server an open file has asked for.
     public private(set) var statuses: [String: ServerStatus] = [:]
+    /// Server id → the characters after which it offers completions / signature help.
+    public private(set) var completionTriggers: [String: Set<String>] = [:]
+    public private(set) var signatureTriggers: [String: Set<String>] = [:]
     /// Path overrides from settings (server id → executable).
     public var overrides: [String: String] = [:]
 
@@ -71,6 +74,8 @@ public final class LanguageHub {
         pendingTexts = [:]
         issues = [:]
         statuses = [:]
+        completionTriggers = [:]
+        signatureTriggers = [:]
         root = nil
     }
 
@@ -118,6 +123,75 @@ public final class LanguageHub {
     public func references(path: String, line: Int, character: Int) async -> [SymbolLocation] {
         let found = await request(path) { await $0.references(uri: $1, line: line, character: character) } ?? []
         return locations(found)
+    }
+
+    /// Completions at the caret, in the server's order.
+    public func completions(path: String, line: Int, character: Int) async -> [Completion] {
+        let items = await request(path) { await $0.completions(uri: $1, line: line, character: character) } ?? []
+        return items.sorted { ($0.sortText ?? $0.label) < ($1.sortText ?? $1.label) }.map(Self.completion)
+    }
+
+    /// The call around the caret, or nil outside one.
+    public func signatureHelp(path: String, line: Int, character: Int) async -> SignatureHint? {
+        guard let help = await request(path, { await $0.signatureHelp(uri: $1, line: line, character: character) }) ?? nil,
+            !help.signatures.isEmpty
+        else { return nil }
+        let signature = help.signatures[min(max(0, help.activeSignature ?? 0), help.signatures.count - 1)]
+        let active = signature.activeParameter.map { Int($0) } ?? help.activeParameter ?? 0
+        var range: NSRange?
+        if let parameters = signature.parameters, parameters.indices.contains(active) {
+            switch parameters[active].label {
+            case .optionA(let text):
+                let found = (signature.label as NSString).range(of: text)
+                range = found.location == NSNotFound ? nil : found
+            case .optionB(let offsets) where offsets.count == 2:
+                range = NSRange(location: Int(offsets[0]), length: Int(offsets[1]) - Int(offsets[0]))
+            default: break
+            }
+        }
+        return SignatureHint(label: signature.label, activeParameter: range, documentation: signature.documentation.map(Self.text))
+    }
+
+    private static func completion(_ item: CompletionItem) -> Completion {
+        var start: (Int, Int)?
+        var newText: String?
+        switch item.textEdit {
+        case .optionA(let edit):
+            start = (edit.range.start.line, edit.range.start.character)
+            newText = edit.newText
+        case .optionB(let edit):
+            start = (edit.replace.start.line, edit.replace.start.character)
+            newText = edit.newText
+        case nil: break
+        }
+        let raw = newText ?? item.insertText ?? item.label
+        return Completion(
+            label: item.label, kind: kind(item.kind), detail: item.detail, documentation: item.documentation.map(text),
+            insertText: item.insertTextFormat == .snippet ? Snippet.plain(raw) : raw,
+            filterText: item.filterText ?? item.label, sortText: item.sortText ?? item.label, replaceStart: start,
+            deprecated: item.deprecated == true)
+    }
+
+    private static func kind(_ kind: CompletionItemKind?) -> Completion.Kind {
+        switch kind {
+        case .method, .constructor: .method
+        case .function, .operator: .function
+        case .field, .property: .property
+        case .variable, .value, .reference: .variable
+        case .class, .interface, .enum, .struct, .typeParameter: .type
+        case .keyword: .keyword
+        case .snippet: .snippet
+        case .module, .folder, .file: .module
+        case .constant, .enumMember: .constant
+        default: .other
+        }
+    }
+
+    private static func text(_ documentation: TwoTypeOption<String, MarkupContent>) -> String {
+        switch documentation {
+        case .optionA(let text): text
+        case .optionB(let markup): markup.value
+        }
     }
 
     /// Runs a request after everything queued for the file's server, the latest edit included.
@@ -192,6 +266,9 @@ public final class LanguageHub {
         switch event {
         case .status(let status):
             statuses[spec.id] = status
+        case .triggers(let completion, let signature):
+            completionTriggers[spec.id] = completion
+            signatureTriggers[spec.id] = signature
         case .diagnostics(let uri, let diagnostics):
             guard let path = path(for: uri) else { return }
             let mapped = diagnostics.map { d in

@@ -44,6 +44,8 @@ actor LanguageSession {
     enum Event: Sendable {
         case diagnostics(uri: String, [Diagnostic])
         case status(ServerStatus)
+        /// Characters after which the server offers completions, and signature help.
+        case triggers(completion: Set<String>, signature: Set<String>)
     }
 
     let spec: ServerSpec
@@ -93,6 +95,9 @@ actor LanguageSession {
             }
             let reply = try await server.initializeIfNeeded()
             capabilities = reply.capabilities
+            emit.yield(.triggers(
+                completion: Set(reply.capabilities.completionProvider?.triggerCharacters ?? []),
+                signature: Set(reply.capabilities.signatureHelpProvider?.triggerCharacters ?? [])))
             for (uri, document) in documents {
                 try await server.textDocumentDidOpen(
                     DidOpenTextDocumentParams(textDocument: TextDocumentItem(
@@ -170,6 +175,23 @@ actor LanguageSession {
         return (try? await server.references(params)) ?? []
     }
 
+    func completions(uri: String, line: Int, character: Int) async -> [CompletionItem] {
+        guard let server, documents[uri] != nil else { return [] }
+        let params = CompletionParams(
+            textDocument: TextDocumentIdentifier(uri: uri), position: Position(line: line, character: character),
+            context: nil)
+        switch (try? await server.completion(params)) ?? nil {
+        case .optionA(let items): return items
+        case .optionB(let list): return list.items
+        case nil: return []
+        }
+    }
+
+    func signatureHelp(uri: String, line: Int, character: Int) async -> SignatureHelp? {
+        guard let server, documents[uri] != nil else { return nil }
+        return (try? await server.signatureHelp(Self.position(uri, line, character))) ?? nil
+    }
+
     private static func position(_ uri: String, _ line: Int, _ character: Int) -> TextDocumentPositionParams {
         TextDocumentPositionParams(
             textDocument: TextDocumentIdentifier(uri: uri), position: Position(line: line, character: character))
@@ -219,7 +241,16 @@ actor LanguageSession {
         textDocument: TextDocumentClientCapabilities(
             synchronization: TextDocumentSyncClientCapabilities(
                 dynamicRegistration: false, willSave: false, willSaveWaitUntil: false, didSave: true),
+            completion: CompletionClientCapabilities(
+                dynamicRegistration: false,
+                completionItem: CompletionClientCapabilities.CompletionItem(
+                    snippetSupport: false, documentationFormat: [.markdown, .plaintext], deprecatedSupport: true)),
             hover: HoverClientCapabilities(dynamicRegistration: false, contentFormat: [.markdown, .plaintext]),
+            signatureHelp: SignatureHelpClientCapabilities(
+                dynamicRegistration: false,
+                signatureInformation: SignatureHelpClientCapabilities.SignatureInformation(
+                    documentationFormat: [.markdown, .plaintext], labelOffsetSupport: true, activeParameterSupport: true),
+                contextSupport: false),
             definition: DynamicRegistrationLinkSupportClientCapabilities(dynamicRegistration: false, linkSupport: true),
             references: DynamicRegistrationClientCapabilities(dynamicRegistration: false),
             publishDiagnostics: PublishDiagnosticsClientCapabilities(

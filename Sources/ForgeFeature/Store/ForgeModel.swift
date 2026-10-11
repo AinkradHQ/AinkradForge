@@ -31,6 +31,9 @@ final class ForgeModel {
     var hover: HoverInfo?
     /// The hover asked for last; an answer for any other is stale and dropped.
     @ObservationIgnored var hoverRequest = 0
+    /// The signature hint over the caret, while it is in a call.
+    var signature: SignatureInfo?
+    @ObservationIgnored var signatureRequest = 0
     /// One editor pane, or two side by side (or stacked). Each has its own tabs.
     private(set) var panes: [Tabs] = [Tabs()]
     /// The pane keyboard commands and the palette act on.

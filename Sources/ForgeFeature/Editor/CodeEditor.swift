@@ -19,6 +19,11 @@ struct CodeEditor: View {
     var definitions: ((Int) async -> [EditorLink])?
     var onOpenLink: (EditorLink) -> Void = { _ in }
     var onHover: ((Int, CGRect)?) -> Void = { _ in }
+    var suggest: ((Int) async -> [EditorSuggestion])?
+    var suggestionTriggers: Set<String> = []
+    var signatureTriggers: Set<String> = []
+    var signatureShown = false
+    var onSignature: ((Int, CGRect)?) -> Void = { _ in }
     let onEdit: () -> Void
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
@@ -31,7 +36,9 @@ struct CodeEditor: View {
             onEdit: onEdit,
             onCursor: { line, column in document.cursor = (line, column) },
             goToLine: goToLine, onGoToLineHandled: onGoToLineHandled, onFocusedCaret: onCaret, marks: marks,
-            definitions: definitions, onOpenLink: onOpenLink, onHover: onHover)
+            definitions: definitions, onOpenLink: onOpenLink, onHover: onHover, suggest: suggest,
+            suggestionTriggers: suggestionTriggers, signatureTriggers: signatureTriggers, signatureShown: signatureShown,
+            onSignature: onSignature)
     }
 }
 

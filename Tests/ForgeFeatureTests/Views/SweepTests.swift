@@ -150,13 +150,27 @@ final class SweepTests: XCTestCase {
         try SweepSupport.waitUntilLoaded(diagnosed)
         SweepSupport.spin(until: 30) { diagnosed.languages.issues[broken]?.count ?? 0 >= 2 }
 
-        // E5 screen 9: the hover card on `count` — its issue, then sourcekit's signature. On its own: the card is
-        // a popover, a window of its own, outside a window capture.
+        // E5 screen 9: the hover card on `count` — its issue, then sourcekit's signature. The rect is where the
+        // word sits in the sweep's layout (the editor reports the real one).
+        let hovering = try SweepSupport.model(opening: repo)
+        hovering.open(file: broken, pinned: true)
+        try SweepSupport.waitUntilLoaded(hovering)
+        SweepSupport.spin(until: 30) { hovering.languages.issues[broken] != nil }
         let badgeText = try String(contentsOf: repo.appendingPathComponent(broken), encoding: .utf8)
         let countOffset = (badgeText as NSString).range(of: "= count").location + 2
-        Task { await diagnosed.hover(pane: 0, path: broken, at: (countOffset, .zero)) }
-        SweepSupport.spin(until: 15) { diagnosed.hover != nil }
-        let hoverInfo = try XCTUnwrap(diagnosed.hover)
+        Task { await hovering.hover(pane: 0, path: broken, at: (countOffset, CGRect(x: 285, y: 113, width: 39, height: 22))) }
+        SweepSupport.spin(until: 15) { hovering.hover != nil }
+
+        // E5 screen 10: signature help inside a call, on its second argument.
+        let typing = try SweepSupport.model(opening: repo)
+        let bump = "Sources/Ainkrad/Features/Sidebar/Bump.swift"
+        let call = "func bump(_ n: Int, by step: Int) -> Int { n + step }\n\nlet a = bump(1, "
+        try call.write(to: repo.appendingPathComponent(bump), atomically: true, encoding: .utf8)
+        typing.open(file: bump, pinned: true)
+        try SweepSupport.waitUntilLoaded(typing)
+        SweepSupport.spin(until: 30) { typing.languages.statuses["sourcekit-lsp"] == .ready }
+        Task { await typing.signature(pane: 0, path: bump, at: ((call as NSString).length, CGRect(x: 192, y: 47, width: 1, height: 22))) }
+        SweepSupport.spin(until: 15) { typing.signature != nil }
 
         // ⇧F12 on `count`: the sample repo is no package, so sourcekit-lsp has no index and finds no references —
         // the whole-word search stands in and says so.
@@ -193,26 +207,10 @@ final class SweepTests: XCTestCase {
                 ("e41-search", searching),
                 ("e42-replace", replacing),
                 ("e51-issues", diagnosed),
+                ("e52-hover", hovering),
                 ("e52-references", referencing),
+                ("e53-signature", typing),
             ]
-            try LiveCapture.shoot(
-                HoverCard(info: hoverInfo)
-                    .padding(skin.size.s12)
-                    .ainkradPanel()
-                    .padding(skin.size.s24)
-                    .frame(width: 520, height: 260, alignment: .topLeading)
-                    .background(skin.color(skin.palette.background))
-                    .ainkradSkin(skin)
-                    .environment(\.ainkradTheme, HostThemeTokens(skin: skin))
-                    .environment(
-                        \.ainkradStatusColors,
-                        AinkradStatusColors(
-                            success: skin.color(skin.palette.success), warning: skin.color(skin.palette.warning),
-                            danger: skin.color(skin.palette.danger)))
-                    .environment(\.ainkradTypography, AinkradTypography(fontFamilyName: theme == "neon" ? "Exo 2" : nil))
-                    .environment(\.colorScheme, .dark),
-                size: CGSize(width: 520, height: 260),
-                to: URL(fileURLWithPath: out).appendingPathComponent("e52-hover-card-\(theme).png"))
             for (name, model) in screens {
                 // The sweep window never becomes key, so an inline name field loses focus right after it shows
                 // and ends its edit; start each edit afresh for every capture.

@@ -38,7 +38,6 @@ struct HoverCard: View {
                 .font(skin.font(AinkradFontToken(sizeKey: "t10")))
                 .foregroundStyle(skin.color(skin.text.faint))
         }
-        .textSelection(.enabled)
         .frame(maxWidth: skin.size.s400, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -64,3 +63,60 @@ struct HoverCard: View {
         }
     }
 }
+
+/// The signature of the call being typed, its active parameter bold and underlined.
+struct SignatureCard: View {
+    let hint: SignatureHint
+    @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
+
+    var body: some View {
+        Text(label)
+            .font(skin.font(AinkradFontToken(sizeKey: "t12", mono: "system")))
+            .lineLimit(2)
+            .frame(maxWidth: skin.size.s400, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var label: AttributedString {
+        var text = AttributedString(hint.label)
+        text.foregroundColor = skin.color(skin.text.muted)
+        if let active = hint.activeParameter, let range = Range(active, in: hint.label),
+            let start = AttributedString.Index(range.lowerBound, within: text),
+            let end = AttributedString.Index(range.upperBound, within: text)
+        {
+            text[start..<end].foregroundColor = theme.foreground
+            text[start..<end].inlinePresentationIntent = .stronglyEmphasized
+            text[start..<end].underlineStyle = .single
+        }
+        return text
+    }
+}
+
+/// A card pinned to a rect of the editor — below it, or above (`prefersAbove`, or when there is no room
+/// below). Drawn in the editor, not a popover window: it never takes the keyboard from the text, and never
+/// takes the pointer (hit testing off), so the editor keeps its hover and clicks.
+struct EditorCardLayer<Card: View>: View {
+    let rect: CGRect
+    let prefersAbove: Bool
+    @ViewBuilder let card: Card
+    @Environment(\.ainkradSkin) private var skin
+
+    var body: some View {
+        GeometryReader { geo in
+            let gap = skin.size.s4
+            let roomBelow = geo.size.height - rect.maxY - gap
+            let above = prefersAbove ? rect.minY > skin.size.s44 || roomBelow < skin.size.s44 : roomBelow < skin.size.s160
+            card
+                .padding(skin.size.s10)
+                .ainkradPanel()
+                .padding(.leading, max(0, min(rect.minX - skin.size.s10, geo.size.width - skin.size.s420)))
+                .frame(
+                    width: geo.size.width, height: max(0, above ? rect.minY - gap : roomBelow),
+                    alignment: above ? .bottomLeading : .topLeading)
+                .offset(y: above ? 0 : rect.maxY + gap)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
