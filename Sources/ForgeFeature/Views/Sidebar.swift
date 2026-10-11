@@ -20,7 +20,14 @@ struct Sidebar: View {
             Group {
                 switch model.sideTab {
                 case .files: FileTreeList(model: model, workspace: workspace)
-                case .changes: ChangesList(model: model, workspace: workspace)
+                case .changes:
+                    VStack(alignment: .leading, spacing: 0) {
+                        OutsideChangesButton(model: model)
+                            .font(skin.font(AinkradFontToken(sizeKey: "t12")))
+                            .padding(.horizontal, skin.size.s12)
+                            .padding(.bottom, model.agent.count > 0 ? skin.size.s8 : 0)
+                        ChangesList(model: model, workspace: workspace)
+                    }
                 case .search: SearchPanel(model: model, workspace: workspace)
                 case .problems: IssuesList(model: model)
                 }

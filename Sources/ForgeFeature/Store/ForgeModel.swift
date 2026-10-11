@@ -56,7 +56,7 @@ final class ForgeModel {
     private(set) var expanded: Set<String> = []
     private(set) var documents: [String: EditorDocument] = [:] {
         // A buffer that goes away (closed, renamed, trashed, workspace switched) is closed on its server too.
-        didSet { for path in oldValue.keys where documents[path] == nil { languages.closed(path: path); git.closed(path); agent.closed(path) } }
+        didSet { for path in oldValue.keys where documents[path] == nil { languages.closed(path: path); git.closed(path); agent.closed(path, text: oldValue[path]?.storage.string) } }
     }
     /// The workspace's language servers: diagnostics now; hover, completion and the rest as E5 lands.
     let languages = LanguageHub()
@@ -181,7 +181,7 @@ final class ForgeModel {
         await tasks.refresh(root: workspace.root, files: workspace.files)
         watcher = FolderWatcher(root: workspace.root) { [weak self] paths in
             guard paths.contains(where: FolderWatcher.isRelevant) else { return }
-            Task { @MainActor in await self?.diskChanged() }
+            Task { @MainActor in await self?.diskChanged(paths: paths) }
         }
         // Tabs whose files are gone since last time are dropped.
         for index in panes.indices {
@@ -278,14 +278,14 @@ final class ForgeModel {
             let document = EditorDocument(url: workspace.url(for: path))
             document.onSaved = { [weak self] saved in
                 guard let path = self?.workspace?.relativePath(of: saved.url) else { return }
-                self?.languages.saved(path: path)
+                self?.languages.saved(path: path); self?.agent.wrote(path, text: saved.storage.string)
             }
             documents[path] = document
             Task {
                 await document.load()
                 if document.state == .ready {
                     languages.opened(path: path, text: document.storage.string)
-                    gitChanged(path)
+                    loaded(path)
                 }
             }
         }
@@ -471,7 +471,7 @@ extension ForgeModel {
     /// Runs a file operation, then refreshes the tree and saves state; a failure becomes the toast.
     private func perform(_ operation: () throws -> Void) {
         do {
-            try operation()
+            agent.treeChanged(); try operation()
         } catch {
             notice = error.localizedDescription
         }

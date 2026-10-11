@@ -24,6 +24,26 @@ final class AgentReview {
     /// Files whose next edit is our own undo (recompute, do not keep everything).
     @ObservationIgnored private var expecting: Set<String> = []
 
+    /// A file that is not open, changed from outside: what it was (nil: it is new) and is (nil: deleted).
+    struct OtherFile: Equatable {
+        let baseline: String?
+        var current: String?
+        let since: Date
+    }
+
+    /// Closed files changed from outside, since the last review.
+    private(set) var others: [String: OtherFile] = [:]
+    /// The Review All pane is showing, and the changes unticked in it (to undo), per file.
+    var reviewingAll = false
+    var unticked: [String: Set<Int>] = [:]
+    /// What Forge last saw of files it read or wrote — the baseline when one of them changes while closed.
+    @ObservationIgnored private(set) var seen: [String: String] = [:]
+    @ObservationIgnored private var ownWrites: [String: Date] = [:]
+    @ObservationIgnored private var treeChangedAt = Date.distantPast
+
+    /// Everything waiting for review.
+    var count: Int { files.count + others.count }
+
     /// A file this long is reloaded without review (the kit's diff is quadratic).
     static let lineLimit = 4_000
 
@@ -31,6 +51,57 @@ final class AgentReview {
         files = [:]
         current = [:]
         expecting = []
+        others = [:]
+        unticked = [:]
+        reviewingAll = false
+        seen = [:]
+        ownWrites = [:]
+    }
+
+    // MARK: - Closed files
+
+    /// Forge read `path` (opened it): that is what it has seen.
+    func saw(_ path: String, text: String) { remember(path, text) }
+
+    /// Forge wrote `path` (a save, a replace): seen, and not an outside change when the watcher reports it.
+    func wrote(_ path: String, text: String) {
+        remember(path, text)
+        ownWrites[path] = Date()
+        others[path] = nil
+    }
+
+    /// Forge is creating, renaming or moving files: the watcher's next reports are its own.
+    func treeChanged() { treeChangedAt = Date() }
+
+    /// Whether a change the watcher reports for `path` is Forge's own.
+    func isOwn(_ path: String) -> Bool {
+        let now = Date()
+        return now.timeIntervalSince(ownWrites[path] ?? .distantPast) < 3 || now.timeIntervalSince(treeChangedAt) < 3
+    }
+
+    /// The baseline a closed file compares against (nil: Forge never saw it — use the index).
+    func lastSeen(_ path: String) -> String? { others[path]?.baseline ?? seen[path] }
+
+    /// A closed file changed from outside: `current` is its text now (nil: deleted), `baseline` what it was.
+    func outside(_ path: String, baseline: String?, current: String?) {
+        let since = others[path]?.since ?? Date()
+        let base = others[path].map(\.baseline) ?? baseline
+        if base == current || (base == nil && current == nil) {
+            others[path] = nil
+        } else {
+            others[path] = OtherFile(baseline: base, current: current, since: since)
+        }
+    }
+
+    /// The review is done with `path` (kept, undone, or opened).
+    func settled(_ path: String) {
+        others[path] = nil
+        unticked[path] = nil
+    }
+
+    private func remember(_ path: String, _ text: String) {
+        // ponytail: an unbounded cache of read files; cap it if a long session holds too many big ones.
+        if text.utf8.count < 2_000_000 { seen[path] = text }
     }
 
     /// Forge reloaded a clean file someone else rewrote: `before` was its text. Edits in a row compare
@@ -51,7 +122,11 @@ final class AgentReview {
         }
     }
 
-    func closed(_ path: String) { forget(path) }
+    /// The tab closed: its text is what Forge last saw.
+    func closed(_ path: String, text: String?) {
+        if let text { remember(path, text) }
+        forget(path)
+    }
 
     // MARK: - Keep / undo
 

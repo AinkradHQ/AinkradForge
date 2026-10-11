@@ -13,7 +13,9 @@ struct EditorArea: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let pending = model.pendingEdit {
+            if model.agent.reviewingAll {
+                ReviewAllPane(model: model)
+            } else if let pending = model.pendingEdit {
                 EditPreview(model: model, pending: pending)
             } else if let preview = model.search.previewPath, model.search.isReplaceOpen, model.sideTab == .search {
                 ReplacePreview(model: model, path: preview)
@@ -341,6 +343,7 @@ private struct StatusRow: View {
             }
             IssueCounts(model: model)
             ServerChip(model: model)
+            OutsideChangesButton(model: model)
             if workspace.isLoading { AinkradSpinner() }
             Spacer(minLength: skin.size.s8)
             if let document = model.activeDocument, document.state == .ready {

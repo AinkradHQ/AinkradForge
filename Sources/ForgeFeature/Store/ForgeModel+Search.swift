@@ -7,7 +7,8 @@ import Foundation
 extension ForgeModel {
     /// Refreshes the tree and git marks, and lets every open buffer compare itself with its file: a clean one
     /// reloads, a dirty one raises its conflict banner.
-    func diskChanged() async {
+    func diskChanged(paths: [String] = []) async {
+        let known = Set(workspace?.files ?? [])
         await workspace?.refresh()
         // A commit, checkout or stage moves what the gutter compares against.
         if let workspace {
@@ -25,6 +26,7 @@ extension ForgeModel {
                 agent.reloaded(path, before: before, after: document.storage.string)
             }
         }
+        await outsideChanges(paths, known: known)
     }
 }
 
@@ -84,6 +86,7 @@ extension ForgeModel {
 
     /// Puts `text` in `path`: its open buffer (unsaved), else the file in its own encoding and line endings.
     func write(_ text: String, to path: String, in workspace: Workspace) -> Bool {
+        agent.wrote(path, text: text)
         if let document = documents[path], document.state == .ready {
             document.replaceText(text)
             languages.changed(path: path) { document.storage.string }
