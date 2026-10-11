@@ -39,6 +39,9 @@ final class TerminalDrawer {
     /// A command's process ended (tab, exit code) / a tab was closed — for the task runner.
     @ObservationIgnored var onEnded: (Int, Int32?) -> Void = { _, _ in }
     @ObservationIgnored var onClosed: (Int) -> Void = { _ in }
+    /// ⌘-click on a path or URL in a terminal's output.
+    @ObservationIgnored var onOpenLink: (String) -> Void = { _ in }
+    @ObservationIgnored private var routers: [Int: LinkRouter] = [:]
     /// The theme's text colour, for a palette that leaves the terminal's foreground unset (Liquid Glass does).
     @ObservationIgnored var foreground: NSColor?
 
@@ -52,6 +55,7 @@ final class TerminalDrawer {
         views.values.forEach { $0.terminate() }
         views = [:]
         events = [:]
+        routers = [:]
         tabs = []
         active = nil
         isOpen = false
@@ -78,6 +82,9 @@ final class TerminalDrawer {
         let view = ForgeTerminalView(frame: .zero)
         let handler = TerminalEvents(id: id, drawer: self)
         view.processDelegate = handler
+        let router = LinkRouter(view: view) { [weak self] link in self?.onOpenLink(link) }
+        view.terminalDelegate = router
+        routers[id] = router
         Self.apply(palette, foreground: foreground, to: view)
         let shell = Self.shell
         // Spawned at the first real size, so the shell starts matching the drawer (no startup resize).
@@ -113,6 +120,7 @@ final class TerminalDrawer {
         confirmingClose = nil
         views.removeValue(forKey: id)?.terminate()
         events[id] = nil
+        routers[id] = nil
         tabs.removeAll { $0.id == id }
         onClosed(id)
         if active == id { active = tabs.last?.id }
@@ -230,3 +238,52 @@ private final class TerminalEvents: NSObject, LocalProcessTerminalViewDelegate, 
         }
     }
 }
+
+/// Stands in as the terminal's view delegate only to catch ⌘-clicked links: SwiftTerm opens them through a
+/// protocol default that a subclass cannot override. Everything else goes back to the terminal view itself.
+private final class LinkRouter: NSObject, TerminalViewDelegate {
+    weak var view: LocalProcessTerminalView?
+    let open: (String) -> Void
+
+    init(view: LocalProcessTerminalView, open: @escaping (String) -> Void) {
+        self.view = view
+        self.open = open
+    }
+
+    func requestOpenLink(source: TerminalView, link: String, params: [String: String]) { open(link) }
+    func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) { view?.sizeChanged(source: source, newCols: newCols, newRows: newRows) }
+    func setTerminalTitle(source: TerminalView, title: String) { view?.setTerminalTitle(source: source, title: title) }
+    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) { view?.hostCurrentDirectoryUpdate(source: source, directory: directory) }
+    func send(source: TerminalView, data: ArraySlice<UInt8>) { view?.send(source: source, data: data) }
+    func scrolled(source: TerminalView, position: Double) { view?.scrolled(source: source, position: position) }
+    func clipboardCopy(source: TerminalView, content: Data) { view?.clipboardCopy(source: source, content: content) }
+    func rangeChanged(source: TerminalView, startY: Int, endY: Int) { view?.rangeChanged(source: source, startY: startY, endY: endY) }
+    func bell(source: TerminalView) { NSSound.beep() }
+    func iTermContent(source: TerminalView, content: ArraySlice<UInt8>) {}
+}
+
+/// A ⌘-clicked terminal link: a file (with its line and column, as compilers print them) or something else.
+enum TerminalLink: Equatable {
+    case file(path: String, line: Int?)
+    case url(URL)
+
+    /// `/a/b.swift:12:5: error`, `./x.ts:3`, `file:///a/b`, `~/notes.md`, or a web URL.
+    static func parse(_ link: String, home: String = NSHomeDirectory()) -> TerminalLink? {
+        var text = link.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("file://"), let url = URL(string: text) { text = url.path(percentEncoded: false) }
+        if text.hasPrefix("~/") { text = home + text.dropFirst() }
+        guard text.hasPrefix("/") || text.hasPrefix("./") || text.hasPrefix("../") else {
+            return URL(string: text).flatMap { $0.scheme == nil ? nil : .url($0) }
+        }
+        // Trailing `:line` and `:line:column` (the column is not used: the editor goes to the line).
+        let parts = text.split(separator: ":", omittingEmptySubsequences: false)
+        var numbers: [Int] = []
+        var end = parts.count
+        while end > 1, let number = Int(parts[end - 1]), numbers.count < 2 {
+            numbers.insert(number, at: 0)
+            end -= 1
+        }
+        return .file(path: parts[..<end].joined(separator: ":"), line: numbers.first)
+    }
+}
+
