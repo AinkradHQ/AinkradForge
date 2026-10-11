@@ -56,12 +56,8 @@ private struct PaneView: View {
                                 .padding(.bottom, skin.size.s6)
                         }
                         DocumentView(
-                            document: document, palette: palette, options: model.editorOptions,
-                            goToLine: model.activePane == index ? model.pendingLine : nil,
-                            onGoToLineHandled: { model.pendingLine = nil },
-                            issues: model.languages.issues[path] ?? [],
-                            onCaret: { model.focus(pane: index) }
-                        ) { model.didEdit(path) }
+                            model: model, pane: index, path: path, document: document, palette: palette,
+                            goToLine: model.activePane == index ? model.pendingLine : nil)
                         // A wholesale buffer change (reload, line endings) rebuilds the editor so it re-parses.
                         .id("\(path)#\(document.revision)")
                     }
@@ -103,15 +99,14 @@ private struct DocumentView: View {
         }
     }
 
+    let model: ForgeModel
+    let pane: Int
+    let path: String
     let document: EditorDocument
     let palette: HostTerminalPalette?
-    let options: EditorOptions
     let goToLine: Int?
-    let onGoToLineHandled: () -> Void
-    let issues: [Issue]
-    /// The caret moved here — this pane is the one being worked in.
-    let onCaret: () -> Void
-    let onEdit: () -> Void
+
+    private var issues: [Issue] { model.languages.issues[path] ?? [] }
 
     var body: some View {
         switch document.state {
@@ -120,8 +115,29 @@ private struct DocumentView: View {
             AinkradEmptyState(icon: "doc.questionmark", title: "Can't show this file", message: why)
         case .ready:
             CodeEditor(
-                document: document, palette: palette, options: options, goToLine: goToLine,
-                onGoToLineHandled: onGoToLineHandled, onCaret: onCaret, marks: marks, onEdit: onEdit)
+                document: document, palette: palette, options: model.editorOptions, goToLine: goToLine,
+                onGoToLineHandled: { model.pendingLine = nil },
+                // The caret moved here — this pane is the one being worked in.
+                onCaret: { model.focus(pane: pane) }, marks: marks,
+                definitions: { [model, path] offset in await model.definitions(path: path, offset: offset) },
+                onOpenLink: { [model] link in model.open(link) },
+                onHover: { [model, pane, path] hit in Task { await model.hover(pane: pane, path: path, at: hit) } }
+            ) { model.didEdit(path) }
+            .overlay(alignment: .topLeading) { hoverAnchor }
+        }
+    }
+
+    /// A clear box over the hovered word, for the kit's popover to point at.
+    @ViewBuilder private var hoverAnchor: some View {
+        if let hover = model.hover, hover.pane == pane, hover.path == path {
+            Color.clear
+                .frame(width: hover.rect.width, height: hover.rect.height)
+                .ainkradPopover(isPresented: Binding(get: { model.hover != nil }, set: { if !$0 { model.hover = nil } })) {
+                    HoverCard(info: hover)
+                }
+                .padding(.leading, hover.rect.minX)
+                .padding(.top, hover.rect.minY)
+                .allowsHitTesting(false)
         }
     }
 }

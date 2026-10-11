@@ -10,6 +10,8 @@ struct CommandsTests {
         #expect(ForgeCommand.commandPalette.shortcut?.display == "⇧⌘P")
         #expect(ForgeCommand.saveAll.shortcut?.display == "⌥⌘S")
         #expect(ForgeCommand.showChanges.shortcut?.display == "⌃⇧G")
+        #expect(ForgeCommand.goToDefinition.shortcut?.display == "F12")
+        #expect(ForgeCommand.findReferences.shortcut?.display == "⇧F12")
     }
 
     @Test func noTwoCommandsShareAChord() {

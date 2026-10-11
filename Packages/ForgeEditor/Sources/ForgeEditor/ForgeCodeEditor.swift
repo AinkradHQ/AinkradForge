@@ -99,6 +99,23 @@ public struct EditorMark: Equatable, Sendable {
     }
 }
 
+/// A definition to jump to. The caller opens it (another file, a preview tab).
+public struct EditorLink: Sendable {
+    /// Absolute.
+    public let path: String
+    /// 1-based.
+    public let line: Int
+    public let label: String
+    public let preview: String
+
+    public init(path: String, line: Int, label: String, preview: String) {
+        self.path = path
+        self.line = line
+        self.label = label
+        self.preview = preview
+    }
+}
+
 /// Edits `storage` in place (a large file is never copied per keystroke). Transparent, so the window's
 /// surface — Neon fill or Liquid Glass — shows through.
 public struct ForgeCodeEditor: View {
@@ -117,12 +134,19 @@ public struct ForgeCodeEditor: View {
     let onFocusedCaret: () -> Void
     /// Ranges to underline (diagnostics).
     let marks: [EditorMark]
+    /// ⌘-click: the definitions of the symbol at a UTF-16 offset; `onOpenLink` opens the one chosen.
+    let definitions: ((Int) async -> [EditorLink])?
+    let onOpenLink: (EditorLink) -> Void
+    /// The pointer rests on a word (its offset and rect, top-left origin in this view), or stopped.
+    let onHover: ((Int, CGRect)?) -> Void
 
     public init(
         storage: NSTextStorage, language: EditorLanguage, colors: EditorColors, options: EditorOptions = EditorOptions(),
         insets: NSEdgeInsets, onEdit: @escaping () -> Void, onCursor: @escaping (Int, Int) -> Void,
         goToLine: Int? = nil, onGoToLineHandled: @escaping () -> Void = {},
-        onFocusedCaret: @escaping () -> Void = {}, marks: [EditorMark] = []
+        onFocusedCaret: @escaping () -> Void = {}, marks: [EditorMark] = [],
+        definitions: ((Int) async -> [EditorLink])? = nil, onOpenLink: @escaping (EditorLink) -> Void = { _ in },
+        onHover: @escaping ((Int, CGRect)?) -> Void = { _ in }
     ) {
         self.storage = storage
         self.language = language
@@ -135,6 +159,9 @@ public struct ForgeCodeEditor: View {
         self.onGoToLineHandled = onGoToLineHandled
         self.onFocusedCaret = onFocusedCaret
         self.marks = marks
+        self.definitions = definitions
+        self.onOpenLink = onOpenLink
+        self.onHover = onHover
     }
 
     public var body: AnyView {
@@ -142,7 +169,8 @@ public struct ForgeCodeEditor: View {
             EditorHost(
                 storage: storage, language: language, colors: colors, options: options, insets: insets,
                 onEdit: onEdit, onCursor: onCursor, goToLine: goToLine, onGoToLineHandled: onGoToLineHandled,
-                onFocusedCaret: onFocusedCaret, marks: marks))
+                onFocusedCaret: onFocusedCaret, marks: marks, definitions: definitions, onOpenLink: onOpenLink,
+                onHover: onHover))
     }
 }
 
@@ -159,6 +187,9 @@ struct EditorHost: View {
     let onGoToLineHandled: () -> Void
     let onFocusedCaret: () -> Void
     let marks: [EditorMark]
+    let definitions: ((Int) async -> [EditorLink])?
+    let onOpenLink: (EditorLink) -> Void
+    let onHover: ((Int, CGRect)?) -> Void
     @State private var state = SourceEditorState()
     @State private var coordinator = Coordinator()
 
@@ -178,9 +209,13 @@ struct EditorHost: View {
                         ? InvisibleCharactersConfiguration(showSpaces: true, showTabs: true, showLineEndings: false)
                         : .empty)),
             state: $state,
-            coordinators: [coordinator]
+            coordinators: [coordinator],
+            jumpToDefinitionDelegate: definitions == nil ? nil : coordinator
         )
         .onAppear {
+            coordinator.definitions = definitions
+            coordinator.onOpenLink = onOpenLink
+            coordinator.hover.onHover = onHover
             coordinator.onEdit = onEdit
             coordinator.onCursor = onCursor
             coordinator.onFocusedCaret = onFocusedCaret
@@ -210,20 +245,27 @@ struct EditorHost: View {
         var onEdit: () -> Void = {}
         var onCursor: (Int, Int) -> Void = { _, _ in }
         var onFocusedCaret: () -> Void = {}
+        var definitions: ((Int) async -> [EditorLink])?
+        var onOpenLink: (EditorLink) -> Void = { _ in }
+        let hover = HoverTracker()
         weak var controller: TextViewController?
 
         /// `prepareCoordinator` runs before the controller loads its view (`scrollView`, implicitly unwrapped, is
         /// still nil), and `viewDidAppear` does not reliably fire inside a SwiftUI host — so one run-loop turn later.
         func prepareCoordinator(controller: TextViewController) {
             self.controller = controller
-            DispatchQueue.main.async { [weak controller] in
-                guard let scrollView = controller?.scrollView else { return }
+            DispatchQueue.main.async { [weak controller, hover] in
+                guard let controller, let scrollView = controller.scrollView else { return }
                 scrollView.drawsBackground = false
                 scrollView.contentView.drawsBackground = false
+                hover.attach(to: controller.textView, container: controller.view, scrollView: scrollView)
             }
         }
 
-        func textViewDidChangeText(controller: TextViewController) { onEdit() }
+        func textViewDidChangeText(controller: TextViewController) {
+            hover.dismiss()
+            onEdit()
+        }
 
         /// Underlines through CodeEditTextView's emphasis manager, replacing the previous set.
         func apply(_ marks: [EditorMark]) {
@@ -242,5 +284,24 @@ struct EditorHost: View {
             if let first = newPositions.first { onCursor(first.start.line, first.start.column) }
             if let textView = controller.textView, textView.window?.firstResponder === textView { onFocusedCaret() }
         }
+    }
+}
+
+extension EditorHost.Coordinator: @preconcurrency JumpToDefinitionDelegate {
+    func queryLinks(forRange range: NSRange, textView: TextViewController) async -> [JumpToDefinitionLink]? {
+        guard let definitions else { return nil }
+        hover.dismiss()
+        return await definitions(range.location).map {
+            JumpToDefinitionLink(
+                url: URL(fileURLWithPath: $0.path), targetRange: CursorPosition(line: $0.line, column: 1),
+                typeName: $0.label, sourcePreview: $0.preview, documentation: nil)
+        }
+    }
+
+    /// Every link carries a file, this one included: the caller opens it and moves the caret, one path for all.
+    func openLink(link: JumpToDefinitionLink) {
+        guard let url = link.url else { return }
+        onOpenLink(
+            EditorLink(path: url.path, line: link.targetRange.start.line, label: link.label, preview: link.sourcePreview ?? ""))
     }
 }

@@ -12,8 +12,11 @@ struct Shortcut: Equatable {
         if modifiers.contains(.option) { text += "⌥" }
         if modifiers.contains(.shift) { text += "⇧" }
         if modifiers.contains(.command) { text += "⌘" }
-        return text + (key == "\r" ? "↵" : String(key).uppercased())
+        return text + (key == "\r" ? "↵" : key == Self.f12 ? "F12" : String(key).uppercased())
     }
+
+    /// AppKit's private-use character for the F12 key.
+    static let f12 = Character("\u{F70F}")
 }
 
 /// Every action Forge has. The palette lists them (each wearing its shortcut) and the shortcut layer binds
@@ -28,6 +31,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
     case newFile, newFolder, renameActiveFile, revealInFinder, trashActiveFile
     case lineEndingsLF, lineEndingsCRLF, saveAsUTF8
     case findInFiles, replaceAll
+    case goToDefinition, findReferences
 
     var id: String { rawValue }
 
@@ -66,6 +70,8 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .saveAsUTF8: "Save as UTF-8"
         case .findInFiles: "Find in Files"
         case .replaceAll: "Replace All in Files"
+        case .goToDefinition: "Go to Definition"
+        case .findReferences: "Find References"
         }
     }
 
@@ -100,6 +106,8 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .saveAsUTF8: "textformat"
         case .findInFiles: "magnifyingglass"
         case .replaceAll: "arrow.left.arrow.right"
+        case .goToDefinition: "arrow.turn.down.right"
+        case .findReferences: "list.bullet.indent"
         }
     }
 
@@ -126,6 +134,8 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .revealInFinder: Shortcut(key: "r", modifiers: [.command, .option])
         case .findInFiles: Shortcut(key: "f", modifiers: [.command, .shift])
         case .replaceAll: Shortcut(key: "\r", modifiers: [.command, .option])
+        case .goToDefinition: Shortcut(key: Shortcut.f12, modifiers: [])
+        case .findReferences: Shortcut(key: Shortcut.f12, modifiers: .shift)
         case .closeWorkspace, .revealInTree, .refresh, .openTerminal, .splitDown, .closePane, .renameActiveFile,
             .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8:
             nil
@@ -139,7 +149,8 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
             .findInFiles, .replaceAll:
             .workspace
         case .goToLine, .save, .closeTab, .nextTab, .previousTab, .revealInTree, .copyPath, .splitRight, .splitDown,
-            .renameActiveFile, .revealInFinder, .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8:
+            .renameActiveFile, .revealInFinder, .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8,
+            .goToDefinition, .findReferences:
             .file
         case .focusFirstPane, .focusSecondPane, .closePane: .split
         }
