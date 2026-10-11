@@ -29,11 +29,17 @@ enum ShellEnvironment {
 
     static var environment: [String: String] { captured }
 
-    /// The executable for `command`: an absolute path as given, else the first match on the login PATH.
+    /// The executable for `command`: an absolute path as given, else the first match on the login PATH, then in
+    /// the folders language toolchains install into without putting them on PATH (`go install` → ~/go/bin).
     static func locate(_ command: String) -> String? {
         if command.hasPrefix("/") { return FileManager.default.isExecutableFile(atPath: command) ? command : nil }
         let path = environment["PATH"] ?? "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"
-        return path.split(separator: ":").map { "\($0)/\(command)" }.first { FileManager.default.isExecutableFile(atPath: $0) }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let gopath = environment["GOPATH"].map { "\($0)/bin" }
+        let folders = path.split(separator: ":").map(String.init)
+            + [environment["GOBIN"], gopath, "\(home)/go/bin", "\(home)/.cargo/bin", "/opt/homebrew/bin", "/usr/local/bin"]
+            .compactMap { $0 }
+        return folders.map { "\($0)/\(command)" }.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 }
 
