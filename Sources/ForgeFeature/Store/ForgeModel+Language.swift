@@ -118,12 +118,38 @@ extension ForgeModel {
     }
 
     /// Opens a definition in a preview tab, at its line.
-    func open(_ link: EditorLink) {
+    /// ⌘⌥-click (`inSplit`) opens it in the other pane, splitting the editor first if it is not split.
+    func open(_ link: EditorLink, inSplit: Bool = NSEvent.modifierFlags.contains(.option)) {
         guard let root = workspace?.root.path(percentEncoded: false) else { return }
         let base = root.hasSuffix("/") ? root : root + "/"
         guard link.path.hasPrefix(base) else { return }
+        if inSplit {
+            if panes.count == 1 { splitEditor(stacked: stacked) } else { focus(pane: activePane == 0 ? 1 : 0) }
+        }
         open(file: String(link.path.dropFirst(base.count)), pinned: false)
         pendingLine = link.line
+    }
+
+    /// Show Hover: the hover card for the symbol at the caret (the keyboard's way to it).
+    func showHoverAtCaret() {
+        guard let path = tabs.active, let document = documents[path], document.state == .ready else { return }
+        let offset = LineIndex(document.storage.string).offset(line: document.cursor.line - 1, character: document.cursor.column - 1)
+        let pane = activePane
+        let rect = document.caretRect
+        Task { await hover(pane: pane, path: path, at: (offset, rect)) }
+    }
+
+    /// Whether a hint is up that Esc closes.
+    var hintShown: Bool { hover != nil || signature != nil || git.peek != nil || agent.showingWas }
+
+    /// Esc: closes the hover card, the signature hint, the git peek and the Was card.
+    func closeHints() {
+        hoverRequest += 1
+        hover = nil
+        signatureRequest += 1
+        signature = nil
+        git.peek = nil
+        agent.showingWas = false
     }
 
     /// F12: the definition of the symbol at the caret.

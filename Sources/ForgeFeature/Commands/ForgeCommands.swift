@@ -12,12 +12,13 @@ struct Shortcut: Equatable {
         if modifiers.contains(.option) { text += "⌥" }
         if modifiers.contains(.shift) { text += "⇧" }
         if modifiers.contains(.command) { text += "⌘" }
-        return text + (key == "\r" ? "↵" : key == Self.backspace ? "⌫" : key == Self.f12 ? "F12" : key == Self.f2 ? "F2" : String(key).uppercased())
+        return text + (key == "\r" ? "↵" : key == Self.backspace ? "⌫" : key == Self.escape ? "Esc" : key == Self.f12 ? "F12" : key == Self.f2 ? "F2" : String(key).uppercased())
     }
 
     /// AppKit's private-use characters for the function keys.
     static let f2 = Character("\u{F705}")
     static let backspace = Character("\u{7F}")
+    static let escape = Character("\u{1B}")
     static let f12 = Character("\u{F70F}")
 }
 
@@ -35,11 +36,11 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
     case findInFiles, replaceAll
     case goToDefinition, findReferences, renameSymbol, codeActions, formatDocument
     case toggleTerminal, newTerminal, maximiseTerminal, toggleBlame, runTask, rerunLastTask
-    case keepChange, undoChange, keepAllChanges, undoAllChanges, askAgent
+    case keepChange, undoChange, keepAllChanges, undoAllChanges, askAgent, showHover, closeHints
 
     var id: String { rawValue }
 
-    enum Requirement { case none, workspace, file, split, agentChange, agentFile }
+    enum Requirement { case none, workspace, file, split, agentChange, agentFile, hint }
 
     var title: String {
         switch self {
@@ -90,6 +91,8 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .keepAllChanges: "Keep All Outside Changes in File"
         case .undoAllChanges: "Undo All Outside Changes in File"
         case .askAgent: "Ask Agent…"
+        case .showHover: "Show Hover"
+        case .closeHints: "Close Hint"
         }
     }
 
@@ -137,6 +140,8 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .keepChange, .keepAllChanges: "checkmark"
         case .undoChange, .undoAllChanges: "arrow.uturn.backward"
         case .askAgent: "sparkles"
+        case .showHover: "text.bubble"
+        case .closeHints: "xmark"
         }
     }
 
@@ -180,8 +185,10 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .keepChange: Shortcut(key: "\r", modifiers: .command)
         case .undoChange: Shortcut(key: Shortcut.backspace, modifiers: .command)
         case .askAgent: Shortcut(key: "i", modifiers: .command)
+        // Claimed only while a hint shows (`.hint`): Esc reaches the editor otherwise.
+        case .closeHints: Shortcut(key: Shortcut.escape, modifiers: [])
         case .closeWorkspace, .revealInTree, .refresh, .openTerminal, .splitDown, .closePane, .renameActiveFile,
-            .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8, .keepAllChanges, .undoAllChanges:
+            .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8, .keepAllChanges, .undoAllChanges, .showHover:
             nil
         }
     }
@@ -194,17 +201,19 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
             .workspace
         case .goToLine, .save, .closeTab, .nextTab, .previousTab, .revealInTree, .copyPath, .splitRight, .splitDown,
             .renameActiveFile, .revealInFinder, .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8,
-            .goToDefinition, .findReferences, .renameSymbol, .codeActions, .formatDocument, .toggleBlame, .askAgent:
+            .goToDefinition, .findReferences, .renameSymbol, .codeActions, .formatDocument, .toggleBlame, .askAgent, .showHover:
             .file
         case .focusFirstPane, .focusSecondPane, .closePane: .split
         case .keepChange, .undoChange: .agentChange
         case .keepAllChanges, .undoAllChanges: .agentFile
+        case .closeHints: .hint
         }
     }
 
     /// The commands that can run now, in registry order.
     static func available(
-        hasWorkspace: Bool, hasFile: Bool, hasSplit: Bool = false, inAgentChange: Bool = false, agentFile: Bool = false
+        hasWorkspace: Bool, hasFile: Bool, hasSplit: Bool = false, inAgentChange: Bool = false, agentFile: Bool = false,
+        hintShown: Bool = false
     ) -> [ForgeCommand] {
         allCases.filter {
             switch $0.requirement {
@@ -214,6 +223,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
             case .split: hasSplit
             case .agentChange: inAgentChange
             case .agentFile: agentFile
+            case .hint: hintShown
             }
         }
     }

@@ -7,7 +7,8 @@ extension ForgeModel {
     var availableCommands: [ForgeCommand] {
         ForgeCommand.available(
             hasWorkspace: workspace != nil, hasFile: tabs.active != nil, hasSplit: panes.count > 1,
-            inAgentChange: agentChangeAtCaret != nil, agentFile: tabs.active.map { agent.files[$0] != nil } ?? false)
+            inAgentChange: agentChangeAtCaret != nil, agentFile: tabs.active.map { agent.files[$0] != nil } ?? false,
+            hintShown: hintShown)
     }
 
     func run(_ command: ForgeCommand) {
@@ -71,6 +72,8 @@ extension ForgeModel {
         case .undoChange: if let at = agentChangeAtCaret { undoChange(at.path, hunk: at.hunk) }
         case .keepAllChanges: if let path = tabs.active { keepAllChanges(path) }
         case .askAgent: beginAsk()
+        case .showHover: showHoverAtCaret()
+        case .closeHints: closeHints()
         case .undoAllChanges: if let path = tabs.active { undoAllChanges(path) }
         case .maximiseTerminal:
             if !terminals.isOpen { terminals.toggle() }
