@@ -121,23 +121,23 @@ private struct DocumentView: View {
                 onCaret: { model.focus(pane: pane) }, marks: marks,
                 definitions: { [model, path] offset in await model.definitions(path: path, offset: offset) },
                 onOpenLink: { [model] link in model.open(link) },
-                onHover: { [model, pane, path] hit in Task { await model.hover(pane: pane, path: path, at: hit) } }
+                onHover: { [model, pane, path] hit in Task { await model.hover(pane: pane, path: path, at: hit) } },
+                suggest: { [model, path] offset in await model.suggestions(path: path, offset: offset) },
+                suggestionTriggers: model.triggers(for: path).completion,
+                signatureTriggers: model.triggers(for: path).signature,
+                signatureShown: model.signature?.pane == pane && model.signature?.path == path,
+                onSignature: { [model, pane, path] hit in Task { await model.signature(pane: pane, path: path, at: hit) } }
             ) { model.didEdit(path) }
-            .overlay(alignment: .topLeading) { hoverAnchor }
-        }
-    }
-
-    /// A clear box over the hovered word, for the kit's popover to point at.
-    @ViewBuilder private var hoverAnchor: some View {
-        if let hover = model.hover, hover.pane == pane, hover.path == path {
-            Color.clear
-                .frame(width: hover.rect.width, height: hover.rect.height)
-                .ainkradPopover(isPresented: Binding(get: { model.hover != nil }, set: { if !$0 { model.hover = nil } })) {
-                    HoverCard(info: hover)
+            .overlay {
+                if let hover = model.hover, hover.pane == pane, hover.path == path {
+                    EditorCardLayer(rect: hover.rect, prefersAbove: false) { HoverCard(info: hover) }
                 }
-                .padding(.leading, hover.rect.minX)
-                .padding(.top, hover.rect.minY)
-                .allowsHitTesting(false)
+            }
+            .overlay {
+                if let signature = model.signature, signature.pane == pane, signature.path == path {
+                    EditorCardLayer(rect: signature.rect, prefersAbove: true) { SignatureCard(hint: signature.hint) }
+                }
+            }
         }
     }
 }

@@ -76,6 +76,44 @@ struct HubTests {
         hub.end()
     }
 
+    /// Completion and signature help at the caret, the latest edit flushed first.
+    @Test func sourcekitCompletesAndHelpsWithSignatures() async throws {
+        guard ShellEnvironment.locate("sourcekit-lsp") != nil else { return }
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("forge-lsp-\(UUID().uuidString.prefix(8))")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let original = "func bump(_ n: Int, by step: Int) -> Int { n + step }\n"
+        try original.write(to: root.appending(path: "main.swift"), atomically: true, encoding: .utf8)
+
+        let hub = LanguageHub()
+        hub.begin(root: root)
+        hub.opened(path: "main.swift", text: original)
+        for _ in 0..<150 where hub.statuses["sourcekit-lsp"] != .ready { try await Task.sleep(for: .milliseconds(100)) }
+        #expect(hub.completionTriggers["sourcekit-lsp"]?.contains(".") == true)
+
+        // Line 1: `let a = bum` — the caret after "bum".
+        hub.changed(path: "main.swift") { original + "let a = bum" }
+        let completions = await hub.completions(path: "main.swift", line: 1, character: 11)
+        let bump = try #require(completions.first { $0.label.hasPrefix("bump") })
+        #expect(bump.kind == .function)
+        #expect(bump.insertText.hasPrefix("bump("))
+        #expect(!bump.insertText.contains("${"))
+
+        // Line 1: `let a = bump(1, ` — the caret on the second argument.
+        hub.changed(path: "main.swift") { original + "let a = bump(1, " }
+        let hint = try #require(await hub.signatureHelp(path: "main.swift", line: 1, character: 16))
+        #expect(hint.label.hasPrefix("bump(_ n: Int, by: Int)"))
+        let active = try #require(hint.activeParameter)
+        #expect((hint.label as NSString).substring(with: active) == "by: Int")
+        hub.end()
+    }
+
+    @Test func snippetsBecomeTheirDefaults() {
+        #expect(Snippet.plain("start(at: ${1:date})$0") == "start(at: date)")
+        #expect(Snippet.plain("bump(${1:n}, by: ${2:step})") == "bump(n, by: step)")
+        #expect(Snippet.plain("cost: \\$${1:price}") == "cost: $price")
+    }
+
     @Test func aMissingServerIsReportedNotInstalled() async throws {
         let hub = LanguageHub()
         hub.overrides["gopls"] = "/nonexistent/gopls"

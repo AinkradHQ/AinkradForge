@@ -139,6 +139,15 @@ public struct ForgeCodeEditor: View {
     let onOpenLink: (EditorLink) -> Void
     /// The pointer rests on a word (its offset and rect, top-left origin in this view), or stopped.
     let onHover: ((Int, CGRect)?) -> Void
+    /// Completions at a UTF-16 offset, shown in CodeEditSourceEditor's suggestion window after a trigger
+    /// character (or ⌃Space / Esc), narrowed as the word is typed.
+    let suggest: ((Int) async -> [EditorSuggestion])?
+    let suggestionTriggers: Set<String>
+    /// Typing a signature trigger ("(", ","), or moving the caret while `signatureShown`, reports the caret's
+    /// offset and rect; the caller asks its server and shows (or hides) the hint.
+    let signatureTriggers: Set<String>
+    let signatureShown: Bool
+    let onSignature: ((Int, CGRect)?) -> Void
 
     public init(
         storage: NSTextStorage, language: EditorLanguage, colors: EditorColors, options: EditorOptions = EditorOptions(),
@@ -146,7 +155,10 @@ public struct ForgeCodeEditor: View {
         goToLine: Int? = nil, onGoToLineHandled: @escaping () -> Void = {},
         onFocusedCaret: @escaping () -> Void = {}, marks: [EditorMark] = [],
         definitions: ((Int) async -> [EditorLink])? = nil, onOpenLink: @escaping (EditorLink) -> Void = { _ in },
-        onHover: @escaping ((Int, CGRect)?) -> Void = { _ in }
+        onHover: @escaping ((Int, CGRect)?) -> Void = { _ in },
+        suggest: ((Int) async -> [EditorSuggestion])? = nil, suggestionTriggers: Set<String> = [],
+        signatureTriggers: Set<String> = [], signatureShown: Bool = false,
+        onSignature: @escaping ((Int, CGRect)?) -> Void = { _ in }
     ) {
         self.storage = storage
         self.language = language
@@ -162,6 +174,11 @@ public struct ForgeCodeEditor: View {
         self.definitions = definitions
         self.onOpenLink = onOpenLink
         self.onHover = onHover
+        self.suggest = suggest
+        self.suggestionTriggers = suggestionTriggers
+        self.signatureTriggers = signatureTriggers
+        self.signatureShown = signatureShown
+        self.onSignature = onSignature
     }
 
     public var body: AnyView {
@@ -170,7 +187,8 @@ public struct ForgeCodeEditor: View {
                 storage: storage, language: language, colors: colors, options: options, insets: insets,
                 onEdit: onEdit, onCursor: onCursor, goToLine: goToLine, onGoToLineHandled: onGoToLineHandled,
                 onFocusedCaret: onFocusedCaret, marks: marks, definitions: definitions, onOpenLink: onOpenLink,
-                onHover: onHover))
+                onHover: onHover, suggest: suggest, suggestionTriggers: suggestionTriggers,
+                signatureTriggers: signatureTriggers, signatureShown: signatureShown, onSignature: onSignature))
     }
 }
 
@@ -190,6 +208,11 @@ struct EditorHost: View {
     let definitions: ((Int) async -> [EditorLink])?
     let onOpenLink: (EditorLink) -> Void
     let onHover: ((Int, CGRect)?) -> Void
+    let suggest: ((Int) async -> [EditorSuggestion])?
+    let suggestionTriggers: Set<String>
+    let signatureTriggers: Set<String>
+    let signatureShown: Bool
+    let onSignature: ((Int, CGRect)?) -> Void
     @State private var state = SourceEditorState()
     @State private var coordinator = Coordinator()
 
@@ -210,9 +233,16 @@ struct EditorHost: View {
                         : .empty)),
             state: $state,
             coordinators: [coordinator],
+            completionDelegate: suggest == nil ? nil : coordinator,
             jumpToDefinitionDelegate: definitions == nil ? nil : coordinator
         )
         .onAppear {
+            coordinator.colors = colors
+            coordinator.suggest = suggest
+            coordinator.suggestionTriggers = suggestionTriggers
+            coordinator.signatureTriggers = signatureTriggers
+            coordinator.signatureShown = signatureShown
+            coordinator.onSignature = onSignature
             coordinator.definitions = definitions
             coordinator.onOpenLink = onOpenLink
             coordinator.hover.onHover = onHover
@@ -225,6 +255,9 @@ struct EditorHost: View {
         }
         .onChange(of: goToLine) { _, line in go(to: line) }
         .onChange(of: marks) { _, marks in coordinator.apply(marks) }
+        .onChange(of: suggestionTriggers) { _, triggers in coordinator.suggestionTriggers = triggers }
+        .onChange(of: signatureTriggers) { _, triggers in coordinator.signatureTriggers = triggers }
+        .onChange(of: signatureShown) { _, shown in coordinator.signatureShown = shown }
     }
 
     /// Through the controller, not `state.cursorPositions`: CodeEdit's state diff compares the new positions
@@ -248,6 +281,15 @@ struct EditorHost: View {
         var definitions: ((Int) async -> [EditorLink])?
         var onOpenLink: (EditorLink) -> Void = { _ in }
         let hover = HoverTracker()
+        var colors: EditorColors?
+        var suggest: ((Int) async -> [EditorSuggestion])?
+        var suggestionTriggers: Set<String> = []
+        /// The server's last offer, and where the word it completes starts.
+        var offered: [EditorSuggestion] = []
+        var wordStart = 0
+        var signatureTriggers: Set<String> = []
+        var signatureShown = false
+        var onSignature: ((Int, CGRect)?) -> Void = { _ in }
         weak var controller: TextViewController?
 
         /// `prepareCoordinator` runs before the controller loads its view (`scrollView`, implicitly unwrapped, is
@@ -282,6 +324,7 @@ struct EditorHost: View {
 
         func textViewDidChangeSelection(controller: TextViewController, newPositions: [CursorPosition]) {
             if let first = newPositions.first { onCursor(first.start.line, first.start.column) }
+            trackSignature(controller, newPositions)
             if let textView = controller.textView, textView.window?.firstResponder === textView { onFocusedCaret() }
         }
     }
@@ -305,3 +348,25 @@ extension EditorHost.Coordinator: @preconcurrency JumpToDefinitionDelegate {
             EditorLink(path: url.path, line: link.targetRange.start.line, label: link.label, preview: link.sourcePreview ?? ""))
     }
 }
+
+extension EditorHost.Coordinator {
+    /// After a signature trigger was typed, or whenever the caret moves while the hint shows (the server then
+    /// moves the active parameter along, or answers that the caret has left the call).
+    func trackSignature(_ controller: TextViewController, _ positions: [CursorPosition]) {
+        guard !signatureTriggers.isEmpty || signatureShown else { return }
+        guard positions.count == 1, let caret = positions.first?.range, caret.length == 0 else {
+            if signatureShown { onSignature(nil) }
+            return
+        }
+        let text = controller.textView.textStorage.string as NSString
+        let typed = caret.location > 0 && caret.location <= text.length
+            ? text.substring(with: NSRange(location: caret.location - 1, length: 1)) : ""
+        guard signatureShown || signatureTriggers.contains(typed) else { return }
+        guard let rect = controller.textView.layoutManager.rectForOffset(caret.location), let view = controller.view as NSView?
+        else { return }
+        var frame = view.convert(rect, from: controller.textView)
+        if !view.isFlipped { frame.origin.y = view.bounds.height - frame.maxY }
+        onSignature((caret.location, frame))
+    }
+}
+
