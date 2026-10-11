@@ -41,6 +41,9 @@ final class AgentReview {
     @ObservationIgnored private var ownWrites: [String: Date] = [:]
     @ObservationIgnored private var treeChangedAt = Date.distantPast
 
+    /// The Ask Agent card, while open.
+    var ask: AskRequest?
+
     /// Everything waiting for review.
     var count: Int { files.count + others.count }
 

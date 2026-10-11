@@ -35,7 +35,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
     case findInFiles, replaceAll
     case goToDefinition, findReferences, renameSymbol, codeActions, formatDocument
     case toggleTerminal, newTerminal, maximiseTerminal, toggleBlame, runTask, rerunLastTask
-    case keepChange, undoChange, keepAllChanges, undoAllChanges
+    case keepChange, undoChange, keepAllChanges, undoAllChanges, askAgent
 
     var id: String { rawValue }
 
@@ -89,6 +89,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .undoChange: "Undo Outside Change"
         case .keepAllChanges: "Keep All Outside Changes in File"
         case .undoAllChanges: "Undo All Outside Changes in File"
+        case .askAgent: "Ask Agent…"
         }
     }
 
@@ -135,6 +136,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .rerunLastTask: "arrow.clockwise"
         case .keepChange, .keepAllChanges: "checkmark"
         case .undoChange, .undoAllChanges: "arrow.uturn.backward"
+        case .askAgent: "sparkles"
         }
     }
 
@@ -177,6 +179,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         // start everywhere else.
         case .keepChange: Shortcut(key: "\r", modifiers: .command)
         case .undoChange: Shortcut(key: Shortcut.backspace, modifiers: .command)
+        case .askAgent: Shortcut(key: "i", modifiers: .command)
         case .closeWorkspace, .revealInTree, .refresh, .openTerminal, .splitDown, .closePane, .renameActiveFile,
             .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8, .keepAllChanges, .undoAllChanges:
             nil
@@ -191,7 +194,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
             .workspace
         case .goToLine, .save, .closeTab, .nextTab, .previousTab, .revealInTree, .copyPath, .splitRight, .splitDown,
             .renameActiveFile, .revealInFinder, .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8,
-            .goToDefinition, .findReferences, .renameSymbol, .codeActions, .formatDocument, .toggleBlame:
+            .goToDefinition, .findReferences, .renameSymbol, .codeActions, .formatDocument, .toggleBlame, .askAgent:
             .file
         case .focusFirstPane, .focusSecondPane, .closePane: .split
         case .keepChange, .undoChange: .agentChange

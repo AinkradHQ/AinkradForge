@@ -207,6 +207,11 @@ private struct DocumentView: View {
                 }
             }
             .overlay {
+                if let ask = model.agent.ask, ask.pane == pane, ask.path == path {
+                    EditorCardLayer(rect: ask.rect, prefersAbove: false, interactive: true) { AskAgentCard(model: model, request: ask) }
+                }
+            }
+            .overlay {
                 if let rename = model.rename, rename.pane == pane, rename.path == path {
                     EditorCardLayer(rect: rename.rect, prefersAbove: false, interactive: true) {
                         RenameField(model: model, state: rename)

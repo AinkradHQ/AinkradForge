@@ -167,6 +167,8 @@ public struct ForgeCodeEditor: View {
     /// scrolling, layout, edits — and nil when it is off screen or gone.
     let anchorLine: Int?
     let onAnchor: (CGRect?) -> Void
+    /// The first selection's UTF-16 range, after every change of it.
+    let onSelection: (NSRange) -> Void
 
     public init(
         storage: NSTextStorage, language: EditorLanguage, colors: EditorColors, options: EditorOptions = EditorOptions(),
@@ -182,7 +184,8 @@ public struct ForgeCodeEditor: View {
         menu: EditorMenu? = nil, onMenuPick: @escaping (Int?) -> Void = { _ in },
         onCaretRect: @escaping (CGRect, CGFloat) -> Void = { _, _ in },
         lineMarks: [EditorLineMark] = [], onLineMarkClick: @escaping (Int, CGRect) -> Void = { _, _ in },
-        anchorLine: Int? = nil, onAnchor: @escaping (CGRect?) -> Void = { _ in }
+        anchorLine: Int? = nil, onAnchor: @escaping (CGRect?) -> Void = { _ in },
+        onSelection: @escaping (NSRange) -> Void = { _ in }
     ) {
         self.storage = storage
         self.language = language
@@ -212,6 +215,7 @@ public struct ForgeCodeEditor: View {
         self.onLineMarkClick = onLineMarkClick
         self.anchorLine = anchorLine
         self.onAnchor = onAnchor
+        self.onSelection = onSelection
     }
 
     public var body: AnyView {
@@ -223,7 +227,8 @@ public struct ForgeCodeEditor: View {
                 onHover: onHover, suggest: suggest, suggestionTriggers: suggestionTriggers,
                 signatureTriggers: signatureTriggers, signatureShown: signatureShown, onSignature: onSignature,
                 edits: edits, onEditsApplied: onEditsApplied, menu: menu, onMenuPick: onMenuPick, onCaretRect: onCaretRect,
-                lineMarks: lineMarks, onLineMarkClick: onLineMarkClick, anchorLine: anchorLine, onAnchor: onAnchor))
+                lineMarks: lineMarks, onLineMarkClick: onLineMarkClick, anchorLine: anchorLine, onAnchor: onAnchor,
+                onSelection: onSelection))
     }
 }
 
@@ -257,6 +262,7 @@ struct EditorHost: View {
     let onLineMarkClick: (Int, CGRect) -> Void
     let anchorLine: Int?
     let onAnchor: (CGRect?) -> Void
+    let onSelection: (NSRange) -> Void
     @State private var state = SourceEditorState()
     @State private var coordinator = Coordinator()
 
@@ -293,6 +299,7 @@ struct EditorHost: View {
             coordinator.onLineMarkClick = onLineMarkClick
             coordinator.lineMarkView.marks = lineMarks
             coordinator.onAnchor = onAnchor
+            coordinator.onSelection = onSelection
             coordinator.anchorLine = anchorLine
             coordinator.definitions = definitions
             coordinator.onOpenLink = onOpenLink
@@ -364,6 +371,7 @@ struct EditorHost: View {
         var gutterObserver: (any NSObjectProtocol)?
         var anchorLine: Int?
         var onAnchor: (CGRect?) -> Void = { _ in }
+        var onSelection: (NSRange) -> Void = { _ in }
         var anchorObserver: (any NSObjectProtocol)?
         private var lastAnchor: CGRect?
         weak var controller: TextViewController?
@@ -407,6 +415,7 @@ struct EditorHost: View {
         func textViewDidChangeSelection(controller: TextViewController, newPositions: [CursorPosition]) {
             if let first = newPositions.first {
                 onCursor(first.start.line, first.start.column)
+                onSelection(first.range)
                 if let frame = caretFrame(controller, first.range.location) { onCaretRect(frame, lineEnd(controller, first.range.location) ?? frame.maxX) }
             }
             trackSignature(controller, newPositions)

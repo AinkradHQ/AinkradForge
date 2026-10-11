@@ -172,3 +172,37 @@ struct OutsideChangesButton: View {
         }
     }
 }
+
+/// ⌘I's card at the selection: what goes with the request, and what to do. Ask (⌘↵) copies it and opens
+/// Grimoire — the card says so, until Grimoire can take a request from another app.
+struct AskAgentCard: View {
+    let model: ForgeModel
+    let request: AskRequest
+    @Environment(\.ainkradSkin) private var skin
+
+    var body: some View {
+        let lines = request.lines.count == 1 ? "line \(request.lines.lowerBound)" : "lines \(request.lines.lowerBound)–\(request.lines.upperBound)"
+        VStack(alignment: .leading, spacing: skin.size.s6) {
+            Text("\((request.path as NSString).lastPathComponent) · \(lines)")
+                .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "system")))
+                .foregroundStyle(skin.color(skin.text.faint))
+            AinkradComposer(
+                text: Binding(get: { model.agent.ask?.prompt ?? "" }, set: { model.agent.ask?.prompt = $0 }),
+                placeholder: "What should the agent do?", isEditable: true,
+                canSend: !request.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, autoFocus: true,
+                suggestions: { _ in [] }, onPick: { _, _ in }, onDrop: nil, onSend: { model.sendAsk() },
+                chips: { EmptyView() },
+                leading: {
+                    Label("Grimoire · this workspace", systemImage: "sparkles")
+                        .font(skin.font(AinkradFontToken(sizeKey: "t11")))
+                        .foregroundStyle(skin.color(skin.text.muted))
+                },
+                trailing: { EmptyView() })
+            Text("Ask copies the request and opens Grimoire — paste it into the thread.")
+                .font(skin.font(AinkradFontToken(sizeKey: "t10")))
+                .foregroundStyle(skin.color(skin.text.faint))
+        }
+        .frame(width: skin.size.s440)
+        .onExitCommand { model.agent.ask = nil }
+    }
+}
