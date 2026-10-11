@@ -27,6 +27,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
     case splitRight, splitDown, focusFirstPane, focusSecondPane, closePane
     case newFile, newFolder, renameActiveFile, revealInFinder, trashActiveFile
     case lineEndingsLF, lineEndingsCRLF, saveAsUTF8
+    case findInFiles
 
     var id: String { rawValue }
 
@@ -63,6 +64,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .lineEndingsLF: "Convert Line Endings to LF"
         case .lineEndingsCRLF: "Convert Line Endings to CRLF"
         case .saveAsUTF8: "Save as UTF-8"
+        case .findInFiles: "Find in Files"
         }
     }
 
@@ -95,6 +97,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .trashActiveFile: "trash"
         case .lineEndingsLF, .lineEndingsCRLF: "return"
         case .saveAsUTF8: "textformat"
+        case .findInFiles: "magnifyingglass"
         }
     }
 
@@ -119,6 +122,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .newFile: Shortcut(key: "n", modifiers: .command)
         case .newFolder: Shortcut(key: "n", modifiers: [.command, .option])
         case .revealInFinder: Shortcut(key: "r", modifiers: [.command, .option])
+        case .findInFiles: Shortcut(key: "f", modifiers: [.command, .shift])
         case .closeWorkspace, .revealInTree, .refresh, .openTerminal, .splitDown, .closePane, .renameActiveFile,
             .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8:
             nil
@@ -128,7 +132,9 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
     var requirement: Requirement {
         switch self {
         case .quickOpen, .commandPalette, .openFolder: .none
-        case .closeWorkspace, .saveAll, .showFiles, .showChanges, .refresh, .openTerminal, .newFile, .newFolder: .workspace
+        case .closeWorkspace, .saveAll, .showFiles, .showChanges, .refresh, .openTerminal, .newFile, .newFolder,
+            .findInFiles:
+            .workspace
         case .goToLine, .save, .closeTab, .nextTab, .previousTab, .revealInTree, .copyPath, .splitRight, .splitDown,
             .renameActiveFile, .revealInFinder, .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8:
             .file

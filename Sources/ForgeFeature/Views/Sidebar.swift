@@ -12,15 +12,18 @@ struct Sidebar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: skin.size.s8) {
             WorkspaceCard(model: model, workspace: workspace)
-            SideTabsBar(selection: $model.sideTab, changes: workspace.marks.count)
+            // The kit's segmented control: Apple's glass segmented picker under Liquid Glass.
+            // Labels stay short so all four fit; the change count is on the workspace card.
+            AinkradSegmentedPicker(items: ForgeModel.SideTab.allCases, selection: $model.sideTab) { $0.rawValue }
+                // Apple's segmented control takes its natural width (the kit fixes its size); small fits 300 pt.
+                .controlSize(.small)
             Group {
                 switch model.sideTab {
                 case .files: FileTreeList(model: model, workspace: workspace)
                 case .changes: ChangesList(model: model, workspace: workspace)
-                case .search:
-                    SidebarPlaceholder(icon: "magnifyingglass", text: "Search across files arrives with E4.")
+                case .search: SearchPanel(model: model, workspace: workspace)
                 case .problems:
-                    SidebarPlaceholder(icon: "exclamationmark.triangle", text: "Problems arrive with language servers (E5).")
+                    SidebarPlaceholder(icon: "exclamationmark.triangle", text: "Issues arrive with language servers (E5).")
                 }
             }
             .frame(maxHeight: .infinity, alignment: .top)
@@ -28,7 +31,7 @@ struct Sidebar: View {
         .padding(.top, skin.size.s12)
         .padding(.horizontal, skin.size.s10)
         .padding(.bottom, skin.size.s10)
-        .frame(width: skin.size.s280)
+        .frame(width: skin.size.s300)
         .frame(maxHeight: .infinity, alignment: .top)
         // Fill, not a rule.
         .background(theme.surface.opacity(skin.opacity.o35))
@@ -70,9 +73,12 @@ private struct WorkspaceCard: View {
                 .foregroundStyle(skin.color(skin.text.muted))
                 .lineLimit(1)
             }
+            // An explicit width: under Glass the kit's menu button is `.fixedSize()`, so `maxWidth: .infinity`
+            // would collapse to the text. 300 (sidebar) − 2×10 (sidebar padding) − 2×10 (card padding).
+            .frame(width: skin.size.s260, alignment: .leading)
             .padding(.vertical, skin.size.s8)
             .padding(.horizontal, skin.size.s10)
-            .ainkradRowBackground(isSelected: false, isHovered: isHovered)
+            .modifier(CardSurface(isHovered: isHovered))
             .contentShape(Rectangle())
             .onHover { isHovered = $0 }
         }
@@ -101,44 +107,18 @@ private struct WorkspaceCard: View {
     }
 }
 
-/// Small text tabs; the selected one sits on the kit's row fill.
-private struct SideTabsBar: View {
-    @Binding var selection: ForgeModel.SideTab
-    let changes: Int
+/// The workspace card's surface: interactive Liquid Glass under the Glass theme (as Apple's pop-up buttons),
+/// the kit's row fill elsewhere. Local only because the kit has no public "card trigger" surface.
+private struct CardSurface: ViewModifier {
+    let isHovered: Bool
     @Environment(\.ainkradSkin) private var skin
 
-    var body: some View {
-        HStack(spacing: skin.size.s2) {
-            ForEach(ForgeModel.SideTab.allCases) { tab in
-                SideTabButton(
-                    title: tab == .changes && changes > 0 ? "\(tab.rawValue) \(changes)" : tab.rawValue,
-                    isSelected: tab == selection
-                ) { selection = tab }
-            }
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *), skin.usesNativeGlass {
+            content.glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: skin.size.s16, style: .continuous))
+        } else {
+            content.ainkradRowBackground(isSelected: false, isHovered: isHovered)
         }
-    }
-}
-
-private struct SideTabButton: View {
-    let title: String
-    let isSelected: Bool
-    let action: () -> Void
-    @State private var isHovered = false
-    @Environment(\.ainkradSkin) private var skin
-    @Environment(\.ainkradTheme) private var theme
-
-    var body: some View {
-        Text(title)
-            .font(skin.font(AinkradFontToken(sizeKey: "t11", weight: isSelected ? "semibold" : "regular", monospacedDigits: true)))
-            .foregroundStyle(isSelected ? theme.foreground : skin.color(skin.text.muted))
-            .lineLimit(1)
-            .fixedSize()
-            .padding(.vertical, skin.size.s4)
-            .padding(.horizontal, skin.size.s8)
-            .ainkradRowBackground(isSelected: isSelected, isHovered: isHovered)
-            .contentShape(Rectangle())
-            .onHover { isHovered = $0 }
-            .onTapGesture(perform: action)
     }
 }
 

@@ -8,7 +8,8 @@ import Observation
 @Observable
 final class ForgeModel {
     enum SideTab: String, CaseIterable, Identifiable {
-        case files = "Files", changes = "Changes", search = "Search", problems = "Problems"
+        // "Issues" (Xcode's word) rather than "Problems", so all four fit one segmented control.
+        case files = "Files", changes = "Changes", search = "Search", problems = "Issues"
         var id: String { rawValue }
     }
 
@@ -44,6 +45,10 @@ final class ForgeModel {
     var pendingLeave: Leave?
     /// Watches the workspace on disk: outside edits reach open buffers, the tree and git marks refresh.
     @ObservationIgnored private var watcher: FolderWatcher?
+    /// The Search tab, one per window; cleared when another workspace opens.
+    let search = SearchModel()
+    /// Bumped to put the cursor in the search field (⌘⇧F).
+    var searchFocusRequest = 0
     /// A name being typed in the tree: a rename, or a new file / folder in a folder ("" = the root).
     var treeEdit: TreeEdit?
 
@@ -140,6 +145,7 @@ final class ForgeModel {
         expanded = saved.expanded
         recentFiles = saved.recentFiles ?? []
         store.noteOpened(key)
+        search.clear()
         await workspace.refresh()
         watcher = FolderWatcher(root: workspace.root) { [weak self] paths in
             guard paths.contains(where: FolderWatcher.isRelevant) else { return }
@@ -467,6 +473,20 @@ extension ForgeModel {
         return EditorOptions(
             fontSize: s.fontSize, tabWidth: s.tabWidth, insertSpaces: s.insertSpaces, wrapLines: s.wrapLines,
             showMinimap: s.showMinimap, showInvisibles: s.showInvisibles)
+    }
+}
+
+/// Search across files.
+extension ForgeModel {
+    /// Text of open files with unsaved edits — searched instead of their stale files on disk.
+    var unsavedBuffers: [String: String] {
+        Dictionary(uniqueKeysWithValues: unsavedPaths.compactMap { path in documents[path].map { (path, $0.storage.string) } })
+    }
+
+    /// ⌘⇧F: the Search tab, cursor in the query.
+    func showSearch() {
+        sideTab = .search
+        searchFocusRequest += 1
     }
 }
 
