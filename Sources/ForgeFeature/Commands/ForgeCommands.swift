@@ -24,10 +24,11 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
     case save, saveAll, closeTab, nextTab, previousTab
     case showFiles, showChanges, revealInTree, refresh
     case copyPath, openTerminal
+    case splitRight, splitDown, focusFirstPane, focusSecondPane, closePane
 
     var id: String { rawValue }
 
-    enum Requirement { case none, workspace, file }
+    enum Requirement { case none, workspace, file, split }
 
     var title: String {
         switch self {
@@ -47,6 +48,11 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .refresh: "Refresh Files and Git Status"
         case .copyPath: "Copy Path of Active File"
         case .openTerminal: "Open Terminal Here (Rune)"
+        case .splitRight: "Split Editor Right"
+        case .splitDown: "Split Editor Down"
+        case .focusFirstPane: "Focus First Pane"
+        case .focusSecondPane: "Focus Second Pane"
+        case .closePane: "Close Pane"
         }
     }
 
@@ -67,6 +73,11 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .refresh: "arrow.clockwise"
         case .copyPath: "doc.on.clipboard"
         case .openTerminal: "terminal"
+        case .splitRight: "rectangle.split.2x1"
+        case .splitDown: "rectangle.split.1x2"
+        case .focusFirstPane: "1.square"
+        case .focusSecondPane: "2.square"
+        case .closePane: "xmark.rectangle"
         }
     }
 
@@ -85,7 +96,10 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .showFiles: Shortcut(key: "e", modifiers: [.command, .shift])
         case .showChanges: Shortcut(key: "g", modifiers: [.control, .shift])
         case .copyPath: Shortcut(key: "c", modifiers: [.command, .option])
-        case .closeWorkspace, .revealInTree, .refresh, .openTerminal: nil
+        case .splitRight: Shortcut(key: "\\", modifiers: .command)
+        case .focusFirstPane: Shortcut(key: "1", modifiers: .command)
+        case .focusSecondPane: Shortcut(key: "2", modifiers: .command)
+        case .closeWorkspace, .revealInTree, .refresh, .openTerminal, .splitDown, .closePane: nil
         }
     }
 
@@ -93,17 +107,19 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         switch self {
         case .quickOpen, .commandPalette, .openFolder: .none
         case .closeWorkspace, .saveAll, .showFiles, .showChanges, .refresh, .openTerminal: .workspace
-        case .goToLine, .save, .closeTab, .nextTab, .previousTab, .revealInTree, .copyPath: .file
+        case .goToLine, .save, .closeTab, .nextTab, .previousTab, .revealInTree, .copyPath, .splitRight, .splitDown: .file
+        case .focusFirstPane, .focusSecondPane, .closePane: .split
         }
     }
 
     /// The commands that can run now, in registry order.
-    static func available(hasWorkspace: Bool, hasFile: Bool) -> [ForgeCommand] {
+    static func available(hasWorkspace: Bool, hasFile: Bool, hasSplit: Bool = false) -> [ForgeCommand] {
         allCases.filter {
             switch $0.requirement {
             case .none: true
             case .workspace: hasWorkspace
             case .file: hasFile
+            case .split: hasSplit
             }
         }
     }

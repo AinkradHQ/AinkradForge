@@ -15,6 +15,11 @@ struct ForgeDocument: Codable, Equatable, Sendable {
         var expanded: Set<String> = []
         /// Newest first, for ⌘P. Optional so state saved before it existed still decodes.
         var recentFiles: [String]?
+        /// Split editor: every pane's tabs (`tabs` mirrors the first, for older readers), the focused one,
+        /// and whether the panes stack top to bottom. Optional for the same reason.
+        var panes: [Tabs]?
+        var activePane: Int?
+        var stacked: Bool?
     }
 
     /// Newest first.

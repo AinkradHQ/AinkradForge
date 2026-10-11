@@ -78,11 +78,14 @@ public struct ForgeCodeEditor: View {
     /// A 1-based line to put the caret on and scroll to; `onGoToLineHandled` is called once it is done.
     let goToLine: Int?
     let onGoToLineHandled: () -> Void
+    /// The caret moved while this editor has keyboard focus — the user is working here (not a load).
+    let onFocusedCaret: () -> Void
 
     public init(
         storage: NSTextStorage, language: EditorLanguage, colors: EditorColors, fontSize: CGFloat,
         insets: NSEdgeInsets, onEdit: @escaping () -> Void, onCursor: @escaping (Int, Int) -> Void,
-        goToLine: Int? = nil, onGoToLineHandled: @escaping () -> Void = {}
+        goToLine: Int? = nil, onGoToLineHandled: @escaping () -> Void = {},
+        onFocusedCaret: @escaping () -> Void = {}
     ) {
         self.storage = storage
         self.language = language
@@ -93,13 +96,15 @@ public struct ForgeCodeEditor: View {
         self.onCursor = onCursor
         self.goToLine = goToLine
         self.onGoToLineHandled = onGoToLineHandled
+        self.onFocusedCaret = onFocusedCaret
     }
 
     public var body: AnyView {
         AnyView(
             EditorHost(
                 storage: storage, language: language, colors: colors, fontSize: fontSize, insets: insets,
-                onEdit: onEdit, onCursor: onCursor, goToLine: goToLine, onGoToLineHandled: onGoToLineHandled))
+                onEdit: onEdit, onCursor: onCursor, goToLine: goToLine, onGoToLineHandled: onGoToLineHandled,
+                onFocusedCaret: onFocusedCaret))
     }
 }
 
@@ -114,6 +119,7 @@ struct EditorHost: View {
     let onCursor: (Int, Int) -> Void
     let goToLine: Int?
     let onGoToLineHandled: () -> Void
+    let onFocusedCaret: () -> Void
     @State private var state = SourceEditorState()
     @State private var coordinator = Coordinator()
 
@@ -133,6 +139,7 @@ struct EditorHost: View {
         .onAppear {
             coordinator.onEdit = onEdit
             coordinator.onCursor = onCursor
+            coordinator.onFocusedCaret = onFocusedCaret
             go(to: goToLine)
         }
         .onChange(of: goToLine) { _, line in go(to: line) }
@@ -155,6 +162,7 @@ struct EditorHost: View {
     final class Coordinator: @preconcurrency TextViewCoordinator {
         var onEdit: () -> Void = {}
         var onCursor: (Int, Int) -> Void = { _, _ in }
+        var onFocusedCaret: () -> Void = {}
         weak var controller: TextViewController?
 
         /// `prepareCoordinator` runs before the controller loads its view (`scrollView`, implicitly unwrapped, is
@@ -172,6 +180,7 @@ struct EditorHost: View {
 
         func textViewDidChangeSelection(controller: TextViewController, newPositions: [CursorPosition]) {
             if let first = newPositions.first { onCursor(first.start.line, first.start.column) }
+            if let textView = controller.textView, textView.window?.firstResponder === textView { onFocusedCaret() }
         }
     }
 }

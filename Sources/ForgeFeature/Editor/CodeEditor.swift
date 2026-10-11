@@ -11,6 +11,8 @@ struct CodeEditor: View {
     /// A line to jump to, and how to say it was done.
     var goToLine: Int?
     var onGoToLineHandled: () -> Void = {}
+    /// The caret moved while this editor has focus (a click or a key here — not a load).
+    var onCaret: () -> Void = {}
     let onEdit: () -> Void
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
@@ -22,7 +24,7 @@ struct CodeEditor: View {
             insets: NSEdgeInsets(top: skin.size.s4, left: 0, bottom: skin.size.s12, right: 0),
             onEdit: onEdit,
             onCursor: { line, column in document.cursor = (line, column) },
-            goToLine: goToLine, onGoToLineHandled: onGoToLineHandled)
+            goToLine: goToLine, onGoToLineHandled: onGoToLineHandled, onFocusedCaret: onCaret)
     }
 }
 
