@@ -16,6 +16,19 @@ xcodegen generate
 xcodebuild -scheme ForgePlugin -configuration Release -derivedDataPath build -destination 'platform=macOS' build
 BUNDLE="build/Build/Products/Release/ForgePlugin.bundle"
 
+# The store's installer rejects ANY symlink in a plugin zip (Ainkrad `DittoUnzipper`), and a macOS framework is built
+# on them (Versions/Current, the top-level links). CodeEditLanguages' `CodeLanguages_Container.framework` is an
+# empty stub — its grammars are linked statically into ForgePlugin and nothing links the stub — but Xcode embeds it
+# anyway; v0.1.0–v0.1.3 shipped it and every install failed ("unsafeEntry"). Drop it, then refuse to ship a link.
+rm -rf "$BUNDLE/Contents/Frameworks/CodeLanguages_Container.framework"
+rmdir "$BUNDLE/Contents/Frameworks" 2>/dev/null || true
+LINKS="$(find "$BUNDLE" -type l)"
+if [[ -n "$LINKS" ]]; then
+  echo "error: the bundle holds symlinks, which the store's installer rejects:" >&2
+  echo "$LINKS" >&2
+  exit 1
+fi
+
 rm -rf dist && mkdir -p dist
 # --- sign ------------------------------------------------------------------
 # Signed BEFORE zipping, deliberately: the catalog verifies the sha256 of the
