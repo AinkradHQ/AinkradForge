@@ -11,6 +11,10 @@ settings:
     CODE_SIGNING_REQUIRED: NO
     CODE_SIGNING_ALLOWED: NO
     EAGER_LINKING: NO
+    # Xcode's explicit-module scan walks ForgeEditor's dependencies into CodeEdit's C
+    # modules (CodeEditTextViewObjC, TreeSitter) and cannot resolve them from this
+    # project. With implicit modules, ForgeEditor's `internal import`s keep them out.
+    SWIFT_ENABLE_EXPLICIT_MODULES: NO
 packages:
   AinkradAppKit:
     url: https://github.com/AinkradHQ/AinkradAppKit
@@ -19,8 +23,12 @@ packages:
     # that copy does not define and dies at `Bundle.load()`. This matches the
     # host's pin exactly: the settings-catalog merge, which is what
     # `settingsCatalog(host:)` in Sources/ForgeFeature/PluginApp.swift needs.
-    # aa3fc95: Glass Native kit (#96–#107), same as AinkradPluginTemplate.
-    revision: aa3fc955d523a9ec940626bddeeabd927c587737
+    # bdf3b0d: kit chat pieces (diff review, composer), = host 0.31.0's pin.
+    revision: bdf3b0d8d235cf792ca4c2a986801162aee3e4fb
+  # The editor engine (CodeEdit forks) behind Forge's own API — see its Package.swift
+  # for why it is a local package. Statically linked into the bundle.
+  ForgeEditor:
+    path: Packages/ForgeEditor
 targets:
   ForgeFeature:
     type: library.static
@@ -29,6 +37,7 @@ targets:
     dependencies:
       - package: AinkradAppKit
         embed: false
+      - package: ForgeEditor
   ForgePlugin:
     type: bundle
     platform: macOS
@@ -41,6 +50,8 @@ targets:
       # Docs/Reference/ainkradplugintemplate-readme.md in the Ainkrad workspace).
       - package: AinkradAppKit
         embed: false
+      # A static library does not carry its package dependencies; the bundle links them.
+      - package: ForgeEditor
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ainkrad.plugin.forge
@@ -69,6 +80,7 @@ targets:
     dependencies:
       - target: ForgeFeature
       - package: AinkradAppKit
+      - package: ForgeEditor
 schemes:
   ForgePlugin:
     build: { targets: { ForgePlugin: all, ForgeFeatureTests: [test] } }

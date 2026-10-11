@@ -1,0 +1,244 @@
+import AinkradAppKit
+import AppKit
+import SwiftUI
+import XCTest
+
+@testable import ForgeFeature
+
+/// Forge's screens under Neon and Liquid Glass, written as `<dir>/<name>-neon.png` / `-glass.png` for
+/// screen-by-screen review. A tool, not a check: it runs only with AINKRAD_SWEEP_DIR and AINKRAD_THEMES_DIR
+/// (the catalog's `themes/`) set. Live window captures — off-screen `cacheDisplay` cannot draw Liquid Glass.
+/// The workspace is a throwaway git repo shaped like the mockups, so no real code leaks.
+///
+/// XCTest, not Swift Testing: a Swift Testing `@MainActor` test runs as a job on the main dispatch queue, so
+/// the editor's own main-queue work (highlighting, its transparent background) never runs while it waits.
+@MainActor
+final class SweepTests: XCTestCase {
+    func testShootE2Screens() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let out = env["AINKRAD_SWEEP_DIR"], let themes = env["AINKRAD_THEMES_DIR"] else {
+            throw XCTSkip("set AINKRAD_SWEEP_DIR and AINKRAD_THEMES_DIR to shoot the screens")
+        }
+        let glass = try SweepSupport.glassSkin(themes: URL(fileURLWithPath: themes))
+        SweepSupport.registerHostFonts()
+        try FileManager.default.createDirectory(atPath: out, withIntermediateDirectories: true)
+        let repo = try SampleRepo.make()
+        defer { try? FileManager.default.removeItem(at: repo.deletingLastPathComponent()) }
+
+        // Screen 1: the window, a file open, the tree expanded down to it.
+        let window = try SweepSupport.model(opening: repo)
+        for folder in ["Sources", "Sources/Ainkrad", "Sources/Ainkrad/Features", "Sources/Ainkrad/Features/Sidebar"] {
+            window.toggle(folder: folder)
+        }
+        window.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarView.swift", pinned: true)
+        window.open(file: "project.yml", pinned: true)
+        window.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift", pinned: true)
+        try SweepSupport.waitUntilLoaded(window)
+
+        // The Changes tab, with a preview tab open.
+        let changes = try SweepSupport.model(opening: repo)
+        changes.sideTab = .changes
+        changes.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift", pinned: false)
+        try SweepSupport.waitUntilLoaded(changes)
+
+        // Closing a tab with unsaved changes.
+        let closing = try SweepSupport.model(opening: repo)
+        closing.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift", pinned: true)
+        try SweepSupport.waitUntilLoaded(closing)
+        closing.didEdit("Sources/Ainkrad/Features/Sidebar/SidebarRow.swift")
+        closing.close("Sources/Ainkrad/Features/Sidebar/SidebarRow.swift")
+
+        // Screen 5: welcome, with recents (the sample repo has a worktree).
+        let docs = MemoryDocs()
+        let welcomeStore = ForgeStore(documents: docs)
+        welcomeStore.noteOpened("/Users/me/Projects/OptimusBackend", at: Date(timeIntervalSinceNow: -86_400))
+        welcomeStore.noteOpened(repo.path(percentEncoded: false), at: Date(timeIntervalSinceNow: -120))
+        welcomeStore.update { $0.lastWorkspace = nil }
+        let welcome = ForgeModel(store: welcomeStore)
+
+        for (theme, skin) in [("neon", AinkradSkin.standard), ("glass", glass)] {
+            let hostTheme = HostTheme(HostThemeTokens(skin: skin))
+            hostTheme.updateStatusColors(
+                HostStatusColors(
+                    success: skin.color(skin.palette.success), warning: skin.color(skin.palette.warning),
+                    danger: skin.color(skin.palette.danger)))
+            hostTheme.updateTerminalPalette(HostTerminalPalette(skin.terminal))
+            let screens: [(String, ForgeModel)] = [
+                ("e21-window", window), ("e21-changes", changes), ("e21-unsaved", closing), ("e22-welcome", welcome),
+            ]
+            for (name, model) in screens {
+                try LiveCapture.shoot(
+                    RootView(model: model, theme: hostTheme)
+                        .frame(width: 1200, height: 760)
+                        .background(skin.color(skin.palette.background))
+                        .ainkradSkin(skin)
+                        // As the host: Exo 2 under Neon, the system face under Glass.
+                        .environment(
+                            \.ainkradTypography, AinkradTypography(fontFamilyName: theme == "neon" ? "Exo 2" : nil)
+                        )
+                        .environment(\.colorScheme, .dark),
+                    size: CGSize(width: 1200, height: 760),
+                    to: URL(fileURLWithPath: out).appendingPathComponent("\(name)-\(theme).png"))
+            }
+        }
+    }
+}
+
+enum SweepSupport {
+    @MainActor static func model(opening repo: URL) throws -> ForgeModel {
+        let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
+        model.request(.open(repo))
+        spin(until: 10) { !(model.workspace?.tree.isEmpty ?? true) }
+        return model
+    }
+
+    @MainActor static func waitUntilLoaded(_ model: ForgeModel) throws {
+        spin(until: 5) { model.activeDocument?.state == .ready }
+    }
+
+    /// Runs the main run loop (and with it the main queue) until `done` or the deadline.
+    @MainActor static func spin(until seconds: TimeInterval, _ done: () -> Bool) {
+        let deadline = Date().addingTimeInterval(seconds)
+        while !done(), Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+    }
+
+    /// The host registers its bundled faces (Exo 2, JetBrains Mono) at launch; the test runner doesn't,
+    /// so borrow the installed app's for true-to-app shots.
+    static func registerHostFonts() {
+        let resources = URL(fileURLWithPath: "/Applications/Ainkrad.app/Contents/Resources")
+        let fonts = (try? FileManager.default.contentsOfDirectory(at: resources, includingPropertiesForKeys: nil)) ?? []
+        for font in fonts where font.pathExtension == "ttf" {
+            CTFontManagerRegisterFontsForURL(font as CFURL, .process, nil)
+        }
+    }
+
+    /// `glass-dark.theme` on the standard skin, coloured by `glass-dark.scheme`, composed the way the host's
+    /// `ThemeCatalog.compose` does.
+    static func glassSkin(themes: URL) throws -> AinkradSkin {
+        let dir = themes.appendingPathComponent("glass")
+        let base = try JSONEncoder().encode(AinkradSkin.standard)
+        let theme = try Data(contentsOf: dir.appendingPathComponent("glass-dark.theme"))
+        let variant = try XCTUnwrap(ainkradLoadThemes([base, theme]).themes["glass.dark"])
+        var scheme = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: dir.appendingPathComponent("glass-dark.scheme")))
+                as? [String: Any])
+        scheme.removeValue(forKey: "appearance")
+        scheme.removeValue(forKey: "host")
+        scheme["base"] = "glass.dark"
+        return try AinkradThemeFile(
+            decoding: JSONSerialization.data(withJSONObject: scheme), bases: ["glass.dark": variant]
+        ).skin
+    }
+}
+
+/// A throwaway repo shaped like the mockups: a committed tree, one modified file, one new one, a worktree.
+enum SampleRepo {
+    static func make() throws -> URL {
+        let base = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("forge-sweep-\(UUID().uuidString.prefix(8))")
+        let repo = base.appendingPathComponent("Ainkrad")
+        let files: [String: String] = [
+            "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift": sidebarRow,
+            "Sources/Ainkrad/Features/Sidebar/SidebarView.swift": "import SwiftUI\n\nstruct SidebarView: View {\n    var body: some View { Text(\"Sidebar\") }\n}\n",
+            "Sources/Ainkrad/Features/Sidebar/SidebarModel.swift": "import Observation\n\n@Observable final class SidebarModel {}\n",
+            "Sources/Ainkrad/Features/Home/HomeView.swift": "import SwiftUI\n",
+            "Sources/Ainkrad/Features/Settings/SettingsView.swift": "import SwiftUI\n",
+            "Sources/Ainkrad/Core/Log.swift": "import os\n",
+            "Sources/Ainkrad/AinkradApp.swift": "import SwiftUI\n\n@main struct AinkradApp: App {\n    var body: some Scene { WindowGroup { Text(\"Ainkrad\") } }\n}\n",
+            "Tests/AinkradTests/SidebarTests.swift": "import Testing\n",
+            "scripts/release.sh": "#!/bin/bash\nset -euo pipefail\n",
+            "project.yml": "name: Ainkrad\noptions:\n  bundleIdPrefix: com.ainkrad\n",
+            "AGENTS.md": "# Agents\n",
+            "Makefile": "build: ; xcodebuild\n",
+        ]
+        for (path, text) in files {
+            let url = repo.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try text.write(to: url, atomically: true, encoding: .utf8)
+        }
+        try git(repo, "init", "-q", "-b", "feat/glass-sidebar")
+        try git(repo, "add", "-A")
+        try git(repo, "-c", "user.name=Forge", "-c", "user.email=forge@example.com", "commit", "-q", "-m", "init")
+        try git(repo, "worktree", "add", "-q", "-b", "development", base.appendingPathComponent("Ainkrad-dev").path)
+        // A modified file and a new one, as the mockup shows.
+        try (sidebarRow.replacingOccurrences(of: ".contentShape(Rectangle())", with: ".contentShape(Rectangle())\n        .help(thread.branchName)"))
+            .write(to: repo.appendingPathComponent("Sources/Ainkrad/Features/Sidebar/SidebarRow.swift"), atomically: true, encoding: .utf8)
+        try "import SwiftUI\n\nstruct SidebarGlassCapsule: View {\n    var body: some View { Capsule() }\n}\n"
+            .write(to: repo.appendingPathComponent("Sources/Ainkrad/Features/Sidebar/SidebarGlassCapsule.swift"), atomically: true, encoding: .utf8)
+        return repo
+    }
+
+    private static func git(_ repo: URL, _ arguments: String...) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = arguments
+        process.currentDirectoryURL = repo
+        try process.run()
+        process.waitUntilExit()
+    }
+
+    static let sidebarRow = """
+        import SwiftUI
+        import AinkradAppKit
+
+        /// One thread row in the sidebar: status dot, title, time, agent badge.
+        struct SidebarRow: View {
+            @Environment(\\.ainkradSkin) private var skin
+            let thread: ThreadSummary
+            let isSelected: Bool
+
+            var body: some View {
+                HStack(spacing: skin.size.s8) {
+                    StatusDot(state: thread.state)
+                    Text(thread.title).lineLimit(1)
+                    Spacer()
+                    Text(thread.updated, format: .relative(presentation: .numeric))
+                }
+                .padding(.horizontal, skin.size.s8)
+                .background {
+                    if isSelected { Capsule().glassEffect(.regular) }
+                }
+                .contentShape(Rectangle())
+            }
+        }
+
+        // MARK: - Previews
+
+        #Preview("Selected · Glass") { SidebarRow(thread: .sample, isSelected: true) }
+
+        """
+}
+
+/// Captures a desktop-level window by id (`screencapture -l`): never the user's screen, never focus.
+@MainActor
+enum LiveCapture {
+    private final class KeyAppearancePanel: NSPanel {
+        override var isKeyWindow: Bool { true }
+        override var isMainWindow: Bool { true }
+        override var canBecomeKey: Bool { false }
+        @objc var hasKeyAppearance: Bool { true }
+        @objc var hasMainAppearance: Bool { true }
+        @objc var _hasActiveAppearance: Bool { true }
+        @objc var _hasActiveAppearanceIgnoringKeyFocus: Bool { true }
+    }
+
+    static func shoot(_ view: some View, size: CGSize, to url: URL) throws {
+        let panel = KeyAppearancePanel(
+            contentRect: NSRect(origin: CGPoint(x: 200, y: 200), size: size),
+            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.appearance = NSAppearance(named: .darkAqua)
+        panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)))
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        panel.hasShadow = false
+        panel.contentView = NSHostingView(
+            rootView: view.environment(\.ainkradMotionBudget, .frozen).environment(\.controlActiveState, .key))
+        panel.orderFrontRegardless()
+        defer { panel.orderOut(nil) }
+        RunLoop.main.run(until: Date().addingTimeInterval(3))  // tree-sitter highlights asynchronously
+        let capture = Process()
+        capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        capture.arguments = ["-x", "-o", "-l", String(panel.windowNumber), url.path]
+        try capture.run()
+        capture.waitUntilExit()
+        XCTAssertEqual(capture.terminationStatus, 0, "no capture for \(url.lastPathComponent)")
+    }
+}
