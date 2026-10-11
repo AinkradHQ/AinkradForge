@@ -202,6 +202,13 @@ final class SweepTests: XCTestCase {
         previewing.commitRename(preview: true)
         SweepSupport.spin(until: 15) { previewing.pendingEdit != nil }
 
+        // E6 screen 12: the terminal drawer — a shell, and a finished command in its own tab, shown.
+        let terminal = try SweepSupport.model(opening: repo)
+        terminal.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift", pinned: true)
+        try SweepSupport.waitUntilLoaded(terminal)
+        terminal.terminals.add()
+        terminal.terminals.add(command: "git status --short && git log --oneline -3", title: "git status")
+
         // Screen 5: welcome, with recents (the sample repo has a worktree).
         let docs = MemoryDocs()
         let welcomeStore = ForgeStore(documents: docs)
@@ -232,6 +239,7 @@ final class SweepTests: XCTestCase {
                 ("e53-signature", typing),
                 ("e54-rename", renamingSymbol),
                 ("e54-rename-preview", previewing),
+                ("e61-terminal", terminal),
             ]
             for (name, model) in screens {
                 // The sweep window never becomes key, so an inline name field loses focus right after it shows

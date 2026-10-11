@@ -60,6 +60,7 @@ final class ForgeModel {
     }
     /// The workspace's language servers: diagnostics now; hover, completion and the rest as E5 lands.
     let languages = LanguageHub()
+    let terminals = TerminalDrawer()
     /// A dirty tab the user asked to close: the window asks Save / Don't Save / Cancel.
     var pendingClose: String?
     /// Leaving the workspace (open another, or close it) while files are unsaved: the window asks first.
@@ -158,6 +159,7 @@ final class ForgeModel {
     private func open(folder: URL) async {
         let workspace = Workspace(root: folder)
         let key = workspace.root.path(percentEncoded: false)
+        terminals.begin(root: workspace.root)
         self.workspace = workspace
         documents = [:]
         let saved = store.document.workspaces[key] ?? .init()
@@ -189,6 +191,7 @@ final class ForgeModel {
     private func closeWorkspace() {
         watcher = nil
         languages.end()
+        terminals.end()
         persist()
         workspace = nil
         documents = [:]

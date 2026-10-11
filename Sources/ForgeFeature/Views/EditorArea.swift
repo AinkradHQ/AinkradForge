@@ -9,6 +9,7 @@ struct EditorArea: View {
     let workspace: Workspace
     let palette: HostTerminalPalette?
     @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -16,7 +17,7 @@ struct EditorArea: View {
                 EditPreview(model: model, pending: pending)
             } else if let preview = model.search.previewPath, model.search.isReplaceOpen, model.sideTab == .search {
                 ReplacePreview(model: model, path: preview)
-            } else {
+            } else if !(model.terminals.isOpen && model.terminals.isMaximised) {
                 let layout = model.stacked ? AnyLayout(VStackLayout(spacing: skin.size.s10)) : AnyLayout(HStackLayout(spacing: skin.size.s10))
                 layout {
                     ForEach(model.panes.indices, id: \.self) { index in
@@ -25,8 +26,16 @@ struct EditorArea: View {
                 }
                 .padding(.horizontal, skin.size.s14)
             }
+            if model.terminals.isOpen {
+                TerminalDrawerView(model: model)
+                    .padding(.horizontal, skin.size.s14)
+                    .padding(.top, skin.size.s10)
+            }
             StatusRow(model: model, workspace: workspace)
         }
+        .onAppear { model.terminals.restyle(palette, foreground: NSColor(theme.foreground)) }
+        .onChange(of: palette) { _, palette in model.terminals.restyle(palette, foreground: NSColor(theme.foreground)) }
+        .onChange(of: theme.foreground) { _, foreground in model.terminals.restyle(palette, foreground: NSColor(foreground)) }
     }
 }
 
