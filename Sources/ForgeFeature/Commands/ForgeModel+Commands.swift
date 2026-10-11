@@ -50,6 +50,7 @@ extension ForgeModel {
         case .lineEndingsLF: activeDocument?.convertLineEndings(to: .lf)
         case .lineEndingsCRLF: activeDocument?.convertLineEndings(to: .crlf)
         case .saveAsUTF8: activeDocument?.setEncoding(.utf8)
+        case .findInFiles: showSearch()
         }
     }
 

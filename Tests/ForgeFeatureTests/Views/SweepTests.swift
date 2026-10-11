@@ -109,6 +109,17 @@ final class SweepTests: XCTestCase {
         tuned.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift", pinned: true)
         try SweepSupport.waitUntilLoaded(tuned)
 
+        // E4 screen 7: search across files, a result opened at its line.
+        let searching = try SweepSupport.model(opening: repo)
+        searching.showSearch()
+        searching.search.query.text = "isSelected"
+        searching.search.include = "Sources/**, Tests/**"
+        searching.search.schedule(root: repo, files: searching.workspace?.files ?? [], buffers: [:], delay: .zero)
+        SweepSupport.spin(until: 5) { if case .done = searching.search.status { true } else { false } }
+        searching.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift", pinned: false)
+        searching.pendingLine = 19
+        try SweepSupport.waitUntilLoaded(searching)
+
         // Screen 5: welcome, with recents (the sample repo has a worktree).
         let docs = MemoryDocs()
         let welcomeStore = ForgeStore(documents: docs)
@@ -131,6 +142,7 @@ final class SweepTests: XCTestCase {
                 ("e25-rename", renaming), ("e25-new-file", creating),
                 ("e31-conflict", conflicted),
                 ("e32-settings-applied", tuned),
+                ("e41-search", searching),
             ]
             for (name, model) in screens {
                 // The sweep window never becomes key, so an inline name field loses focus right after it shows
