@@ -12,11 +12,12 @@ struct Shortcut: Equatable {
         if modifiers.contains(.option) { text += "⌥" }
         if modifiers.contains(.shift) { text += "⇧" }
         if modifiers.contains(.command) { text += "⌘" }
-        return text + (key == "\r" ? "↵" : key == Self.f12 ? "F12" : key == Self.f2 ? "F2" : String(key).uppercased())
+        return text + (key == "\r" ? "↵" : key == Self.backspace ? "⌫" : key == Self.f12 ? "F12" : key == Self.f2 ? "F2" : String(key).uppercased())
     }
 
     /// AppKit's private-use characters for the function keys.
     static let f2 = Character("\u{F705}")
+    static let backspace = Character("\u{7F}")
     static let f12 = Character("\u{F70F}")
 }
 
@@ -34,10 +35,11 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
     case findInFiles, replaceAll
     case goToDefinition, findReferences, renameSymbol, codeActions, formatDocument
     case toggleTerminal, newTerminal, maximiseTerminal, toggleBlame, runTask, rerunLastTask
+    case keepChange, undoChange, keepAllChanges, undoAllChanges
 
     var id: String { rawValue }
 
-    enum Requirement { case none, workspace, file, split }
+    enum Requirement { case none, workspace, file, split, agentChange, agentFile }
 
     var title: String {
         switch self {
@@ -83,6 +85,10 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .toggleBlame: "Toggle Blame"
         case .runTask: "Run Task…"
         case .rerunLastTask: "Rerun Last Task"
+        case .keepChange: "Keep Outside Change"
+        case .undoChange: "Undo Outside Change"
+        case .keepAllChanges: "Keep All Outside Changes in File"
+        case .undoAllChanges: "Undo All Outside Changes in File"
         }
     }
 
@@ -127,6 +133,8 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .toggleBlame: "person.text.rectangle"
         case .runTask: "play"
         case .rerunLastTask: "arrow.clockwise"
+        case .keepChange, .keepAllChanges: "checkmark"
+        case .undoChange, .undoAllChanges: "arrow.uturn.backward"
         }
     }
 
@@ -165,8 +173,12 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         // ⇧⌘B is VS Code's Run Build Task (⌥⌘R stays Reveal in Finder).
         case .runTask: Shortcut(key: "b", modifiers: [.command, .shift])
         case .rerunLastTask: Shortcut(key: "b", modifiers: [.command, .shift, .control])
+        // Claimed only while the caret is in an outside change (`.agentChange`): ⌘⌫ deletes to the line's
+        // start everywhere else.
+        case .keepChange: Shortcut(key: "\r", modifiers: .command)
+        case .undoChange: Shortcut(key: Shortcut.backspace, modifiers: .command)
         case .closeWorkspace, .revealInTree, .refresh, .openTerminal, .splitDown, .closePane, .renameActiveFile,
-            .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8:
+            .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8, .keepAllChanges, .undoAllChanges:
             nil
         }
     }
@@ -182,17 +194,23 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
             .goToDefinition, .findReferences, .renameSymbol, .codeActions, .formatDocument, .toggleBlame:
             .file
         case .focusFirstPane, .focusSecondPane, .closePane: .split
+        case .keepChange, .undoChange: .agentChange
+        case .keepAllChanges, .undoAllChanges: .agentFile
         }
     }
 
     /// The commands that can run now, in registry order.
-    static func available(hasWorkspace: Bool, hasFile: Bool, hasSplit: Bool = false) -> [ForgeCommand] {
+    static func available(
+        hasWorkspace: Bool, hasFile: Bool, hasSplit: Bool = false, inAgentChange: Bool = false, agentFile: Bool = false
+    ) -> [ForgeCommand] {
         allCases.filter {
             switch $0.requirement {
             case .none: true
             case .workspace: hasWorkspace
             case .file: hasFile
             case .split: hasSplit
+            case .agentChange: inAgentChange
+            case .agentFile: agentFile
             }
         }
     }

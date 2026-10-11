@@ -17,9 +17,13 @@ extension ForgeModel {
         }
         for (path, document) in documents {
             let revision = document.revision
+            let before = document.storage.string
             await document.checkDisk()
-            // Reloaded from disk: the server gets the new text.
-            if document.revision != revision { languages.changed(path: path) { document.storage.string } }
+            // Reloaded from disk: the server gets the new text, and the change waits for review.
+            if document.revision != revision {
+                languages.changed(path: path) { document.storage.string }
+                agent.reloaded(path, before: before, after: document.storage.string)
+            }
         }
     }
 }
