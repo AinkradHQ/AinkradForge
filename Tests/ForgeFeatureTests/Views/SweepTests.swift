@@ -209,6 +209,31 @@ final class SweepTests: XCTestCase {
         terminal.terminals.add()
         terminal.terminals.add(command: "git status --short && git log --oneline -3", title: "git status")
 
+        // E6 screen 13: the gutter's change marks against HEAD, a peek at one change, blame on the caret's line.
+        let gitting = try SweepSupport.model(opening: repo)
+        let row = "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift"
+        gitting.open(file: row, pinned: true)
+        try SweepSupport.waitUntilLoaded(gitting)
+        // In the buffer too: one line changed, one removed — so all three kinds of mark show.
+        let rowDocument = try XCTUnwrap(gitting.activeDocument)
+        let edited = rowDocument.storage.string
+            .replacingOccurrences(of: "Spacer()", with: "Spacer(minLength: skin.size.s4)")
+            .replacingOccurrences(of: "            Text(thread.title).lineLimit(1)\n", with: "")
+        rowDocument.storage.replaceCharacters(in: NSRange(location: 0, length: rowDocument.storage.length), with: edited)
+        gitting.didEdit(row)
+        SweepSupport.spin(until: 10) { (gitting.git.hunks[row]?.count ?? 0) >= 3 }
+        let hunks = gitting.git.hunks[row] ?? []
+        if let changed = hunks.firstIndex(where: { $0.oldCount > 0 && $0.newCount > 0 }) {
+            gitting.peekChange(
+                pane: 0, path: row, hunk: changed,
+                rect: CGRect(x: 52, y: Double(hunks[changed].newStart - 1) * 25.9 + 4, width: 8, height: 25))
+        }
+        gitting.activeDocument?.cursor = (7, 9)
+        gitting.activeDocument?.caretRect = CGRect(x: 120, y: 6 * 25.9 + 4, width: 1, height: 25)
+        gitting.activeDocument?.caretLineEnd = 300
+        gitting.toggleBlame()
+        SweepSupport.spin(until: 10) { gitting.git.blame != nil }
+
         // Screen 5: welcome, with recents (the sample repo has a worktree).
         let docs = MemoryDocs()
         let welcomeStore = ForgeStore(documents: docs)
@@ -240,6 +265,7 @@ final class SweepTests: XCTestCase {
                 ("e54-rename", renamingSymbol),
                 ("e54-rename-preview", previewing),
                 ("e61-terminal", terminal),
+                ("e62-git", gitting),
             ]
             for (name, model) in screens {
                 // The sweep window never becomes key, so an inline name field loses focus right after it shows

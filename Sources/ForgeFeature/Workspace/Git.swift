@@ -9,8 +9,8 @@ struct Git: Sendable {
         var errorDescription: String? { message }
     }
 
-    /// stdout on exit 0; otherwise throws with stderr as the message.
-    func run(_ arguments: [String]) async throws -> String {
+    /// stdout on exit 0; otherwise throws with stderr as the message. `input` is written to its stdin.
+    func run(_ arguments: [String], input: Data? = nil) async throws -> String {
         let directory = directory
         return try await Task.detached(priority: .userInitiated) {
             let process = Process()
@@ -21,8 +21,16 @@ struct Git: Sendable {
             process.currentDirectoryURL = directory
             process.standardOutput = out
             process.standardError = err
-            process.standardInput = FileHandle.nullDevice
+            let stdin = Pipe()
+            process.standardInput = input == nil ? FileHandle.nullDevice : stdin
             try process.run()
+            if let input {
+                // Written off this thread: a large buffer would fill the pipe while git is not yet reading.
+                Thread.detachNewThread {
+                    stdin.fileHandleForWriting.write(input)
+                    try? stdin.fileHandleForWriting.close()
+                }
+            }
             // Read before waiting: a full pipe would block the child forever.
             let output = out.fileHandleForReading.readDataToEndOfFile()
             let errors = err.fileHandleForReading.readDataToEndOfFile()

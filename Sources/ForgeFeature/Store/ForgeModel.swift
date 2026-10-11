@@ -56,11 +56,17 @@ final class ForgeModel {
     private(set) var expanded: Set<String> = []
     private(set) var documents: [String: EditorDocument] = [:] {
         // A buffer that goes away (closed, renamed, trashed, workspace switched) is closed on its server too.
-        didSet { for path in oldValue.keys where documents[path] == nil { languages.closed(path: path) } }
+        didSet {
+            for path in oldValue.keys where documents[path] == nil {
+                languages.closed(path: path)
+                git.closed(path)
+            }
+        }
     }
     /// The workspace's language servers: diagnostics now; hover, completion and the rest as E5 lands.
     let languages = LanguageHub()
     let terminals = TerminalDrawer()
+    let git = EditorGit()
     /// A dirty tab the user asked to close: the window asks Save / Don't Save / Cancel.
     var pendingClose: String?
     /// Leaving the workspace (open another, or close it) while files are unsaved: the window asks first.
@@ -160,6 +166,7 @@ final class ForgeModel {
         let workspace = Workspace(root: folder)
         let key = workspace.root.path(percentEncoded: false)
         terminals.begin(root: workspace.root)
+        git.reset()
         self.workspace = workspace
         documents = [:]
         let saved = store.document.workspaces[key] ?? .init()
@@ -276,7 +283,10 @@ final class ForgeModel {
             documents[path] = document
             Task {
                 await document.load()
-                if document.state == .ready { languages.opened(path: path, text: document.storage.string) }
+                if document.state == .ready {
+                    languages.opened(path: path, text: document.storage.string)
+                    gitChanged(path)
+                }
             }
         }
     }
@@ -284,6 +294,7 @@ final class ForgeModel {
     func didEdit(_ path: String) {
         documents[path]?.didEdit()
         languages.changed(path: path) { [weak self] in self?.documents[path]?.storage.string ?? "" }
+        gitChanged(path)
         if tabs.preview == path { pin(path) }
     }
 

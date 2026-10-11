@@ -62,6 +62,7 @@ extension ForgeModel {
         case .formatDocument: formatDocument()
         case .toggleTerminal: terminals.toggle()
         case .newTerminal: terminals.add()
+        case .toggleBlame: toggleBlame()
         case .maximiseTerminal:
             if !terminals.isOpen { terminals.toggle() }
             terminals.isMaximised.toggle()

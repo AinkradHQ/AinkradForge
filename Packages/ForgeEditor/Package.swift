@@ -27,6 +27,9 @@ let package = Package(
             swiftSettings: [.unsafeFlags(["-enable-library-evolution"])]),
         .testTarget(
             name: "ForgeEditorTests",
-            dependencies: ["ForgeEditor", .product(name: "CodeEditTextView", package: "CodeEditTextView")]),
+            dependencies: [
+                "ForgeEditor", .product(name: "CodeEditTextView", package: "CodeEditTextView"),
+                .product(name: "CodeEditSourceEditor", package: "CodeEditSourceEditor"),
+            ]),
     ]
 )
