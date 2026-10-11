@@ -27,6 +27,32 @@ struct ForgeDocument: Codable, Equatable, Sendable {
     var workspaces: [String: WorkspaceState] = [:]
     /// Reopened at launch, when it still exists.
     var lastWorkspace: String?
+    /// Editor settings; nil = defaults. Optional so state saved before it existed still decodes.
+    var editor: EditorSettings?
+}
+
+/// The editor settings page. Decoded field by field, each falling back to its default, so a setting added
+/// later never makes the saved ones unreadable.
+struct EditorSettings: Codable, Equatable, Sendable {
+    var fontSize: Double = 13
+    var tabWidth: Int = 4
+    var insertSpaces = true
+    var wrapLines = false
+    var showMinimap = false
+    var showInvisibles = false
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = EditorSettings()
+        fontSize = (try? c.decodeIfPresent(Double.self, forKey: .fontSize)) ?? d.fontSize
+        tabWidth = (try? c.decodeIfPresent(Int.self, forKey: .tabWidth)) ?? d.tabWidth
+        insertSpaces = (try? c.decodeIfPresent(Bool.self, forKey: .insertSpaces)) ?? d.insertSpaces
+        wrapLines = (try? c.decodeIfPresent(Bool.self, forKey: .wrapLines)) ?? d.wrapLines
+        showMinimap = (try? c.decodeIfPresent(Bool.self, forKey: .showMinimap)) ?? d.showMinimap
+        showInvisibles = (try? c.decodeIfPresent(Bool.self, forKey: .showInvisibles)) ?? d.showInvisibles
+    }
 }
 
 /// Loads `ForgeDocument` once and saves it on every change. Bytes that no longer decode are set aside,

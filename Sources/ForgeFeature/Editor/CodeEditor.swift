@@ -8,6 +8,7 @@ struct CodeEditor: View {
     let document: EditorDocument
     /// `host.theme.terminalPalette`.
     let palette: HostTerminalPalette?
+    var options = EditorOptions()
     /// A line to jump to, and how to say it was done.
     var goToLine: Int?
     var onGoToLineHandled: () -> Void = {}
@@ -20,7 +21,7 @@ struct CodeEditor: View {
     var body: some View {
         ForgeCodeEditor(
             storage: document.storage, language: document.language,
-            colors: EditorPalette.colors(tokens: theme, palette: palette), fontSize: skin.size.s13,
+            colors: EditorPalette.colors(tokens: theme, palette: palette), options: options,
             insets: NSEdgeInsets(top: skin.size.s4, left: 0, bottom: skin.size.s12, right: 0),
             onEdit: onEdit,
             onCursor: { line, column in document.cursor = (line, column) },

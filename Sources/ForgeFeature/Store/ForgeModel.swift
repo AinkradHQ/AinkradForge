@@ -1,4 +1,5 @@
 import AinkradAppKit
+import ForgeEditor
 import Foundation
 import Observation
 
@@ -451,6 +452,21 @@ extension ForgeModel {
     func diskChanged() async {
         await workspace?.refresh()
         for document in documents.values { await document.checkDisk() }
+    }
+}
+
+/// Editor settings, stored with the rest of Forge's state.
+extension ForgeModel {
+    var editorSettings: EditorSettings {
+        get { store.document.editor ?? EditorSettings() }
+        set { store.update { $0.editor = newValue } }
+    }
+
+    var editorOptions: EditorOptions {
+        let s = editorSettings
+        return EditorOptions(
+            fontSize: s.fontSize, tabWidth: s.tabWidth, insertSpaces: s.insertSpaces, wrapLines: s.wrapLines,
+            showMinimap: s.showMinimap, showInvisibles: s.showInvisibles)
     }
 }
 

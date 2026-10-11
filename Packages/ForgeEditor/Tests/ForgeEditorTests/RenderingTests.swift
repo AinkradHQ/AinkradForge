@@ -25,7 +25,7 @@ final class RenderingTests: XCTestCase {
         let host = NSHostingView(
             rootView: ForgeCodeEditor(
                 storage: storage, language: .detect(url: URL(fileURLWithPath: "/a.swift")), colors: colors,
-                fontSize: 13, insets: NSEdgeInsets(), onEdit: {}, onCursor: { _, _ in }))
+                insets: NSEdgeInsets(), onEdit: {}, onCursor: { _, _ in }))
         let window = NSWindow(
             contentRect: NSRect(x: -3000, y: -3000, width: 500, height: 300), styleMask: .borderless,
             backing: .buffered, defer: false)
@@ -59,7 +59,7 @@ final class RenderingTests: XCTestCase {
         var handled = false
         let host = NSHostingView(
             rootView: ForgeCodeEditor(
-                storage: storage, language: .detect(url: URL(fileURLWithPath: "/a.txt")), colors: colors, fontSize: 13,
+                storage: storage, language: .detect(url: URL(fileURLWithPath: "/a.txt")), colors: colors,
                 insets: NSEdgeInsets(), onEdit: {}, onCursor: { line, _ in caretLine = line },
                 goToLine: 250, onGoToLineHandled: { handled = true }))
         let window = NSWindow(
@@ -84,7 +84,7 @@ final class RenderingTests: XCTestCase {
             types: gray, attributes: gray, variables: gray, values: gray, numbers: gray, strings: gray, comments: gray)
         func editor() -> ForgeCodeEditor {
             ForgeCodeEditor(
-                storage: storage, language: .detect(url: URL(fileURLWithPath: "/a.swift")), colors: colors, fontSize: 13,
+                storage: storage, language: .detect(url: URL(fileURLWithPath: "/a.swift")), colors: colors,
                 insets: NSEdgeInsets(), onEdit: {}, onCursor: { _, _ in })
         }
         let host = NSHostingView(rootView: HStack { editor(); editor() })
@@ -105,5 +105,30 @@ final class RenderingTests: XCTestCase {
         let views = textViews(in: host)
         XCTAssertEqual(views.count, 2)
         XCTAssertTrue(views.allSatisfy { $0.textStorage === storage && $0.string.hasPrefix("// shared") })
+    }
+
+    /// The options reach CodeEdit: wrapping and the indent unit.
+    func testOptionsReachTheTextView() throws {
+        let gray = NSColor.gray
+        let colors = EditorColors(
+            text: gray, insertionPoint: gray, selection: gray, lineHighlight: gray, keywords: gray, commands: gray,
+            types: gray, attributes: gray, variables: gray, values: gray, numbers: gray, strings: gray, comments: gray)
+        let host = NSHostingView(
+            rootView: ForgeCodeEditor(
+                storage: NSTextStorage(string: "x\n"), language: .detect(url: URL(fileURLWithPath: "/a.swift")), colors: colors,
+                options: EditorOptions(fontSize: 18, tabWidth: 2, wrapLines: true), insets: NSEdgeInsets(),
+                onEdit: {}, onCursor: { _, _ in }))
+        let window = NSWindow(
+            contentRect: NSRect(x: -3000, y: -3000, width: 400, height: 200), styleMask: .borderless,
+            backing: .buffered, defer: false)
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        func textView(in view: NSView) -> TextView? { (view as? TextView) ?? view.subviews.lazy.compactMap(textView(in:)).first }
+        let editor = try XCTUnwrap(textView(in: host))
+        XCTAssertTrue(editor.wrapLines)
+        XCTAssertEqual(editor.font.pointSize, 18)
     }
 }
