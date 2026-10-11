@@ -14,7 +14,8 @@ final class EditorDocument {
         case unreadable(String)
     }
 
-    let url: URL
+    /// Follows a rename or move (`moved(to:)`), so saving never writes to the old path.
+    private(set) var url: URL
     let language: EditorLanguage
     @ObservationIgnored let storage = NSTextStorage()
     private(set) var state: State = .loading
@@ -40,6 +41,8 @@ final class EditorDocument {
             state = .unreadable("This file is not UTF-8 text.")
         }
     }
+
+    func moved(to url: URL) { self.url = url }
 
     /// Called by the editor on every change.
     func didEdit() { isDirty = true }

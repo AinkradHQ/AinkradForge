@@ -39,6 +39,14 @@ extension ForgeModel {
         case .focusFirstPane: focus(pane: 0)
         case .focusSecondPane: focus(pane: 1)
         case .closePane: closePane()
+        case .newFile: beginNew(folder: false, in: tabs.active.map(FileOps.parent(of:)) ?? "")
+        case .newFolder: beginNew(folder: true, in: tabs.active.map(FileOps.parent(of:)) ?? "")
+        case .renameActiveFile: if let path = tabs.active { beginRename(path) }
+        case .revealInFinder:
+            if let path = tabs.active, let url = workspace?.url(for: path) {
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
+        case .trashActiveFile: if let path = tabs.active { trash(path) }
         }
     }
 

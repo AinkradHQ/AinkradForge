@@ -41,6 +41,14 @@ final class ForgeModel {
     var pendingClose: String?
     /// Leaving the workspace (open another, or close it) while files are unsaved: the window asks first.
     var pendingLeave: Leave?
+    /// A name being typed in the tree: a rename, or a new file / folder in a folder ("" = the root).
+    var treeEdit: TreeEdit?
+
+    enum TreeEdit: Equatable {
+        case rename(String)
+        case newFile(in: String)
+        case newFolder(in: String)
+    }
 
     enum Leave: Equatable {
         case open(URL)
@@ -310,3 +318,122 @@ extension ForgeModel {
         activePane = min(activePane, panes.count - 1)
     }
 }
+
+/// File operations from the tree, the palette and Finder drops. Every path the window remembers follows a
+/// rename or move: tabs in every pane, buffers (and the URL they save to), expanded folders, recents.
+extension ForgeModel {
+    /// The folder a new item goes into, for a row: a folder itself, else the file's folder.
+    func folder(for path: String?, isDirectory: Bool) -> String {
+        guard let path else { return "" }
+        return isDirectory ? path : FileOps.parent(of: path)
+    }
+
+    /// Starts naming a new file or folder inside `folder`, opening it (and its parents) so the field shows.
+    func beginNew(folder isFolder: Bool, in folder: String) {
+        sideTab = .files
+        if !folder.isEmpty {
+            reveal(folder + "/x")
+        }
+        treeEdit = isFolder ? .newFolder(in: folder) : .newFile(in: folder)
+    }
+
+    /// Starts renaming `path` in the tree, revealing its row.
+    func beginRename(_ path: String) {
+        sideTab = .files
+        reveal(path)
+        treeEdit = .rename(path)
+    }
+
+    /// Ends the inline edit with `name` (from Return); the edit is simply dropped on Esc.
+    func commitTreeEdit(_ name: String) {
+        guard let edit = treeEdit, let root = workspace?.root else { return }
+        treeEdit = nil
+        perform {
+            switch edit {
+            case .rename(let path):
+                let new = try FileOps.rename(path, to: name, root: root)
+                self.follow(from: path, to: new)
+            case .newFile(let folder):
+                let new = try FileOps.createFile(named: name, in: folder, root: root)
+                if !folder.isEmpty { self.expanded.insert(folder) }
+                self.open(file: new, pinned: true)
+            case .newFolder(let folder):
+                let new = try FileOps.createFolder(named: name, in: folder, root: root)
+                if !folder.isEmpty { self.expanded.insert(folder) }
+                self.expanded.insert(new)
+            }
+        }
+    }
+
+    func duplicate(_ path: String) {
+        guard let root = workspace?.root else { return }
+        perform { _ = try FileOps.duplicate(path, root: root) }
+    }
+
+    func move(_ path: String, into folder: String) {
+        guard let root = workspace?.root else { return }
+        perform {
+            let new = try FileOps.move(path, into: folder, root: root)
+            if !folder.isEmpty { self.expanded.insert(folder) }
+            self.follow(from: path, to: new)
+        }
+    }
+
+    /// Files dragged in from Finder are copied, never moved out of where they came from.
+    func copyIn(_ urls: [URL], into folder: String) {
+        guard let root = workspace?.root else { return }
+        perform {
+            for url in urls { _ = try FileOps.copyIn(url, into: folder, root: root) }
+            if !folder.isEmpty { self.expanded.insert(folder) }
+        }
+    }
+
+    /// To the Trash. An open file with unsaved changes is refused rather than thrown away.
+    func trash(_ path: String) {
+        guard let root = workspace?.root else { return }
+        let affected = openPaths.filter { FileOps.remap($0, from: path, to: path) != nil }
+        if let dirty = affected.first(where: { documents[$0]?.isDirty == true }) {
+            notice = "Save or close \((dirty as NSString).lastPathComponent) before moving it to the Trash."
+            return
+        }
+        perform {
+            try FileOps.trash(path, root: root)
+            for open in affected {
+                for index in self.panes.indices { self.panes[index].close(open) }
+                self.documents[open] = nil
+            }
+            self.recentFiles.removeAll { FileOps.remap($0, from: path, to: path) != nil }
+            self.collapseEmptyPanes()
+            self.loadActive()
+        }
+    }
+
+    /// Runs a file operation, then refreshes the tree and saves state; a failure becomes the toast.
+    private func perform(_ operation: () throws -> Void) {
+        do {
+            try operation()
+        } catch {
+            notice = error.localizedDescription
+        }
+        persist()
+        Task { await workspace?.refresh() }
+    }
+
+    private func follow(from old: String, to new: String) {
+        guard let workspace else { return }
+        for index in panes.indices {
+            for path in panes[index].paths {
+                if let moved = FileOps.remap(path, from: old, to: new) { panes[index].rename(path, to: moved) }
+            }
+        }
+        for (path, document) in documents {
+            guard let moved = FileOps.remap(path, from: old, to: new) else { continue }
+            documents[path] = nil
+            document.moved(to: workspace.url(for: moved))
+            documents[moved] = document
+        }
+        expanded = Set(expanded.map { FileOps.remap($0, from: old, to: new) ?? $0 })
+        recentFiles = recentFiles.map { FileOps.remap($0, from: old, to: new) ?? $0 }
+    }
+}
+

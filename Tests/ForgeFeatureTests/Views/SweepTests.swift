@@ -78,6 +78,16 @@ final class SweepTests: XCTestCase {
         stacked.open(file: "project.yml", pinned: true)
         SweepSupport.spin(until: 3) { stacked.documents.values.allSatisfy { $0.state == .ready } }
 
+        // Screen 6: renaming a row in place, and naming a new file in a folder.
+        let renaming = try SweepSupport.model(opening: repo)
+        renaming.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift", pinned: true)
+        try SweepSupport.waitUntilLoaded(renaming)
+        renaming.beginRename("Sources/Ainkrad/Features/Sidebar/SidebarGlassCapsule.swift")
+        let creating = try SweepSupport.model(opening: repo)
+        creating.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift", pinned: true)
+        try SweepSupport.waitUntilLoaded(creating)
+        creating.beginNew(folder: false, in: "Sources/Ainkrad/Features/Sidebar")
+
         // Screen 5: welcome, with recents (the sample repo has a worktree).
         let docs = MemoryDocs()
         let welcomeStore = ForgeStore(documents: docs)
@@ -97,8 +107,13 @@ final class SweepTests: XCTestCase {
                 ("e21-window", window), ("e21-changes", changes), ("e21-unsaved", closing), ("e22-welcome", welcome),
                 ("e24-quick-open", quick), ("e24-command-palette", commands),
                 ("e23-split", split), ("e23-split-stacked", stacked),
+                ("e25-rename", renaming), ("e25-new-file", creating),
             ]
             for (name, model) in screens {
+                // The sweep window never becomes key, so an inline name field loses focus right after it shows
+                // and ends its edit; start each edit afresh for every capture.
+                if name == "e25-rename" { model.beginRename("Sources/Ainkrad/Features/Sidebar/SidebarGlassCapsule.swift") }
+                if name == "e25-new-file" { model.beginNew(folder: false, in: "Sources/Ainkrad/Features/Sidebar") }
                 try LiveCapture.shoot(
                     RootView(model: model, theme: hostTheme)
                         .frame(width: 1200, height: 760)

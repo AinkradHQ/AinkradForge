@@ -25,6 +25,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
     case showFiles, showChanges, revealInTree, refresh
     case copyPath, openTerminal
     case splitRight, splitDown, focusFirstPane, focusSecondPane, closePane
+    case newFile, newFolder, renameActiveFile, revealInFinder, trashActiveFile
 
     var id: String { rawValue }
 
@@ -53,6 +54,11 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .focusFirstPane: "Focus First Pane"
         case .focusSecondPane: "Focus Second Pane"
         case .closePane: "Close Pane"
+        case .newFile: "New File…"
+        case .newFolder: "New Folder…"
+        case .renameActiveFile: "Rename Active File…"
+        case .revealInFinder: "Reveal Active File in Finder"
+        case .trashActiveFile: "Move Active File to Trash"
         }
     }
 
@@ -78,6 +84,11 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .focusFirstPane: "1.square"
         case .focusSecondPane: "2.square"
         case .closePane: "xmark.rectangle"
+        case .newFile: "doc.badge.plus"
+        case .newFolder: "folder.badge.plus"
+        case .renameActiveFile: "pencil"
+        case .revealInFinder: "folder"
+        case .trashActiveFile: "trash"
         }
     }
 
@@ -99,15 +110,22 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .splitRight: Shortcut(key: "\\", modifiers: .command)
         case .focusFirstPane: Shortcut(key: "1", modifiers: .command)
         case .focusSecondPane: Shortcut(key: "2", modifiers: .command)
-        case .closeWorkspace, .revealInTree, .refresh, .openTerminal, .splitDown, .closePane: nil
+        case .newFile: Shortcut(key: "n", modifiers: .command)
+        case .newFolder: Shortcut(key: "n", modifiers: [.command, .option])
+        case .revealInFinder: Shortcut(key: "r", modifiers: [.command, .option])
+        case .closeWorkspace, .revealInTree, .refresh, .openTerminal, .splitDown, .closePane, .renameActiveFile,
+            .trashActiveFile:
+            nil
         }
     }
 
     var requirement: Requirement {
         switch self {
         case .quickOpen, .commandPalette, .openFolder: .none
-        case .closeWorkspace, .saveAll, .showFiles, .showChanges, .refresh, .openTerminal: .workspace
-        case .goToLine, .save, .closeTab, .nextTab, .previousTab, .revealInTree, .copyPath, .splitRight, .splitDown: .file
+        case .closeWorkspace, .saveAll, .showFiles, .showChanges, .refresh, .openTerminal, .newFile, .newFolder: .workspace
+        case .goToLine, .save, .closeTab, .nextTab, .previousTab, .revealInTree, .copyPath, .splitRight, .splitDown,
+            .renameActiveFile, .revealInFinder, .trashActiveFile:
+            .file
         case .focusFirstPane, .focusSecondPane, .closePane: .split
         }
     }
