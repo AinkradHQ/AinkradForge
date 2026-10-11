@@ -47,4 +47,30 @@ final class RenderingTests: XCTestCase {
         let letColor = storage.attribute(.foregroundColor, at: (storage.string as NSString).range(of: "let").location, effectiveRange: nil) as? NSColor
         XCTAssertEqual(letColor, keyword, "`let` was not highlighted as a keyword")
     }
+
+    /// The caret lands on the requested line (CodeEdit's own state path would silently drop it).
+    func testGoToLineMovesTheCaret() throws {
+        let storage = NSTextStorage(string: (1...300).map { "line \($0)" }.joined(separator: "\n"))
+        let gray = NSColor.gray
+        let colors = EditorColors(
+            text: gray, insertionPoint: gray, selection: gray, lineHighlight: gray, keywords: gray, commands: gray,
+            types: gray, attributes: gray, variables: gray, values: gray, numbers: gray, strings: gray, comments: gray)
+        var caretLine = 0
+        var handled = false
+        let host = NSHostingView(
+            rootView: ForgeCodeEditor(
+                storage: storage, language: .detect(url: URL(fileURLWithPath: "/a.txt")), colors: colors, fontSize: 13,
+                insets: NSEdgeInsets(), onEdit: {}, onCursor: { line, _ in caretLine = line },
+                goToLine: 250, onGoToLineHandled: { handled = true }))
+        let window = NSWindow(
+            contentRect: NSRect(x: -3000, y: -3000, width: 500, height: 300), styleMask: .borderless,
+            backing: .buffered, defer: false)
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(1))
+        XCTAssertTrue(handled)
+        XCTAssertEqual(caretLine, 250)
+    }
 }

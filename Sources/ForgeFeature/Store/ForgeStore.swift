@@ -13,6 +13,8 @@ struct ForgeDocument: Codable, Equatable, Sendable {
     struct WorkspaceState: Codable, Equatable, Sendable {
         var tabs = Tabs()
         var expanded: Set<String> = []
+        /// Newest first, for ⌘P. Optional so state saved before it existed still decodes.
+        var recentFiles: [String]?
     }
 
     /// Newest first.

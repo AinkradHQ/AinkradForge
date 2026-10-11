@@ -19,8 +19,11 @@ struct EditorArea: View {
                             .padding(.horizontal, skin.size.s14)
                             .padding(.top, skin.size.s8)
                             .padding(.bottom, skin.size.s4)
-                        DocumentView(document: document, palette: palette) { model.didEdit(path) }
-                            .id(path)
+                        DocumentView(
+                            document: document, palette: palette, goToLine: model.pendingLine,
+                            onGoToLineHandled: { model.pendingLine = nil }
+                        ) { model.didEdit(path) }
+                        .id(path)
                     }
                 } else {
                     AinkradEmptyState(
@@ -45,6 +48,8 @@ struct EditorArea: View {
 private struct DocumentView: View {
     let document: EditorDocument
     let palette: HostTerminalPalette?
+    let goToLine: Int?
+    let onGoToLineHandled: () -> Void
     let onEdit: () -> Void
 
     var body: some View {
@@ -52,7 +57,10 @@ private struct DocumentView: View {
         case .loading: AinkradLoadingState(label: "Opening \(document.url.lastPathComponent)…")
         case .unreadable(let why):
             AinkradEmptyState(icon: "doc.questionmark", title: "Can't show this file", message: why)
-        case .ready: CodeEditor(document: document, palette: palette, onEdit: onEdit)
+        case .ready:
+            CodeEditor(
+                document: document, palette: palette, goToLine: goToLine, onGoToLineHandled: onGoToLineHandled,
+                onEdit: onEdit)
         }
     }
 }

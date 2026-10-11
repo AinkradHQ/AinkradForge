@@ -75,10 +75,14 @@ public struct ForgeCodeEditor: View {
     let onEdit: () -> Void
     /// 1-based line and column of the first caret.
     let onCursor: (Int, Int) -> Void
+    /// A 1-based line to put the caret on and scroll to; `onGoToLineHandled` is called once it is done.
+    let goToLine: Int?
+    let onGoToLineHandled: () -> Void
 
     public init(
         storage: NSTextStorage, language: EditorLanguage, colors: EditorColors, fontSize: CGFloat,
-        insets: NSEdgeInsets, onEdit: @escaping () -> Void, onCursor: @escaping (Int, Int) -> Void
+        insets: NSEdgeInsets, onEdit: @escaping () -> Void, onCursor: @escaping (Int, Int) -> Void,
+        goToLine: Int? = nil, onGoToLineHandled: @escaping () -> Void = {}
     ) {
         self.storage = storage
         self.language = language
@@ -87,13 +91,15 @@ public struct ForgeCodeEditor: View {
         self.insets = insets
         self.onEdit = onEdit
         self.onCursor = onCursor
+        self.goToLine = goToLine
+        self.onGoToLineHandled = onGoToLineHandled
     }
 
     public var body: AnyView {
         AnyView(
             EditorHost(
                 storage: storage, language: language, colors: colors, fontSize: fontSize, insets: insets,
-                onEdit: onEdit, onCursor: onCursor))
+                onEdit: onEdit, onCursor: onCursor, goToLine: goToLine, onGoToLineHandled: onGoToLineHandled))
     }
 }
 
@@ -106,6 +112,8 @@ struct EditorHost: View {
     let onEdit: () -> Void
     /// 1-based line and column of the first caret.
     let onCursor: (Int, Int) -> Void
+    let goToLine: Int?
+    let onGoToLineHandled: () -> Void
     @State private var state = SourceEditorState()
     @State private var coordinator = Coordinator()
 
@@ -125,6 +133,19 @@ struct EditorHost: View {
         .onAppear {
             coordinator.onEdit = onEdit
             coordinator.onCursor = onCursor
+            go(to: goToLine)
+        }
+        .onChange(of: goToLine) { _, line in go(to: line) }
+    }
+
+    /// Through the controller, not `state.cursorPositions`: CodeEdit's state diff compares the new positions
+    /// with themselves, so a caret set through state is never applied.
+    private func go(to line: Int?) {
+        guard let line else { return }
+        // One turn later: on first appearance the controller has not loaded its view yet.
+        DispatchQueue.main.async {
+            coordinator.controller?.setCursorPositions([CursorPosition(line: line, column: 1)], scrollToVisible: true)
+            onGoToLineHandled()
         }
     }
 
@@ -134,10 +155,12 @@ struct EditorHost: View {
     final class Coordinator: @preconcurrency TextViewCoordinator {
         var onEdit: () -> Void = {}
         var onCursor: (Int, Int) -> Void = { _, _ in }
+        weak var controller: TextViewController?
 
         /// `prepareCoordinator` runs before the controller loads its view (`scrollView`, implicitly unwrapped, is
         /// still nil), and `viewDidAppear` does not reliably fire inside a SwiftUI host — so one run-loop turn later.
         func prepareCoordinator(controller: TextViewController) {
+            self.controller = controller
             DispatchQueue.main.async { [weak controller] in
                 guard let scrollView = controller?.scrollView else { return }
                 scrollView.drawsBackground = false
