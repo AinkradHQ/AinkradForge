@@ -292,6 +292,17 @@ public final class LanguageHub {
         enqueue(spec.id) { await session.close(uri: uri) }
     }
 
+    /// A new path for a server (or none: the login PATH again): a running one stops, and the next file opened
+    /// for it starts it from the new place.
+    public func setOverride(_ specID: String, path: String?) {
+        guard overrides[specID] != path else { return }
+        overrides[specID] = path
+        if let session = sessions.removeValue(forKey: specID) { Task { await session.shutdown() } }
+        chains[specID] = nil
+        statuses[specID] = nil
+        for (path, list) in issues where LanguageRegistry.server(for: path)?.0.id == specID && !list.isEmpty { issues[path] = nil }
+    }
+
     public func restart(_ specID: String) {
         guard let session = sessions[specID] else { return }
         enqueue(specID) { await session.restart() }

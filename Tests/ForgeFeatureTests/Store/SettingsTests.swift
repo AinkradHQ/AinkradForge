@@ -19,7 +19,9 @@ struct SettingsTests {
         let host = FakeHost(docs: docs)
         let page = try #require(ForgeApp.settingsCatalog(host: host))
         let fields = page.groups.flatMap(\.fields)
-        #expect(fields.count == 6)
+        // Six editor settings, and a path for each language server.
+        #expect(page.groups.map(\.title) == ["Editor", "Language servers"])
+        #expect(page.groups[0].fields.count == 6 && page.groups[1].fields.count == 5)
         guard case .toggle(let wrap) = try #require(fields.first { $0.label == "Wrap lines" }).kind else {
             Issue.record("Wrap lines is not a toggle"); return
         }

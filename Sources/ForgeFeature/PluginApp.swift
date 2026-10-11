@@ -1,4 +1,5 @@
 import AinkradAppKit
+import ForgeLanguage
 import SwiftUI
 
 /// Forge: a native code editor — workspaces, LSP, terminal and agent review. Read theme via
@@ -80,7 +81,21 @@ public struct ForgeApp: AinkradApp, AinkradAppTeardown {
                         toggle("wrapLines", "Wrap lines", "Long lines wrap at the editor's edge instead of scrolling.", \.wrapLines),
                         toggle("showMinimap", "Show minimap", "A miniature of the file beside the editor.", \.showMinimap),
                         toggle("showInvisibles", "Show invisibles", "Draw spaces and tabs as faint marks.", \.showInvisibles),
-                    ])
+                    ]),
+                SettingsGroup(
+                    path: root.appending("servers"), title: "Language servers",
+                    fields: LanguageRegistry.servers.map { spec in
+                        SettingsField(
+                            path: root.appending("servers").appending(spec.id), label: "\(spec.language) — \(spec.command)",
+                            help: "Empty: found on your login shell's PATH (and ~/go/bin, ~/.cargo/bin, Homebrew). Install: \(spec.installHint)",
+                            keywords: [spec.id, spec.command, spec.language, "language server", "lsp", "path"],
+                            kind: .text(Binding(
+                                get: { model.editorSettings.serverPaths[spec.id] ?? "" },
+                                set: { model.setServerPath(spec.id, $0) })),
+                            defaultDescription: "Login PATH",
+                            isModified: { model.editorSettings.serverPaths[spec.id] != nil },
+                            reset: { model.setServerPath(spec.id, "") })
+                    }),
             ],
             appID: id)
     }
