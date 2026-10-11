@@ -122,6 +122,19 @@ private struct DocumentView: View {
 
     private var issues: [Issue] { model.languages.issues[path] ?? [] }
     private var isFirstPane: Bool { model.panes.firstIndex { $0.active == path } == pane }
+    private var lineCount: Int { document.storage.string.utf8.reduce(1) { $1 == 10 ? $0 + 1 : $0 } }
+
+    /// The ruler's marks: issues by severity, git changes, outside changes.
+    private var overview: [OverviewRuler.Mark] {
+        var marks = issues.map { OverviewRuler.Mark(line: $0.start.line + 1, color: IssueStyle.color($0.severity, status: status, theme: theme)) }
+        for hunk in model.git.hunks[path] ?? [] {
+            let color = hunk.newCount == 0 ? status.danger : hunk.oldCount == 0 ? status.success : status.warning
+            marks += (hunk.newStart...max(hunk.newStart, hunk.newStart + hunk.newCount - 1)).map { OverviewRuler.Mark(line: max(1, $0), color: color) }
+        }
+        marks += model.agent.lines(path).written.map { OverviewRuler.Mark(line: $0, color: theme.accentSecondary) }
+        return marks
+    }
+
     /// Where the current outside change's first line is, as the editor last reported it.
     @State private var anchor: CGRect?
 
@@ -196,6 +209,7 @@ private struct DocumentView: View {
                         .padding(.top, document.caretRect.minY)
                 }
             }
+            .overlay { OverviewRuler(marks: overview, lineCount: lineCount) }
             .overlay(alignment: .topLeading) {
                 if review != nil, let anchor {
                     // At the line's end, but never so far right that the Was card leaves the editor.

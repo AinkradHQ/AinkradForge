@@ -122,3 +122,31 @@ struct EditorCardLayer<Card: View>: View {
     }
 }
 
+
+/// The editor's right edge: where in the file its issues, git changes and outside changes are, each a short mark
+/// at its place in the whole file (so a glance shows what is off screen). Not hit-testable.
+struct OverviewRuler: View {
+    struct Mark: Hashable {
+        /// 1-based.
+        let line: Int
+        let color: Color
+    }
+
+    let marks: [Mark]
+    let lineCount: Int
+    @Environment(\.ainkradSkin) private var skin
+
+    var body: some View {
+        GeometryReader { geo in
+            let usable = max(1, geo.size.height - skin.size.s4)
+            let row = max(skin.size.s3, usable / Double(max(1, lineCount)))
+            ForEach(Array(Set(marks)), id: \.self) { mark in
+                RoundedRectangle(cornerRadius: skin.size.s1)
+                    .fill(mark.color.opacity(skin.opacity.o90))
+                    .frame(width: skin.size.s6, height: min(row, skin.size.s8))
+                    .offset(x: geo.size.width - skin.size.s8, y: usable * Double(mark.line - 1) / Double(max(1, lineCount)))
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
