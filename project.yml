@@ -29,6 +29,9 @@ packages:
   # for why it is a local package. Statically linked into the bundle.
   ForgeEditor:
     path: Packages/ForgeEditor
+  # Language servers (ChimeHQ LanguageClient) behind Forge's own API — see its Package.swift.
+  ForgeLanguage:
+    path: Packages/ForgeLanguage
 targets:
   ForgeFeature:
     type: library.static
@@ -38,6 +41,7 @@ targets:
       - package: AinkradAppKit
         embed: false
       - package: ForgeEditor
+      - package: ForgeLanguage
   ForgePlugin:
     type: bundle
     platform: macOS
@@ -52,6 +56,7 @@ targets:
         embed: false
       # A static library does not carry its package dependencies; the bundle links them.
       - package: ForgeEditor
+      - package: ForgeLanguage
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ainkrad.plugin.forge
@@ -81,6 +86,7 @@ targets:
       - target: ForgeFeature
       - package: AinkradAppKit
       - package: ForgeEditor
+      - package: ForgeLanguage
 schemes:
   ForgePlugin:
     build: { targets: { ForgePlugin: all, ForgeFeatureTests: [test] } }

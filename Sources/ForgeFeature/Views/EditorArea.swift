@@ -1,5 +1,6 @@
 import AinkradAppKit
 import ForgeEditor
+import ForgeLanguage
 import SwiftUI
 
 /// One or two editor panes and the status bar — one surface, no rules.
@@ -58,6 +59,7 @@ private struct PaneView: View {
                             document: document, palette: palette, options: model.editorOptions,
                             goToLine: model.activePane == index ? model.pendingLine : nil,
                             onGoToLineHandled: { model.pendingLine = nil },
+                            issues: model.languages.issues[path] ?? [],
                             onCaret: { model.focus(pane: index) }
                         ) { model.didEdit(path) }
                         // A wholesale buffer change (reload, line endings) rebuilds the editor so it re-parses.
@@ -87,11 +89,26 @@ private struct PaneView: View {
 }
 
 private struct DocumentView: View {
+    @Environment(\.ainkradStatusColors) private var status
+    @Environment(\.ainkradTheme) private var theme
+
+    /// The issues as underlines: LSP (line, character) mapped onto the buffer the server was sent.
+    private var marks: [EditorMark] {
+        guard !issues.isEmpty else { return [] }
+        let index = LineIndex(document.storage.string)
+        return issues.map { issue in
+            EditorMark(
+                range: index.range(from: issue.start, to: issue.end),
+                color: NSColor(IssueStyle.color(issue.severity, status: status, theme: theme)))
+        }
+    }
+
     let document: EditorDocument
     let palette: HostTerminalPalette?
     let options: EditorOptions
     let goToLine: Int?
     let onGoToLineHandled: () -> Void
+    let issues: [Issue]
     /// The caret moved here — this pane is the one being worked in.
     let onCaret: () -> Void
     let onEdit: () -> Void
@@ -104,7 +121,7 @@ private struct DocumentView: View {
         case .ready:
             CodeEditor(
                 document: document, palette: palette, options: options, goToLine: goToLine,
-                onGoToLineHandled: onGoToLineHandled, onCaret: onCaret, onEdit: onEdit)
+                onGoToLineHandled: onGoToLineHandled, onCaret: onCaret, marks: marks, onEdit: onEdit)
         }
     }
 }
@@ -232,6 +249,8 @@ private struct StatusRow: View {
             if let branch = workspace.branch {
                 Label(branch, systemImage: "arrow.triangle.branch")
             }
+            IssueCounts(model: model)
+            ServerChip(model: model)
             if workspace.isLoading { AinkradSpinner() }
             Spacer(minLength: skin.size.s8)
             if let document = model.activeDocument, document.state == .ready {
@@ -270,6 +289,81 @@ private struct StatusMenu: View {
             Text(title)
                 .foregroundStyle(isHovered ? theme.foreground : skin.color(skin.text.muted))
                 .onHover { isHovered = $0 }
+        }
+    }
+}
+
+/// ⊗ errors ⚠ warnings — opens the Issues tab.
+private struct IssueCounts: View {
+    let model: ForgeModel
+    @Environment(\.ainkradStatusColors) private var status
+    @Environment(\.ainkradSkin) private var skin
+
+    var body: some View {
+        if !model.languages.statuses.isEmpty {
+            HStack(spacing: skin.size.s6) {
+                Label("\(model.languages.errorCount)", systemImage: "xmark.octagon")
+                    .foregroundStyle(model.languages.errorCount > 0 ? status.danger : skin.color(skin.text.muted))
+                Label("\(model.languages.warningCount)", systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(model.languages.warningCount > 0 ? status.warning : skin.color(skin.text.muted))
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { model.sideTab = .problems }
+            .help("Show issues")
+        }
+    }
+}
+
+/// The active file's language server and its state; the menu lists every server the workspace uses.
+private struct ServerChip: View {
+    let model: ForgeModel
+    @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
+    @Environment(\.ainkradStatusColors) private var status
+
+    var body: some View {
+        if let path = model.tabs.active, let (spec, _) = LanguageRegistry.server(for: path) {
+            let state = model.languages.statuses[spec.id] ?? .notRunning
+            AinkradMenuButton(items: items) {
+                HStack(spacing: skin.size.s4) {
+                    Circle().fill(color(state)).frame(width: skin.size.s6, height: skin.size.s6)
+                    Text(spec.command)
+                }
+            }
+            .help(Self.describe(state, spec: spec))
+        }
+    }
+
+    private var items: [AinkradMenuItem] {
+        let used = LanguageRegistry.servers.filter { model.languages.statuses[$0.id] != nil }
+        var items = used.map { spec in
+            let state = model.languages.statuses[spec.id] ?? .notRunning
+            return AinkradMenuItem(title: "\(spec.command) — \(Self.describe(state, spec: spec))", systemName: nil) {}
+        }
+        for spec in used where model.languages.statuses[spec.id] != .notInstalled {
+            items.append(AinkradMenuItem(title: "Restart \(spec.command)", systemName: "arrow.clockwise") {
+                model.languages.restart(spec.id)
+            })
+        }
+        return items
+    }
+
+    private func color(_ state: ServerStatus) -> Color {
+        switch state {
+        case .ready: status.success
+        case .starting: theme.accentSecondary
+        case .failed, .notInstalled: status.warning
+        case .notRunning: skin.color(skin.text.faint)
+        }
+    }
+
+    static func describe(_ state: ServerStatus, spec: ServerSpec) -> String {
+        switch state {
+        case .ready: "ready"
+        case .starting: "starting…"
+        case .notRunning: "not running"
+        case .notInstalled: "not installed — \(spec.installHint)"
+        case .failed(let why): "failed: \(why)"
         }
     }
 }

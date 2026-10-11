@@ -22,8 +22,7 @@ struct Sidebar: View {
                 case .files: FileTreeList(model: model, workspace: workspace)
                 case .changes: ChangesList(model: model, workspace: workspace)
                 case .search: SearchPanel(model: model, workspace: workspace)
-                case .problems:
-                    SidebarPlaceholder(icon: "exclamationmark.triangle", text: "Issues arrive with language servers (E5).")
+                case .problems: IssuesList(model: model)
                 }
             }
             .frame(maxHeight: .infinity, alignment: .top)

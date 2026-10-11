@@ -36,6 +36,8 @@ final class EditorDocument {
     private(set) var revision = 0
     /// 1-based, for the status bar.
     var cursor = (line: 1, column: 1)
+    /// Told after every successful save (the language server hears about it).
+    @ObservationIgnored var onSaved: (EditorDocument) -> Void = { _ in }
     /// What the file looked like when last read or written by Forge, to tell outside changes from our own saves.
     @ObservationIgnored private var diskStamp: DiskStamp?
 
@@ -96,6 +98,7 @@ final class EditorDocument {
         diskStamp = Self.stamp(url)
         isDirty = false
         conflict = nil
+        onSaved(self)
     }
 
     /// Something on disk changed near this file: reload a clean buffer, or flag a conflict on a dirty one.

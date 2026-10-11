@@ -2,6 +2,7 @@ import AppKit
 // CodeEdit predates strict concurrency; its callbacks all arrive on the main thread.
 @preconcurrency internal import CodeEditLanguages
 @preconcurrency internal import CodeEditSourceEditor
+@preconcurrency internal import CodeEditTextView
 import SwiftUI
 
 // No public type here stores a CodeEdit type: a client of a non-resilient module needs the layout of every
@@ -87,6 +88,17 @@ public struct EditorOptions: Equatable, Sendable {
     }
 }
 
+/// A range of the buffer to underline (a diagnostic), in the colour of its severity.
+public struct EditorMark: Equatable, Sendable {
+    public let range: NSRange
+    public let color: NSColor
+
+    public init(range: NSRange, color: NSColor) {
+        self.range = range
+        self.color = color
+    }
+}
+
 /// Edits `storage` in place (a large file is never copied per keystroke). Transparent, so the window's
 /// surface — Neon fill or Liquid Glass — shows through.
 public struct ForgeCodeEditor: View {
@@ -103,12 +115,14 @@ public struct ForgeCodeEditor: View {
     let onGoToLineHandled: () -> Void
     /// The caret moved while this editor has keyboard focus — the user is working here (not a load).
     let onFocusedCaret: () -> Void
+    /// Ranges to underline (diagnostics).
+    let marks: [EditorMark]
 
     public init(
         storage: NSTextStorage, language: EditorLanguage, colors: EditorColors, options: EditorOptions = EditorOptions(),
         insets: NSEdgeInsets, onEdit: @escaping () -> Void, onCursor: @escaping (Int, Int) -> Void,
         goToLine: Int? = nil, onGoToLineHandled: @escaping () -> Void = {},
-        onFocusedCaret: @escaping () -> Void = {}
+        onFocusedCaret: @escaping () -> Void = {}, marks: [EditorMark] = []
     ) {
         self.storage = storage
         self.language = language
@@ -120,6 +134,7 @@ public struct ForgeCodeEditor: View {
         self.goToLine = goToLine
         self.onGoToLineHandled = onGoToLineHandled
         self.onFocusedCaret = onFocusedCaret
+        self.marks = marks
     }
 
     public var body: AnyView {
@@ -127,7 +142,7 @@ public struct ForgeCodeEditor: View {
             EditorHost(
                 storage: storage, language: language, colors: colors, options: options, insets: insets,
                 onEdit: onEdit, onCursor: onCursor, goToLine: goToLine, onGoToLineHandled: onGoToLineHandled,
-                onFocusedCaret: onFocusedCaret))
+                onFocusedCaret: onFocusedCaret, marks: marks))
     }
 }
 
@@ -143,6 +158,7 @@ struct EditorHost: View {
     let goToLine: Int?
     let onGoToLineHandled: () -> Void
     let onFocusedCaret: () -> Void
+    let marks: [EditorMark]
     @State private var state = SourceEditorState()
     @State private var coordinator = Coordinator()
 
@@ -169,8 +185,11 @@ struct EditorHost: View {
             coordinator.onCursor = onCursor
             coordinator.onFocusedCaret = onFocusedCaret
             go(to: goToLine)
+            // One turn later, as `go(to:)`: the controller has not loaded its view on first appearance.
+            DispatchQueue.main.async { coordinator.apply(marks) }
         }
         .onChange(of: goToLine) { _, line in go(to: line) }
+        .onChange(of: marks) { _, marks in coordinator.apply(marks) }
     }
 
     /// Through the controller, not `state.cursorPositions`: CodeEdit's state diff compares the new positions
@@ -205,6 +224,19 @@ struct EditorHost: View {
         }
 
         func textViewDidChangeText(controller: TextViewController) { onEdit() }
+
+        /// Underlines through CodeEditTextView's emphasis manager, replacing the previous set.
+        func apply(_ marks: [EditorMark]) {
+            guard let textView = controller?.textView, let manager = textView.emphasisManager else { return }
+            manager.removeEmphases(for: "forge.marks")
+            let length = textView.textStorage.length
+            let emphases = marks.compactMap { mark -> Emphasis? in
+                guard mark.range.location < length else { return nil }
+                let range = NSRange(location: mark.range.location, length: max(1, min(mark.range.length, length - mark.range.location)))
+                return Emphasis(range: range, style: .underline(color: mark.color))
+            }
+            if !emphases.isEmpty { manager.addEmphases(emphases, for: "forge.marks") }
+        }
 
         func textViewDidChangeSelection(controller: TextViewController, newPositions: [CursorPosition]) {
             if let first = newPositions.first { onCursor(first.start.line, first.start.column) }

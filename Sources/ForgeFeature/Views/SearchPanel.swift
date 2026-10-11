@@ -131,7 +131,7 @@ struct SearchPanel: View {
     }
 }
 
-private struct ResultFileRow: View {
+struct ResultFileRow: View {
     let path: String
     let count: Int
     let isFolded: Bool

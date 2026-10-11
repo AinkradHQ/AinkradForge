@@ -1,5 +1,6 @@
 import AinkradAppKit
 import ForgeEditor
+import ForgeLanguage
 import Foundation
 import Observation
 
@@ -38,7 +39,12 @@ final class ForgeModel {
         set { panes[min(activePane, panes.count - 1)] = newValue }
     }
     private(set) var expanded: Set<String> = []
-    private(set) var documents: [String: EditorDocument] = [:]
+    private(set) var documents: [String: EditorDocument] = [:] {
+        // A buffer that goes away (closed, renamed, trashed, workspace switched) is closed on its server too.
+        didSet { for path in oldValue.keys where documents[path] == nil { languages.closed(path: path) } }
+    }
+    /// The workspace's language servers: diagnostics now; hover, completion and the rest as E5 lands.
+    let languages = LanguageHub()
     /// A dirty tab the user asked to close: the window asks Save / Don't Save / Cancel.
     var pendingClose: String?
     /// Leaving the workspace (open another, or close it) while files are unsaved: the window asks first.
@@ -146,6 +152,7 @@ final class ForgeModel {
         recentFiles = saved.recentFiles ?? []
         store.noteOpened(key)
         search.clear()
+        languages.begin(root: workspace.root)
         await workspace.refresh()
         watcher = FolderWatcher(root: workspace.root) { [weak self] paths in
             guard paths.contains(where: FolderWatcher.isRelevant) else { return }
@@ -165,6 +172,7 @@ final class ForgeModel {
 
     private func closeWorkspace() {
         watcher = nil
+        languages.end()
         persist()
         workspace = nil
         documents = [:]
@@ -242,13 +250,21 @@ final class ForgeModel {
         guard let workspace else { return }
         for path in panes.compactMap(\.active) where documents[path] == nil {
             let document = EditorDocument(url: workspace.url(for: path))
+            document.onSaved = { [weak self] saved in
+                guard let path = self?.workspace?.relativePath(of: saved.url) else { return }
+                self?.languages.saved(path: path)
+            }
             documents[path] = document
-            Task { await document.load() }
+            Task {
+                await document.load()
+                if document.state == .ready { languages.opened(path: path, text: document.storage.string) }
+            }
         }
     }
 
     func didEdit(_ path: String) {
         documents[path]?.didEdit()
+        languages.changed(path: path) { [weak self] in self?.documents[path]?.storage.string ?? "" }
         if tabs.preview == path { pin(path) }
     }
 
@@ -445,6 +461,7 @@ extension ForgeModel {
             documents[path] = nil
             document.moved(to: workspace.url(for: moved))
             documents[moved] = document
+            if document.state == .ready { languages.opened(path: moved, text: document.storage.string) }
         }
         expanded = Set(expanded.map { FileOps.remap($0, from: old, to: new) ?? $0 })
         recentFiles = recentFiles.map { FileOps.remap($0, from: old, to: new) ?? $0 }
