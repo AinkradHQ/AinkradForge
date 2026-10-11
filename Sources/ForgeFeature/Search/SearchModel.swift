@@ -15,6 +15,8 @@ final class SearchModel {
         case idle
         case searching
         case done(lines: Int, files: Int, milliseconds: Int, capped: Bool)
+        /// The list holds a language server's references, not a search.
+        case references(symbol: String, lines: Int, files: Int)
         case failed(String)
     }
 
@@ -68,6 +70,13 @@ final class SearchModel {
             guard !Task.isCancelled else { return }
             await search(regex: regex, root: root, files: candidates, buffers: buffers)
         }
+    }
+
+    /// Shows a language server's references in place of search results.
+    func showReferences(_ found: [FileResult], to symbol: String) {
+        running?.cancel()
+        results = found
+        status = .references(symbol: symbol, lines: found.reduce(0) { $0 + $1.matches.count }, files: found.count)
     }
 
     /// Forgets the results (a new workspace, or an emptied query).

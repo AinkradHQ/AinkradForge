@@ -135,6 +135,53 @@ actor LanguageSession {
 
     var openDocumentCount: Int { documents.count }
 
+    // MARK: - Requests (nil / empty when the server is down or does not know)
+
+    /// The hover's contents as Markdown (code blocks fenced with their language).
+    func hover(uri: String, line: Int, character: Int) async -> String? {
+        guard let server, documents[uri] != nil,
+            let hover = try? await server.hover(Self.position(uri, line, character))
+        else { return nil }
+        let text: String =
+            switch hover.contents {
+            case .optionA(let marked): Self.markdown(marked)
+            case .optionB(let list): list.map(Self.markdown).joined(separator: "\n\n")
+            case .optionC(let markup): markup.value
+            }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text
+    }
+
+    func definition(uri: String, line: Int, character: Int) async -> [Location] {
+        guard let server, documents[uri] != nil,
+            let reply = try? await server.definition(Self.position(uri, line, character))
+        else { return [] }
+        switch reply {
+        case .optionA(let location): return [location]
+        case .optionB(let locations): return locations
+        case .optionC(let links): return links.map { Location(uri: $0.targetUri, range: $0.targetSelectionRange) }
+        }
+    }
+
+    func references(uri: String, line: Int, character: Int) async -> [Location] {
+        guard let server, documents[uri] != nil else { return [] }
+        let params = ReferenceParams(
+            textDocument: TextDocumentIdentifier(uri: uri), position: Position(line: line, character: character),
+            includeDeclaration: true)
+        return (try? await server.references(params)) ?? []
+    }
+
+    private static func position(_ uri: String, _ line: Int, _ character: Int) -> TextDocumentPositionParams {
+        TextDocumentPositionParams(
+            textDocument: TextDocumentIdentifier(uri: uri), position: Position(line: line, character: character))
+    }
+
+    private static func markdown(_ marked: MarkedString) -> String {
+        switch marked {
+        case .optionA(let text): text
+        case .optionB(let pair): "```\(pair.language)\n\(pair.value)\n```"
+        }
+    }
+
     /// Ends the server (closing the workspace, or a manual restart).
     func shutdown() async {
         isShuttingDown = true
@@ -172,6 +219,9 @@ actor LanguageSession {
         textDocument: TextDocumentClientCapabilities(
             synchronization: TextDocumentSyncClientCapabilities(
                 dynamicRegistration: false, willSave: false, willSaveWaitUntil: false, didSave: true),
+            hover: HoverClientCapabilities(dynamicRegistration: false, contentFormat: [.markdown, .plaintext]),
+            definition: DynamicRegistrationLinkSupportClientCapabilities(dynamicRegistration: false, linkSupport: true),
+            references: DynamicRegistrationClientCapabilities(dynamicRegistration: false),
             publishDiagnostics: PublishDiagnosticsClientCapabilities(
                 relatedInformation: false, tagSupport: nil, versionSupport: false, codeDescriptionSupport: false,
                 dataSupport: false)),

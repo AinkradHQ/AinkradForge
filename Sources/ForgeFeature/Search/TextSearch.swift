@@ -69,6 +69,34 @@ enum TextSearch {
         return (out as String, found.count)
     }
 
+    /// Line `index` (0-based) of `text`, without its line break; "" past the end.
+    static func line(_ index: Int, of text: String) -> String {
+        var number = 0
+        var found = ""
+        text.enumerateLines { line, stop in
+            if number == index {
+                found = line
+                stop = true
+            }
+            number += 1
+        }
+        return found
+    }
+
+    /// The identifier around UTF-16 `character` of `line` ("" when there is none).
+    static func word(in line: String, at character: Int) -> String {
+        let ns = line as NSString
+        func isWord(_ index: Int) -> Bool {
+            let unit = ns.character(at: index)
+            return unit == 95 || (UnicodeScalar(unit).map { CharacterSet.alphanumerics.contains($0) } ?? false)
+        }
+        var start = min(max(0, character), ns.length)
+        var end = start
+        while start > 0, isWord(start - 1) { start -= 1 }
+        while end < ns.length, isWord(end) { end += 1 }
+        return ns.substring(with: NSRange(location: start, length: end - start))
+    }
+
     /// isSelected → isActive stays; IsSelected → IsActive; ISSELECTED → ISACTIVE.
     static func adaptCase(_ replacement: String, to original: String) -> String {
         let letters = original.filter(\.isLetter)

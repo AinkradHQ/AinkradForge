@@ -16,6 +16,9 @@ struct CodeEditor: View {
     var onCaret: () -> Void = {}
     /// Diagnostics to underline.
     var marks: [EditorMark] = []
+    var definitions: ((Int) async -> [EditorLink])?
+    var onOpenLink: (EditorLink) -> Void = { _ in }
+    var onHover: ((Int, CGRect)?) -> Void = { _ in }
     let onEdit: () -> Void
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
@@ -27,7 +30,8 @@ struct CodeEditor: View {
             insets: NSEdgeInsets(top: skin.size.s4, left: 0, bottom: skin.size.s12, right: 0),
             onEdit: onEdit,
             onCursor: { line, column in document.cursor = (line, column) },
-            goToLine: goToLine, onGoToLineHandled: onGoToLineHandled, onFocusedCaret: onCaret, marks: marks)
+            goToLine: goToLine, onGoToLineHandled: onGoToLineHandled, onFocusedCaret: onCaret, marks: marks,
+            definitions: definitions, onOpenLink: onOpenLink, onHover: onHover)
     }
 }
 

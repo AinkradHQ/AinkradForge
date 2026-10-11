@@ -22,6 +22,15 @@ public struct Issue: Identifiable, Equatable, Sendable {
     public static func == (a: Issue, b: Issue) -> Bool { a.id == b.id && a.severity == b.severity }
 }
 
+/// A place in the workspace a server pointed at (a definition, a reference).
+public struct SymbolLocation: Sendable {
+    /// Workspace-relative.
+    public let path: String
+    /// 0-based, as LSP reports them.
+    public let start: (line: Int, character: Int)
+    public let end: (line: Int, character: Int)
+}
+
 /// The window's language servers: one session per server the workspace's open files need, started on demand.
 /// Calls to a session are chained so they reach it in order; edits are debounced into full-text changes.
 @MainActor
@@ -38,6 +47,8 @@ public final class LanguageHub {
     @ObservationIgnored private var sessions: [String: LanguageSession] = [:]
     @ObservationIgnored private var chains: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private var pendingChanges: [String: Task<Void, Never>] = [:]
+    /// The text reader of each pending change, so a request can send it at once instead of after the pause.
+    @ObservationIgnored private var pendingTexts: [String: @MainActor () -> String] = [:]
 
     public var allIssues: [Issue] { issues.values.flatMap { $0 }.sorted { ($0.severity, $0.path) < ($1.severity, $1.path) } }
     public var errorCount: Int { issues.values.reduce(0) { $0 + $1.filter { $0.severity == .error }.count } }
@@ -57,6 +68,7 @@ public final class LanguageHub {
         chains = [:]
         pendingChanges.values.forEach { $0.cancel() }
         pendingChanges = [:]
+        pendingTexts = [:]
         issues = [:]
         statuses = [:]
         root = nil
@@ -73,11 +85,64 @@ public final class LanguageHub {
         guard let (spec, _) = LanguageRegistry.server(for: path), let uri = uri(for: path), let session = sessions[spec.id]
         else { return }
         pendingChanges[path]?.cancel()
+        pendingTexts[path] = text
         pendingChanges[path] = Task {
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
-            let current = text()
-            enqueue(spec.id) { await session.change(uri: uri, text: current) }
+            flush(path)
+        }
+    }
+
+    /// Sends a pending change now.
+    private func flush(_ path: String) {
+        pendingChanges.removeValue(forKey: path)?.cancel()
+        guard let text = pendingTexts.removeValue(forKey: path), let (spec, _) = LanguageRegistry.server(for: path),
+            let uri = uri(for: path), let session = sessions[spec.id]
+        else { return }
+        let current = text()
+        enqueue(spec.id) { await session.change(uri: uri, text: current) }
+    }
+
+    // MARK: - Requests: 0-based line and UTF-16 character, as LSP counts them
+
+    public func hover(path: String, line: Int, character: Int) async -> String? {
+        await request(path) { await $0.hover(uri: $1, line: line, character: character) } ?? nil
+    }
+
+    /// Definitions inside the workspace (a definition in an SDK or a dependency outside it is left out).
+    public func definition(path: String, line: Int, character: Int) async -> [SymbolLocation] {
+        let found = await request(path) { await $0.definition(uri: $1, line: line, character: character) } ?? []
+        return locations(found)
+    }
+
+    public func references(path: String, line: Int, character: Int) async -> [SymbolLocation] {
+        let found = await request(path) { await $0.references(uri: $1, line: line, character: character) } ?? []
+        return locations(found)
+    }
+
+    /// Runs a request after everything queued for the file's server, the latest edit included.
+    private func request<T: Sendable>(
+        _ path: String, _ operation: @escaping @Sendable (LanguageSession, String) async -> T
+    ) async -> T? {
+        guard let (spec, _) = LanguageRegistry.server(for: path), let uri = uri(for: path), let session = sessions[spec.id]
+        else { return nil }
+        flush(path)
+        let previous = chains[spec.id]
+        let task = Task {
+            await previous?.value
+            return await operation(session, uri)
+        }
+        chains[spec.id] = Task { _ = await task.value }
+        return await task.value
+    }
+
+    private func locations(_ found: [Location]) -> [SymbolLocation] {
+        found.compactMap { location in
+            path(for: location.uri).map {
+                SymbolLocation(
+                    path: $0, start: (location.range.start.line, location.range.start.character),
+                    end: (location.range.end.line, location.range.end.character))
+            }
         }
     }
 
@@ -89,6 +154,7 @@ public final class LanguageHub {
 
     public func closed(path: String) {
         pendingChanges.removeValue(forKey: path)?.cancel()
+        pendingTexts.removeValue(forKey: path)
         guard let (spec, _) = LanguageRegistry.server(for: path), let uri = uri(for: path), let session = sessions[spec.id]
         else { return }
         enqueue(spec.id) { await session.close(uri: uri) }

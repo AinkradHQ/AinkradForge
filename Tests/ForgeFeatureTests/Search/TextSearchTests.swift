@@ -55,4 +55,24 @@ struct TextSearchTests {
         #expect(GlobSet("Sources/*.swift").matches("Sources/A.swift") && !GlobSet("Sources/*.swift").matches("Sources/A/B.swift"))
         #expect(GlobSet("  ").isEmpty)
     }
+
+    @Test func linesAndWordsForReferences() {
+        let text = "first\r\nlet isSelected = true\nlast"
+        #expect(TextSearch.line(1, of: text) == "let isSelected = true")
+        #expect(TextSearch.line(9, of: text) == "")
+        #expect(TextSearch.word(in: "let isSelected = true", at: 6) == "isSelected")
+        #expect(TextSearch.word(in: "let isSelected = true", at: 4) == "isSelected")
+        #expect(TextSearch.word(in: "a + b", at: 2) == "")
+    }
+
+    @Test func hoverMarkdownSplitsCodeFromProse() {
+        let blocks = HoverCard.blocks("```swift\nfunc bump(_ n: Int) -> Int\n```\n\nAdds **one**.\n")
+        #expect(blocks.count == 2)
+        #expect(blocks.first == .code("func bump(_ n: Int) -> Int"))
+        guard case .prose(let prose) = blocks.last else {
+            Testing.Issue.record("no prose")
+            return
+        }
+        #expect(String(prose.characters) == "Adds one.")
+    }
 }

@@ -1,0 +1,122 @@
+import AppKit
+import ForgeEditor
+import ForgeLanguage
+import Foundation
+
+/// What the hover card shows: the issues under the pointer, then the server's Markdown about the symbol.
+struct HoverInfo: Equatable {
+    let pane: Int
+    let path: String
+    /// Where to anchor the card, in the editor's coordinates.
+    let rect: CGRect
+    let issues: [Issue]
+    let markdown: String?
+    let server: String
+}
+
+/// Language-server requests from the editor: hover, go to definition, find references.
+extension ForgeModel {
+    /// The pointer rested on `offset` in `path` (or stopped resting, with nil).
+    func hover(pane: Int, path: String, at hit: (offset: Int, rect: CGRect)?) async {
+        hoverRequest += 1
+        let request = hoverRequest
+        guard let hit, let document = documents[path], let (spec, _) = LanguageRegistry.server(for: path) else {
+            hover = nil
+            return
+        }
+        let index = LineIndex(document.storage.string)
+        let position = index.position(of: hit.offset)
+        let issues = (languages.issues[path] ?? []).filter { issue in
+            let range = index.range(from: issue.start, to: issue.end)
+            return NSLocationInRange(hit.offset, range) || (range.length == 0 && range.location == hit.offset)
+        }
+        let markdown = await languages.hover(path: path, line: position.line, character: position.character)
+        guard request == hoverRequest, issues.count + (markdown == nil ? 0 : 1) > 0 else { return }
+        hover = HoverInfo(pane: pane, path: path, rect: hit.rect, issues: issues, markdown: markdown, server: spec.command)
+    }
+
+    /// ⌘-click: definitions of the symbol at `offset`, as links the editor can list and open.
+    func definitions(path: String, offset: Int) async -> [EditorLink] {
+        guard let document = documents[path] else { return [] }
+        let position = LineIndex(document.storage.string).position(of: offset)
+        return links(await languages.definition(path: path, line: position.line, character: position.character))
+    }
+
+    /// Opens a definition in a preview tab, at its line.
+    func open(_ link: EditorLink) {
+        guard let root = workspace?.root.path(percentEncoded: false) else { return }
+        let base = root.hasSuffix("/") ? root : root + "/"
+        guard link.path.hasPrefix(base) else { return }
+        open(file: String(link.path.dropFirst(base.count)), pinned: false)
+        pendingLine = link.line
+    }
+
+    /// F12: the definition of the symbol at the caret.
+    func goToDefinition() {
+        guard let (path, line, character) = caret else { return }
+        Task {
+            let found = links(await languages.definition(path: path, line: line, character: character))
+            if let first = found.first { open(first) } else { notice = "No definition found." }
+        }
+    }
+
+    /// ⇧F12: every reference to the symbol at the caret, in the Search tab. When the server knows none (it
+    /// answers from its index, which may not cover the project), a whole-word search stands in, and says so.
+    func findReferences() {
+        guard let (path, line, character) = caret, let document = documents[path] else { return }
+        let lineText = TextSearch.line(line, of: document.storage.string)
+        let symbol = TextSearch.word(in: lineText, at: character)
+        Task {
+            let found = await languages.references(path: path, line: line, character: character)
+            sideTab = .search
+            guard !found.isEmpty else {
+                guard !symbol.isEmpty else { return notice = "No references found." }
+                search.query = SearchQuery(text: symbol, matchCase: true, wholeWord: true, regex: false)
+                // Now, not on the panel's query change: the panel may only just be appearing, and misses it.
+                rerunSearch()
+                notice = "The language server found no references to \(symbol), so these are text matches."
+                return
+            }
+            search.showReferences(referenceResults(found), to: symbol)
+        }
+    }
+
+    /// The active file and its caret as LSP counts it (0-based line, UTF-16 character).
+    private var caret: (String, Int, Int)? {
+        guard let path = tabs.active, let document = documents[path] else { return nil }
+        return (path, document.cursor.line - 1, document.cursor.column - 1)
+    }
+
+    private func links(_ locations: [SymbolLocation]) -> [EditorLink] {
+        guard let root = workspace?.root else { return [] }
+        return locations.map { location in
+            EditorLink(
+                path: root.appending(path: location.path).path(percentEncoded: false), line: location.start.line + 1,
+                label: "\((location.path as NSString).lastPathComponent):\(location.start.line + 1)",
+                preview: TextSearch.line(location.start.line, of: text(of: location.path) ?? "")
+                    .trimmingCharacters(in: .whitespaces))
+        }
+    }
+
+    /// References as search results: by file, then line, each highlighting the reference.
+    private func referenceResults(_ locations: [SymbolLocation]) -> [SearchModel.FileResult] {
+        var results: [SearchModel.FileResult] = []
+        for (path, here) in Dictionary(grouping: locations, by: \.path).sorted(by: { $0.key < $1.key }) {
+            let text = text(of: path) ?? ""
+            let matches = here.sorted { $0.start.line < $1.start.line }.map { location in
+                let length = location.end.line == location.start.line ? location.end.character - location.start.character : 0
+                return LineMatch(
+                    line: location.start.line + 1, text: TextSearch.line(location.start.line, of: text),
+                    ranges: [NSRange(location: location.start.character, length: max(0, length))])
+            }
+            results.append(SearchModel.FileResult(path: path, matches: matches))
+        }
+        return results
+    }
+
+    /// An open file's buffer, else the file on disk.
+    private func text(of path: String) -> String? {
+        if let document = documents[path] { return document.storage.string }
+        return workspace.flatMap { SearchModel.readText($0.root.appending(path: path)) }
+    }
+}

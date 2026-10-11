@@ -150,6 +150,24 @@ final class SweepTests: XCTestCase {
         try SweepSupport.waitUntilLoaded(diagnosed)
         SweepSupport.spin(until: 30) { diagnosed.languages.issues[broken]?.count ?? 0 >= 2 }
 
+        // E5 screen 9: the hover card on `count` — its issue, then sourcekit's signature. On its own: the card is
+        // a popover, a window of its own, outside a window capture.
+        let badgeText = try String(contentsOf: repo.appendingPathComponent(broken), encoding: .utf8)
+        let countOffset = (badgeText as NSString).range(of: "= count").location + 2
+        Task { await diagnosed.hover(pane: 0, path: broken, at: (countOffset, .zero)) }
+        SweepSupport.spin(until: 15) { diagnosed.hover != nil }
+        let hoverInfo = try XCTUnwrap(diagnosed.hover)
+
+        // ⇧F12 on `count`: the sample repo is no package, so sourcekit-lsp has no index and finds no references —
+        // the whole-word search stands in and says so.
+        let referencing = try SweepSupport.model(opening: repo)
+        referencing.open(file: broken, pinned: true)
+        try SweepSupport.waitUntilLoaded(referencing)
+        SweepSupport.spin(until: 30) { referencing.languages.statuses["sourcekit-lsp"] == .ready }
+        referencing.activeDocument?.cursor = (4, 13)
+        referencing.findReferences()
+        SweepSupport.spin(until: 15) { if case .done = referencing.search.status { true } else { false } }
+
         // Screen 5: welcome, with recents (the sample repo has a worktree).
         let docs = MemoryDocs()
         let welcomeStore = ForgeStore(documents: docs)
@@ -175,7 +193,26 @@ final class SweepTests: XCTestCase {
                 ("e41-search", searching),
                 ("e42-replace", replacing),
                 ("e51-issues", diagnosed),
+                ("e52-references", referencing),
             ]
+            try LiveCapture.shoot(
+                HoverCard(info: hoverInfo)
+                    .padding(skin.size.s12)
+                    .ainkradPanel()
+                    .padding(skin.size.s24)
+                    .frame(width: 520, height: 260, alignment: .topLeading)
+                    .background(skin.color(skin.palette.background))
+                    .ainkradSkin(skin)
+                    .environment(\.ainkradTheme, HostThemeTokens(skin: skin))
+                    .environment(
+                        \.ainkradStatusColors,
+                        AinkradStatusColors(
+                            success: skin.color(skin.palette.success), warning: skin.color(skin.palette.warning),
+                            danger: skin.color(skin.palette.danger)))
+                    .environment(\.ainkradTypography, AinkradTypography(fontFamilyName: theme == "neon" ? "Exo 2" : nil))
+                    .environment(\.colorScheme, .dark),
+                size: CGSize(width: 520, height: 260),
+                to: URL(fileURLWithPath: out).appendingPathComponent("e52-hover-card-\(theme).png"))
             for (name, model) in screens {
                 // The sweep window never becomes key, so an inline name field loses focus right after it shows
                 // and ends its edit; start each edit afresh for every capture.

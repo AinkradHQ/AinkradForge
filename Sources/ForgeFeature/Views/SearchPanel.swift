@@ -49,7 +49,10 @@ struct SearchPanel: View {
         .onChange(of: search.query) { _, _ in rerun() }
         .onChange(of: search.include) { _, _ in rerun() }
         .onChange(of: search.exclude) { _, _ in rerun() }
-        .onChange(of: workspace.files) { _, _ in if !search.query.text.isEmpty { rerun(delay: .milliseconds(600)) } }
+        .onChange(of: workspace.files) { _, _ in
+            if case .references = search.status { return }
+            if !search.query.text.isEmpty { rerun(delay: .milliseconds(600)) }
+        }
     }
 
     private func rerun(delay: Duration = .milliseconds(250)) {
@@ -66,6 +69,8 @@ struct SearchPanel: View {
                     ? "No results · \(ms) ms"
                     : "\(capped ? "\(SearchModel.cap)+ results — refine the search" : "\(lines) results") in \(files) files · \(ms) ms"
             case .failed(let message): message
+            case .references(let symbol, let lines, let files):
+                "\(lines) \(lines == 1 ? "reference" : "references") to \(symbol) in \(files) \(files == 1 ? "file" : "files")"
             }
         if let text {
             Text(text)

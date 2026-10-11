@@ -55,6 +55,8 @@ extension ForgeModel {
             showSearch()
             search.isReplaceOpen = true
             if !search.results.isEmpty { search.confirmingReplaceAll = true }
+        case .goToDefinition: goToDefinition()
+        case .findReferences: findReferences()
         }
     }
 
