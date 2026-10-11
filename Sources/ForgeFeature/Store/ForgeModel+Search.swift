@@ -1,5 +1,6 @@
 import AinkradAppKit
 import ForgeEditor
+import ForgeLanguage
 import Foundation
 
 /// Changes made outside Forge — an agent, git, another editor.
@@ -8,7 +9,12 @@ extension ForgeModel {
     /// reloads, a dirty one raises its conflict banner.
     func diskChanged() async {
         await workspace?.refresh()
-        for document in documents.values { await document.checkDisk() }
+        for (path, document) in documents {
+            let revision = document.revision
+            await document.checkDisk()
+            // Reloaded from disk: the server gets the new text.
+            if document.revision != revision { languages.changed(path: path) { document.storage.string } }
+        }
     }
 }
 
@@ -62,6 +68,7 @@ extension ForgeModel {
         let text = plan.text(rejecting: search.rejected[path] ?? [])
         if let document = documents[path], document.state == .ready {
             document.replaceText(text)
+            languages.changed(path: path) { document.storage.string }
         } else {
             let url = workspace.url(for: path)
             do {

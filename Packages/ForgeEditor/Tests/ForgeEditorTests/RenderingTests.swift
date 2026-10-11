@@ -131,4 +131,29 @@ final class RenderingTests: XCTestCase {
         XCTAssertTrue(editor.wrapLines)
         XCTAssertEqual(editor.font.pointSize, 18)
     }
+
+    /// Diagnostics reach CodeEdit as underline emphases, replaced (not piled up) when they change.
+    func testMarksBecomeUnderlines() throws {
+        let gray = NSColor.gray
+        let colors = EditorColors(
+            text: gray, insertionPoint: gray, selection: gray, lineHighlight: gray, keywords: gray, commands: gray,
+            types: gray, attributes: gray, variables: gray, values: gray, numbers: gray, strings: gray, comments: gray)
+        let red = NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 1)
+        let host = NSHostingView(
+            rootView: ForgeCodeEditor(
+                storage: NSTextStorage(string: "let x: Int = \"nope\"\n"), language: .detect(url: URL(fileURLWithPath: "/a.swift")),
+                colors: colors, insets: NSEdgeInsets(), onEdit: {}, onCursor: { _, _ in },
+                marks: [EditorMark(range: NSRange(location: 13, length: 6), color: red)]))
+        let window = NSWindow(
+            contentRect: NSRect(x: -3000, y: -3000, width: 400, height: 200), styleMask: .borderless,
+            backing: .buffered, defer: false)
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        func textView(in view: NSView) -> TextView? { (view as? TextView) ?? view.subviews.lazy.compactMap(textView(in:)).first }
+        let emphases = try XCTUnwrap(textView(in: host)?.emphasisManager).getEmphases(for: "forge.marks")
+        XCTAssertEqual(emphases.map(\.range), [NSRange(location: 13, length: 6)])
+    }
 }

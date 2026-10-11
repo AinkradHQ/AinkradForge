@@ -130,6 +130,26 @@ final class SweepTests: XCTestCase {
         SweepSupport.spin(until: 5) { if case .done = replacing.search.status { true } else { false } }
         replacing.search.previewPath = "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift"
 
+        // E5 screen 9: a real sourcekit-lsp's issues — the Issues tab, underlines, status-bar counts and chip.
+        let diagnosed = try SweepSupport.model(opening: repo)
+        let broken = "Sources/Ainkrad/Features/Sidebar/SidebarBadge.swift"
+        try """
+            import SwiftUI
+
+            struct SidebarBadge: View {
+                let count: Int
+                var body: some View {
+                    let label: String = count
+                    Text(label).foregroundStyle(.secondary).padding(missingInset)
+                }
+            }
+
+            """.write(to: repo.appendingPathComponent(broken), atomically: true, encoding: .utf8)
+        diagnosed.sideTab = .problems
+        diagnosed.open(file: broken, pinned: true)
+        try SweepSupport.waitUntilLoaded(diagnosed)
+        SweepSupport.spin(until: 30) { diagnosed.languages.issues[broken]?.count ?? 0 >= 2 }
+
         // Screen 5: welcome, with recents (the sample repo has a worktree).
         let docs = MemoryDocs()
         let welcomeStore = ForgeStore(documents: docs)
@@ -154,6 +174,7 @@ final class SweepTests: XCTestCase {
                 ("e32-settings-applied", tuned),
                 ("e41-search", searching),
                 ("e42-replace", replacing),
+                ("e51-issues", diagnosed),
             ]
             for (name, model) in screens {
                 // The sweep window never becomes key, so an inline name field loses focus right after it shows
