@@ -1,5 +1,6 @@
 import AppKit
 import CodeEditTextView
+import CodeEditSourceEditor
 import SwiftUI
 import XCTest
 
@@ -183,5 +184,33 @@ final class RenderingTests: XCTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.5))
         XCTAssertEqual(storage.string, "let first = 1\nlet b = first + first\n")
         XCTAssertEqual(applied, [7])
+    }
+
+    /// Change marks sit in CodeEdit's gutter, at its trailing edge, on top, with a real size.
+    func testLineMarksLiveInTheGutter() throws {
+        let gray = NSColor.gray
+        let colors = EditorColors(
+            text: gray, insertionPoint: gray, selection: gray, lineHighlight: gray, keywords: gray, commands: gray,
+            types: gray, attributes: gray, variables: gray, values: gray, numbers: gray, strings: gray, comments: gray)
+        let host = NSHostingView(
+            rootView: ForgeCodeEditor(
+                storage: NSTextStorage(string: "let a = 1\nlet b = 2\nlet c = 3\n"), language: .detect(url: URL(fileURLWithPath: "/a.swift")),
+                colors: colors, insets: NSEdgeInsets(), onEdit: {}, onCursor: { _, _ in },
+                lineMarks: [EditorLineMark(lines: 2...2, color: .systemOrange, isRemoval: false, tag: 0)]))
+        let window = NSWindow(
+            contentRect: NSRect(x: -3000, y: -3000, width: 400, height: 200), styleMask: .borderless, backing: .buffered, defer: false)
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+        func find<T: NSView>(_ type: T.Type, in view: NSView) -> T? { (view as? T) ?? view.subviews.lazy.compactMap { find(type, in: $0) }.first }
+        let marks = try XCTUnwrap(find(LineMarkView.self, in: host), "no mark view")
+        let gutter = try XCTUnwrap(marks.superview)
+        XCTAssertTrue(gutter is GutterView)
+        XCTAssertEqual(gutter.subviews.last, marks, "covered by \(gutter.subviews.map { type(of: $0) })")
+        XCTAssertGreaterThan(marks.frame.height, 40)
+        XCTAssertEqual(marks.frame.maxX, gutter.bounds.maxX, accuracy: 0.5, "gutter \(gutter.bounds), marks \(marks.frame)")
+        XCTAssertEqual(marks.marks.count, 1)
     }
 }

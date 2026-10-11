@@ -154,8 +154,12 @@ public struct ForgeCodeEditor: View {
     /// A menu to open at the caret, and its pick.
     let menu: EditorMenu?
     let onMenuPick: (Int?) -> Void
-    /// Where the caret is drawn after each move (top-left origin, this view), for anchoring a field to it.
-    let onCaretRect: (CGRect) -> Void
+    /// Where the caret is drawn after each move (top-left origin, this view), and where its line's text ends
+    /// (x), for anchoring a field or a note to it.
+    let onCaretRect: (CGRect, CGFloat) -> Void
+    /// Change marks in the gutter; a click reports the mark's tag and rect.
+    let lineMarks: [EditorLineMark]
+    let onLineMarkClick: (Int, CGRect) -> Void
 
     public init(
         storage: NSTextStorage, language: EditorLanguage, colors: EditorColors, options: EditorOptions = EditorOptions(),
@@ -169,7 +173,8 @@ public struct ForgeCodeEditor: View {
         onSignature: @escaping ((Int, CGRect)?) -> Void = { _ in },
         edits: EditorEdits? = nil, onEditsApplied: @escaping (Int) -> Void = { _ in },
         menu: EditorMenu? = nil, onMenuPick: @escaping (Int?) -> Void = { _ in },
-        onCaretRect: @escaping (CGRect) -> Void = { _ in }
+        onCaretRect: @escaping (CGRect, CGFloat) -> Void = { _, _ in },
+        lineMarks: [EditorLineMark] = [], onLineMarkClick: @escaping (Int, CGRect) -> Void = { _, _ in }
     ) {
         self.storage = storage
         self.language = language
@@ -195,6 +200,8 @@ public struct ForgeCodeEditor: View {
         self.menu = menu
         self.onMenuPick = onMenuPick
         self.onCaretRect = onCaretRect
+        self.lineMarks = lineMarks
+        self.onLineMarkClick = onLineMarkClick
     }
 
     public var body: AnyView {
@@ -205,7 +212,8 @@ public struct ForgeCodeEditor: View {
                 onFocusedCaret: onFocusedCaret, marks: marks, definitions: definitions, onOpenLink: onOpenLink,
                 onHover: onHover, suggest: suggest, suggestionTriggers: suggestionTriggers,
                 signatureTriggers: signatureTriggers, signatureShown: signatureShown, onSignature: onSignature,
-                edits: edits, onEditsApplied: onEditsApplied, menu: menu, onMenuPick: onMenuPick, onCaretRect: onCaretRect))
+                edits: edits, onEditsApplied: onEditsApplied, menu: menu, onMenuPick: onMenuPick, onCaretRect: onCaretRect,
+                lineMarks: lineMarks, onLineMarkClick: onLineMarkClick))
     }
 }
 
@@ -234,7 +242,9 @@ struct EditorHost: View {
     let onEditsApplied: (Int) -> Void
     let menu: EditorMenu?
     let onMenuPick: (Int?) -> Void
-    let onCaretRect: (CGRect) -> Void
+    let onCaretRect: (CGRect, CGFloat) -> Void
+    let lineMarks: [EditorLineMark]
+    let onLineMarkClick: (Int, CGRect) -> Void
     @State private var state = SourceEditorState()
     @State private var coordinator = Coordinator()
 
@@ -268,6 +278,8 @@ struct EditorHost: View {
             coordinator.onEditsApplied = onEditsApplied
             coordinator.onMenuPick = onMenuPick
             coordinator.onCaretRect = onCaretRect
+            coordinator.onLineMarkClick = onLineMarkClick
+            coordinator.lineMarkView.marks = lineMarks
             coordinator.definitions = definitions
             coordinator.onOpenLink = onOpenLink
             coordinator.hover.onHover = onHover
@@ -280,6 +292,7 @@ struct EditorHost: View {
                 coordinator.apply(marks)
                 coordinator.apply(edits)
                 coordinator.open(menu)
+                if let controller = coordinator.controller { coordinator.installLineMarks(controller) }
             }
         }
         .onChange(of: goToLine) { _, line in go(to: line) }
@@ -289,6 +302,7 @@ struct EditorHost: View {
         .onChange(of: signatureShown) { _, shown in coordinator.signatureShown = shown }
         .onChange(of: edits) { _, edits in coordinator.apply(edits) }
         .onChange(of: menu) { _, menu in coordinator.open(menu) }
+        .onChange(of: lineMarks) { _, marks in coordinator.lineMarkView.marks = marks }
     }
 
     /// Through the controller, not `state.cursorPositions`: CodeEdit's state diff compares the new positions
@@ -325,7 +339,10 @@ struct EditorHost: View {
         var appliedEditsID: Int?
         var onMenuPick: (Int?) -> Void = { _ in }
         var openedMenuID: Int?
-        var onCaretRect: (CGRect) -> Void = { _ in }
+        var onCaretRect: (CGRect, CGFloat) -> Void = { _, _ in }
+        var onLineMarkClick: (Int, CGRect) -> Void = { _, _ in }
+        let lineMarkView = LineMarkView()
+        var gutterObserver: (any NSObjectProtocol)?
         weak var controller: TextViewController?
 
         /// `prepareCoordinator` runs before the controller loads its view (`scrollView`, implicitly unwrapped, is
@@ -338,10 +355,12 @@ struct EditorHost: View {
                 scrollView.contentView.drawsBackground = false
                 hover.attach(to: controller.textView, container: controller.view, scrollView: scrollView)
             }
+            lineMarkView.onClick = { [weak self] tag, rect in self?.lineMarkClicked(tag, rect) }
         }
 
         func textViewDidChangeText(controller: TextViewController) {
             hover.dismiss()
+            lineMarkView.needsDisplay = true
             onEdit()
         }
 
@@ -361,7 +380,7 @@ struct EditorHost: View {
         func textViewDidChangeSelection(controller: TextViewController, newPositions: [CursorPosition]) {
             if let first = newPositions.first {
                 onCursor(first.start.line, first.start.column)
-                if let frame = caretFrame(controller, first.range.location) { onCaretRect(frame) }
+                if let frame = caretFrame(controller, first.range.location) { onCaretRect(frame, lineEnd(controller, first.range.location) ?? frame.maxX) }
             }
             trackSignature(controller, newPositions)
             if let textView = controller.textView, textView.window?.firstResponder === textView { onFocusedCaret() }
@@ -403,6 +422,18 @@ extension EditorHost.Coordinator {
         guard signatureShown || signatureTriggers.contains(typed) else { return }
         guard let frame = caretFrame(controller, caret.location) else { return }
         onSignature((caret.location, frame))
+    }
+}
+
+extension EditorHost.Coordinator {
+    /// Where the text of the caret's line ends (x, this view's coordinates).
+    func lineEnd(_ controller: TextViewController, _ offset: Int) -> CGFloat? {
+        let text = controller.textView.textStorage.string as NSString
+        guard offset <= text.length else { return nil }
+        let line = text.lineRange(for: NSRange(location: offset, length: 0))
+        var end = NSMaxRange(line)
+        while end > line.location, [10, 13].contains(text.character(at: end - 1)) { end -= 1 }
+        return caretFrame(controller, end)?.maxX
     }
 }
 

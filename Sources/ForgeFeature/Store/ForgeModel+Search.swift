@@ -9,6 +9,11 @@ extension ForgeModel {
     /// reloads, a dirty one raises its conflict banner.
     func diskChanged() async {
         await workspace?.refresh()
+        // A commit, checkout or stage moves what the gutter compares against.
+        if let workspace {
+            git.headMoved(
+                open: documents.compactMapValues { $0.state == .ready ? $0.storage.string : nil }, git: Git(directory: workspace.root))
+        }
         for (path, document) in documents {
             let revision = document.revision
             await document.checkDisk()

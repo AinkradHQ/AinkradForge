@@ -96,6 +96,7 @@ private struct PaneView: View {
 }
 
 private struct DocumentView: View {
+    @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradStatusColors) private var status
     @Environment(\.ainkradTheme) private var theme
 
@@ -144,7 +145,13 @@ private struct DocumentView: View {
                 onEditsApplied: { [model, path] id in if model.editorEdits[path]?.id == id { model.editorEdits[path] = nil } },
                 menu: pane == model.activePane ? model.actionMenu : nil,
                 onMenuPick: { [model] index in model.pickCodeAction(index) },
-                onCaretRect: { [document] rect in document.caretRect = rect }
+                onCaretRect: { [document, model] rect, lineEnd in
+                    document.caretRect = rect
+                    document.caretLineEnd = lineEnd
+                    model.blameCaret()
+                },
+                lineMarks: model.git.marks(path, status: status),
+                onLineMarkClick: { [model, pane, path] tag, rect in model.peekChange(pane: pane, path: path, hunk: tag, rect: rect) }
             ) { model.didEdit(path) }
             .overlay {
                 if let hover = model.hover, hover.pane == pane, hover.path == path {
@@ -154,6 +161,18 @@ private struct DocumentView: View {
             .overlay {
                 if let signature = model.signature, signature.pane == pane, signature.path == path {
                     EditorCardLayer(rect: signature.rect, prefersAbove: true) { SignatureCard(hint: signature.hint) }
+                }
+            }
+            .overlay {
+                if let peek = model.git.peek, peek.pane == pane, peek.path == path {
+                    EditorCardLayer(rect: peek.rect, prefersAbove: false, interactive: true) { GitPeekCard(model: model, peek: peek) }
+                }
+            }
+            .overlay(alignment: .topLeading) {
+                if let note = model.git.blame, note.path == path, pane == model.activePane {
+                    BlameView(model: model, note: note)
+                        .padding(.leading, document.caretLineEnd + skin.size.s28)
+                        .padding(.top, document.caretRect.minY)
                 }
             }
             .overlay {
