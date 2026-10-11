@@ -46,6 +46,8 @@ actor LanguageSession {
         case status(ServerStatus)
         /// Characters after which the server offers completions, and signature help.
         case triggers(completion: Set<String>, signature: Set<String>)
+        /// The server asks Forge to make an edit (after a command it ran); `reply` says whether it was made.
+        case applyEdit(WorkspaceEdit, reply: @Sendable (Bool) async -> Void)
     }
 
     let spec: ServerSpec
@@ -88,8 +90,12 @@ actor LanguageSession {
             let emit = emit
             eventLoop = Task {
                 for await event in server.eventSequence {
-                    if case .notification(.textDocumentPublishDiagnostics(let params)) = event {
+                    switch event {
+                    case .notification(.textDocumentPublishDiagnostics(let params)):
                         emit.yield(.diagnostics(uri: params.uri, params.diagnostics))
+                    case .request(_, let request):
+                        await Self.answer(request, root: root, emit: emit)
+                    default: break
                     }
                 }
             }
@@ -192,6 +198,63 @@ actor LanguageSession {
         return (try? await server.signatureHelp(Self.position(uri, line, character))) ?? nil
     }
 
+    func rename(uri: String, line: Int, character: Int, to newName: String) async -> WorkspaceEdit? {
+        guard let server, documents[uri] != nil else { return nil }
+        let params = RenameParams(
+            textDocument: TextDocumentIdentifier(uri: uri), position: Position(line: line, character: character),
+            newName: newName)
+        return (try? await server.rename(params)) ?? nil
+    }
+
+    func codeActions(uri: String, range: LSPRange, diagnostics: [Diagnostic]) async -> [TwoTypeOption<Command, CodeAction>] {
+        guard let server, documents[uri] != nil else { return [] }
+        let params = CodeActionParams(
+            textDocument: TextDocumentIdentifier(uri: uri), range: range,
+            context: CodeActionContext(diagnostics: diagnostics, only: nil))
+        return ((try? await server.codeAction(params)) ?? nil) ?? []
+    }
+
+    func execute(_ command: Command) async {
+        _ = try? await server?.executeCommand(ExecuteCommandParams(command: command.command, arguments: command.arguments))
+    }
+
+    func format(uri: String, tabSize: Int, insertSpaces: Bool) async -> [TextEdit] {
+        guard let server, documents[uri] != nil else { return [] }
+        let params = DocumentFormattingParams(
+            textDocument: TextDocumentIdentifier(uri: uri), options: FormattingOptions(tabSize: tabSize, insertSpaces: insertSpaces))
+        return ((try? await server.formatting(params)) ?? nil) ?? []
+    }
+
+    /// Every request a server can send must be answered, or the server may wait on it forever (pyright and
+    /// intelephense ask for their configuration at start). Edits go to the hub; the rest get neutral answers.
+    private static func answer(_ request: ServerRequest, root: URL, emit: AsyncStream<Event>.Continuation) async {
+        switch request {
+        case .workspaceApplyEdit(let params, let handler):
+            let (stream, done) = AsyncStream<Bool>.makeStream()
+            emit.yield(.applyEdit(params.edit, reply: { applied in
+                done.yield(applied)
+                done.finish()
+            }))
+            var applied = false
+            for await result in stream { applied = result }
+            await handler(.success(ApplyWorkspaceEditResult(applied: applied)))
+        case .workspaceConfiguration(let params, let handler):
+            await handler(.success(params.items.map { _ in LSPAny.null }))
+        case .workspaceFolders(let handler):
+            await handler(.success([WorkspaceFolder(uri: root.absoluteString, name: root.lastPathComponent)]))
+        case .clientRegisterCapability(_, let handler), .clientUnregisterCapability(_, let handler),
+            .workspaceCodeLensRefresh(let handler), .workspaceSemanticTokenRefresh(let handler),
+            .windowWorkDoneProgressCreate(_, let handler):
+            await handler(nil)
+        case .windowShowMessageRequest(_, let handler):
+            await handler(.success(nil))
+        case .windowShowDocument(_, let handler):
+            await handler(.success(ShowDocumentResult(success: false)))
+        case .custom(_, _, let handler):
+            await handler(.success(LSPAny.null))
+        }
+    }
+
     private static func position(_ uri: String, _ line: Int, _ character: Int) -> TextDocumentPositionParams {
         TextDocumentPositionParams(
             textDocument: TextDocumentIdentifier(uri: uri), position: Position(line: line, character: character))
@@ -237,7 +300,9 @@ actor LanguageSession {
 
     /// What Forge can show today; widened as hover, completion and the rest land.
     static let clientCapabilities = ClientCapabilities(
-        workspace: nil,
+        workspace: ClientCapabilities.Workspace(
+            applyEdit: true, workspaceEdit: nil, didChangeConfiguration: nil, didChangeWatchedFiles: nil, symbol: nil,
+            executeCommand: nil, workspaceFolders: true, configuration: true, semanticTokens: nil),
         textDocument: TextDocumentClientCapabilities(
             synchronization: TextDocumentSyncClientCapabilities(
                 dynamicRegistration: false, willSave: false, willSaveWaitUntil: false, didSave: true),
@@ -253,6 +318,15 @@ actor LanguageSession {
                 contextSupport: false),
             definition: DynamicRegistrationLinkSupportClientCapabilities(dynamicRegistration: false, linkSupport: true),
             references: DynamicRegistrationClientCapabilities(dynamicRegistration: false),
+            codeAction: CodeActionClientCapabilities(
+                dynamicRegistration: false,
+                codeActionLiteralSupport: CodeActionClientCapabilities.CodeActionLiteralSupport(
+                    codeActionKind: ValueSet(valueSet: ["quickfix", "refactor", "source"])),
+                isPreferredSupport: true),
+            formatting: DocumentFormattingClientCapabilities(dynamicRegistration: false),
+            rename: RenameClientCapabilities(
+                dynamicRegistration: false, prepareSupport: false, prepareSupportDefaultBehavior: nil,
+                honorsChangeAnnotations: false),
             publishDiagnostics: PublishDiagnosticsClientCapabilities(
                 relatedInformation: false, tagSupport: nil, versionSupport: false, codeDescriptionSupport: false,
                 dataSupport: false)),

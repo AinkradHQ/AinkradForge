@@ -16,9 +16,13 @@ struct ReplacePlan: Equatable {
         path: String, text: String, regex: NSRegularExpression, replacement: String, isRegex: Bool, preserveCase: Bool
     ) -> ReplacePlan {
         let result = TextSearch.replace(in: text, regex: regex, with: replacement, isRegex: isRegex, preserveCase: preserveCase)
-        let lines = text.utf8.reduce(1) { $1 == 10 ? $0 + 1 : $0 }
-        let diff = lines <= previewLineLimit ? AinkradDiffEngine.compute(old: text, new: result.text, path: path, context: 2) : nil
-        return ReplacePlan(path: path, original: text, updated: result.text, count: result.count, diff: diff)
+        return make(path: path, original: text, updated: result.text, count: result.count)
+    }
+
+    static func make(path: String, original: String, updated: String, count: Int) -> ReplacePlan {
+        let lines = original.utf8.reduce(1) { $1 == 10 ? $0 + 1 : $0 }
+        let diff = lines <= previewLineLimit ? AinkradDiffEngine.compute(old: original, new: updated, path: path, context: 2) : nil
+        return ReplacePlan(path: path, original: original, updated: updated, count: count, diff: diff)
     }
 
     /// The text to write: every hunk applied except the rejected ones, which keep their original lines.

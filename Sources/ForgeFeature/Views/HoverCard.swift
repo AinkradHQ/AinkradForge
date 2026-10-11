@@ -94,11 +94,13 @@ struct SignatureCard: View {
 }
 
 /// A card pinned to a rect of the editor — below it, or above (`prefersAbove`, or when there is no room
-/// below). Drawn in the editor, not a popover window: it never takes the keyboard from the text, and never
-/// takes the pointer (hit testing off), so the editor keeps its hover and clicks.
+/// below). Drawn in the editor, not a popover window: a hint never takes the keyboard from the text, nor
+/// (unless `interactive`) the pointer, so the editor keeps its hover and clicks.
 struct EditorCardLayer<Card: View>: View {
     let rect: CGRect
     let prefersAbove: Bool
+    /// The rename field takes clicks and keys; the hover and signature cards take neither.
+    var interactive = false
     @ViewBuilder let card: Card
     @Environment(\.ainkradSkin) private var skin
 
@@ -116,7 +118,7 @@ struct EditorCardLayer<Card: View>: View {
                     alignment: above ? .bottomLeading : .topLeading)
                 .offset(y: above ? 0 : rect.maxY + gap)
         }
-        .allowsHitTesting(false)
+        .allowsHitTesting(interactive)
     }
 }
 
