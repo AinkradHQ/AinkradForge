@@ -1,0 +1,60 @@
+import AinkradAppKit
+import AppKit
+import ForgeEditor
+import SwiftUI
+
+/// The editor for one document, coloured from the host theme.
+struct CodeEditor: View {
+    let document: EditorDocument
+    /// `host.theme.terminalPalette`.
+    let palette: HostTerminalPalette?
+    let onEdit: () -> Void
+    @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
+
+    var body: some View {
+        ForgeCodeEditor(
+            storage: document.storage, language: document.language,
+            colors: EditorPalette.colors(tokens: theme, palette: palette), fontSize: skin.size.s13,
+            insets: NSEdgeInsets(top: skin.size.s4, left: 0, bottom: skin.size.s12, right: 0),
+            onEdit: onEdit,
+            onCursor: { line, column in document.cursor = (line, column) })
+    }
+}
+
+/// Syntax colours from the active theme's terminal palette — the same ANSI colours Rune uses, so code reads
+/// the same in the editor and the terminal. A host that publishes no palette falls back to the theme accents.
+enum EditorPalette {
+    static func colors(tokens: HostThemeTokens, palette: HostTerminalPalette?) -> EditorColors {
+        let fg = NSColor(tokens.foreground)
+        func ansi(_ index: Int, _ fallback: Color) -> NSColor {
+            guard let palette, palette.ansi.indices.contains(index), let color = color(hex: palette.ansi[index]) else {
+                return NSColor(fallback)
+            }
+            return color
+        }
+        return EditorColors(
+            text: fg,
+            insertionPoint: NSColor(tokens.accentSecondary),
+            selection: NSColor(tokens.accentPrimary).withAlphaComponent(0.35),
+            lineHighlight: fg.withAlphaComponent(0.05),
+            keywords: ansi(5, tokens.accentPrimary),
+            commands: ansi(4, tokens.accentPrimary),
+            types: ansi(6, tokens.accentSecondary),
+            attributes: ansi(2, tokens.accentTertiary),
+            variables: fg,
+            values: ansi(14, tokens.accentSecondary),
+            numbers: ansi(13, tokens.accentPrimary),
+            strings: ansi(3, tokens.accentTertiary),
+            comments: fg.withAlphaComponent(0.4))
+    }
+
+    /// `RRGGBB` (optionally `#`-prefixed) → sRGB colour.
+    static func color(hex: String) -> NSColor? {
+        let digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        guard digits.count == 6, let value = UInt32(digits, radix: 16) else { return nil }
+        return NSColor(  // design-lint: allow raw-color decodes host.theme.terminalPalette hex (theme data)
+            srgbRed: CGFloat(value >> 16 & 0xFF) / 255, green: CGFloat(value >> 8 & 0xFF) / 255,
+            blue: CGFloat(value & 0xFF) / 255, alpha: 1)
+    }
+}
