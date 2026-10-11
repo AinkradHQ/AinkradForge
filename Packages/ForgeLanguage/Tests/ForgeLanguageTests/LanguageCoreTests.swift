@@ -23,4 +23,11 @@ struct LanguageCoreTests {
         #expect(index.position(of: 16) == (1, 6))
         #expect(index.range(from: (0, 4), to: (0, 5)) == NSRange(location: 4, length: 1))
     }
+
+    /// `go install` puts gopls in ~/go/bin, which is often not on PATH; it is still found.
+    @Test func toolFoldersOffPathAreSearched() throws {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        guard FileManager.default.isExecutableFile(atPath: "\(home)/go/bin/gopls") else { return }
+        #expect(ShellEnvironment.locate("gopls") != nil)
+    }
 }
