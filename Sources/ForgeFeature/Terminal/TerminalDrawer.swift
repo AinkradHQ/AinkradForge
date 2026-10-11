@@ -42,6 +42,8 @@ final class TerminalDrawer {
     /// ⌘-click on a path or URL in a terminal's output.
     @ObservationIgnored var onOpenLink: (String) -> Void = { _ in }
     @ObservationIgnored private var routers: [Int: LinkRouter] = [:]
+    @ObservationIgnored private var scrollMonitor: Any?
+    @ObservationIgnored private var hideScroller: Task<Void, Never>?
     /// The theme's text colour, for a palette that leaves the terminal's foreground unset (Liquid Glass does).
     @ObservationIgnored var foreground: NSColor?
 
@@ -95,6 +97,7 @@ final class TerminalDrawer {
         }
         views[id] = view
         events[id] = handler
+        watchScrolling()
         tabs.append(Tab(id: id, title: title ?? (shell as NSString).lastPathComponent, command: command))
         active = id
         isOpen = true
@@ -161,6 +164,31 @@ final class TerminalDrawer {
         views.values.forEach { Self.apply(palette, foreground: foreground, to: $0) }
     }
 
+    /// Shows a terminal's scroller while it is scrolled, and hides it a moment after — as Rune does. One
+    /// monitor for every terminal in the drawer.
+    private func watchScrolling() {
+        guard scrollMonitor == nil else { return }
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            MainActor.assumeIsolated { self?.scrolled(event) }
+            return event
+        }
+    }
+
+    private func scrolled(_ event: NSEvent) {
+        guard let view = views.values.first(where: { view in
+            view.window === event.window && view.bounds.contains(view.convert(event.locationInWindow, from: nil))
+        }), let scroller = view.subviews.compactMap({ $0 as? NSScroller }).first
+        else { return }
+        scroller.scrollerStyle = .overlay
+        scroller.isHidden = false
+        hideScroller?.cancel()
+        hideScroller = Task { [weak scroller] in
+            try? await Task.sleep(for: .seconds(1.1))
+            guard !Task.isCancelled else { return }
+            scroller?.isHidden = true
+        }
+    }
+
     // MARK: - Support
 
     /// `$SHELL` when /etc/shells lists it, else zsh — as Rune resolves it.
@@ -185,7 +213,7 @@ final class TerminalDrawer {
         view.layer?.isOpaque = false
         view.layer?.backgroundColor = .clear
         view.nativeBackgroundColor = NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.004)  // design-lint: allow raw-color near-clear terminal background
-        // ponytail: the scroller stays hidden (SwiftTerm's own, not an overlay one); Rune's reveal-on-scroll if missed.
+        // SwiftTerm's own scroller (not an overlay one): hidden until the terminal is scrolled (`watchScrolling`).
         view.subviews.compactMap { $0 as? NSScroller }.forEach { $0.isHidden = true }
         let ansi = palette?.ansi.compactMap(color(hex:)) ?? []
         if ansi.count == 16 { view.installColors(ansi) }
