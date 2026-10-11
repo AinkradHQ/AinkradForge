@@ -31,6 +31,8 @@ struct CodeEditor: View {
     var onCaretRect: (CGRect, CGFloat) -> Void = { _, _ in }
     var lineMarks: [EditorLineMark] = []
     var onLineMarkClick: (Int, CGRect) -> Void = { _, _ in }
+    var anchorLine: Int?
+    var onAnchor: (CGRect?) -> Void = { _ in }
     let onEdit: () -> Void
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
@@ -46,7 +48,8 @@ struct CodeEditor: View {
             definitions: definitions, onOpenLink: onOpenLink, onHover: onHover, suggest: suggest,
             suggestionTriggers: suggestionTriggers, signatureTriggers: signatureTriggers, signatureShown: signatureShown,
             onSignature: onSignature, edits: edits, onEditsApplied: onEditsApplied, menu: menu, onMenuPick: onMenuPick,
-            onCaretRect: onCaretRect, lineMarks: lineMarks, onLineMarkClick: onLineMarkClick)
+            onCaretRect: onCaretRect, lineMarks: lineMarks, onLineMarkClick: onLineMarkClick, anchorLine: anchorLine,
+            onAnchor: onAnchor)
     }
 }
 

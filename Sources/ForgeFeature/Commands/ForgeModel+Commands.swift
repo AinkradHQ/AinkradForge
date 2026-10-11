@@ -5,7 +5,9 @@ import Foundation
 /// Runs `ForgeCommand`s — the single entry point the palette and the shortcut layer share.
 extension ForgeModel {
     var availableCommands: [ForgeCommand] {
-        ForgeCommand.available(hasWorkspace: workspace != nil, hasFile: tabs.active != nil, hasSplit: panes.count > 1)
+        ForgeCommand.available(
+            hasWorkspace: workspace != nil, hasFile: tabs.active != nil, hasSplit: panes.count > 1,
+            inAgentChange: agentChangeAtCaret != nil, agentFile: tabs.active.map { agent.files[$0] != nil } ?? false)
     }
 
     func run(_ command: ForgeCommand) {
@@ -65,6 +67,10 @@ extension ForgeModel {
         case .toggleBlame: toggleBlame()
         case .runTask: palette = "!"
         case .rerunLastTask: rerunLastTask()
+        case .keepChange: if let at = agentChangeAtCaret { keepChange(at.path, hunk: at.hunk) }
+        case .undoChange: if let at = agentChangeAtCaret { undoChange(at.path, hunk: at.hunk) }
+        case .keepAllChanges: if let path = tabs.active { keepAllChanges(path) }
+        case .undoAllChanges: if let path = tabs.active { undoAllChanges(path) }
         case .maximiseTerminal:
             if !terminals.isOpen { terminals.toggle() }
             terminals.isMaximised.toggle()

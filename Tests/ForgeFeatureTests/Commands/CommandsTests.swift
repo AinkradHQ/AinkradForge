@@ -25,7 +25,7 @@ struct CommandsTests {
         let workspace = ForgeCommand.available(hasWorkspace: true, hasFile: false)
         #expect(workspace.contains(.showChanges) && !workspace.contains(.goToLine))
         #expect(!ForgeCommand.available(hasWorkspace: true, hasFile: true).contains(.closePane))
-        #expect(ForgeCommand.available(hasWorkspace: true, hasFile: true, hasSplit: true).count == ForgeCommand.allCases.count)
+        #expect(ForgeCommand.available(hasWorkspace: true, hasFile: true, hasSplit: true, inAgentChange: true, agentFile: true).count == ForgeCommand.allCases.count)
     }
 
     @Test func commandSearchMatchesTitleWords() {

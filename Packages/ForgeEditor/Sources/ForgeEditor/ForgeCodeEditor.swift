@@ -88,14 +88,17 @@ public struct EditorOptions: Equatable, Sendable {
     }
 }
 
-/// A range of the buffer to underline (a diagnostic), in the colour of its severity.
+/// A range of the buffer to mark: underlined (a diagnostic, in its severity's colour), or washed (a change
+/// made outside Forge — a soft fill behind its text).
 public struct EditorMark: Equatable, Sendable {
     public let range: NSRange
     public let color: NSColor
+    public let isWash: Bool
 
-    public init(range: NSRange, color: NSColor) {
+    public init(range: NSRange, color: NSColor, isWash: Bool = false) {
         self.range = range
         self.color = color
+        self.isWash = isWash
     }
 }
 
@@ -160,6 +163,10 @@ public struct ForgeCodeEditor: View {
     /// Change marks in the gutter; a click reports the mark's tag and rect.
     let lineMarks: [EditorLineMark]
     let onLineMarkClick: (Int, CGRect) -> Void
+    /// A 1-based line to follow: its text's rect (this view, top-left origin) is reported whenever it moves —
+    /// scrolling, layout, edits — and nil when it is off screen or gone.
+    let anchorLine: Int?
+    let onAnchor: (CGRect?) -> Void
 
     public init(
         storage: NSTextStorage, language: EditorLanguage, colors: EditorColors, options: EditorOptions = EditorOptions(),
@@ -174,7 +181,8 @@ public struct ForgeCodeEditor: View {
         edits: EditorEdits? = nil, onEditsApplied: @escaping (Int) -> Void = { _ in },
         menu: EditorMenu? = nil, onMenuPick: @escaping (Int?) -> Void = { _ in },
         onCaretRect: @escaping (CGRect, CGFloat) -> Void = { _, _ in },
-        lineMarks: [EditorLineMark] = [], onLineMarkClick: @escaping (Int, CGRect) -> Void = { _, _ in }
+        lineMarks: [EditorLineMark] = [], onLineMarkClick: @escaping (Int, CGRect) -> Void = { _, _ in },
+        anchorLine: Int? = nil, onAnchor: @escaping (CGRect?) -> Void = { _ in }
     ) {
         self.storage = storage
         self.language = language
@@ -202,6 +210,8 @@ public struct ForgeCodeEditor: View {
         self.onCaretRect = onCaretRect
         self.lineMarks = lineMarks
         self.onLineMarkClick = onLineMarkClick
+        self.anchorLine = anchorLine
+        self.onAnchor = onAnchor
     }
 
     public var body: AnyView {
@@ -213,7 +223,7 @@ public struct ForgeCodeEditor: View {
                 onHover: onHover, suggest: suggest, suggestionTriggers: suggestionTriggers,
                 signatureTriggers: signatureTriggers, signatureShown: signatureShown, onSignature: onSignature,
                 edits: edits, onEditsApplied: onEditsApplied, menu: menu, onMenuPick: onMenuPick, onCaretRect: onCaretRect,
-                lineMarks: lineMarks, onLineMarkClick: onLineMarkClick))
+                lineMarks: lineMarks, onLineMarkClick: onLineMarkClick, anchorLine: anchorLine, onAnchor: onAnchor))
     }
 }
 
@@ -245,6 +255,8 @@ struct EditorHost: View {
     let onCaretRect: (CGRect, CGFloat) -> Void
     let lineMarks: [EditorLineMark]
     let onLineMarkClick: (Int, CGRect) -> Void
+    let anchorLine: Int?
+    let onAnchor: (CGRect?) -> Void
     @State private var state = SourceEditorState()
     @State private var coordinator = Coordinator()
 
@@ -280,6 +292,8 @@ struct EditorHost: View {
             coordinator.onCaretRect = onCaretRect
             coordinator.onLineMarkClick = onLineMarkClick
             coordinator.lineMarkView.marks = lineMarks
+            coordinator.onAnchor = onAnchor
+            coordinator.anchorLine = anchorLine
             coordinator.definitions = definitions
             coordinator.onOpenLink = onOpenLink
             coordinator.hover.onHover = onHover
@@ -293,6 +307,7 @@ struct EditorHost: View {
                 coordinator.apply(edits)
                 coordinator.open(menu)
                 if let controller = coordinator.controller { coordinator.installLineMarks(controller) }
+                coordinator.reportAnchor()
             }
         }
         .onChange(of: goToLine) { _, line in go(to: line) }
@@ -303,6 +318,10 @@ struct EditorHost: View {
         .onChange(of: edits) { _, edits in coordinator.apply(edits) }
         .onChange(of: menu) { _, menu in coordinator.open(menu) }
         .onChange(of: lineMarks) { _, marks in coordinator.lineMarkView.marks = marks }
+        .onChange(of: anchorLine) { _, line in
+            coordinator.anchorLine = line
+            coordinator.reportAnchor()
+        }
     }
 
     /// Through the controller, not `state.cursorPositions`: CodeEdit's state diff compares the new positions
@@ -343,6 +362,10 @@ struct EditorHost: View {
         var onLineMarkClick: (Int, CGRect) -> Void = { _, _ in }
         let lineMarkView = LineMarkView()
         var gutterObserver: (any NSObjectProtocol)?
+        var anchorLine: Int?
+        var onAnchor: (CGRect?) -> Void = { _ in }
+        var anchorObserver: (any NSObjectProtocol)?
+        private var lastAnchor: CGRect?
         weak var controller: TextViewController?
 
         /// `prepareCoordinator` runs before the controller loads its view (`scrollView`, implicitly unwrapped, is
@@ -354,6 +377,9 @@ struct EditorHost: View {
                 scrollView.drawsBackground = false
                 scrollView.contentView.drawsBackground = false
                 hover.attach(to: controller.textView, container: controller.view, scrollView: scrollView)
+                self.anchorObserver = NotificationCenter.default.addObserver(
+                    forName: NSView.boundsDidChangeNotification, object: scrollView.contentView, queue: .main
+                ) { [weak self] _ in MainActor.assumeIsolated { self?.reportAnchor() } }
             }
             lineMarkView.onClick = { [weak self] tag, rect in self?.lineMarkClicked(tag, rect) }
         }
@@ -361,6 +387,7 @@ struct EditorHost: View {
         func textViewDidChangeText(controller: TextViewController) {
             hover.dismiss()
             lineMarkView.needsDisplay = true
+            DispatchQueue.main.async { [weak self] in self?.reportAnchor() }
             onEdit()
         }
 
@@ -372,7 +399,7 @@ struct EditorHost: View {
             let emphases = marks.compactMap { mark -> Emphasis? in
                 guard mark.range.location < length else { return nil }
                 let range = NSRange(location: mark.range.location, length: max(1, min(mark.range.length, length - mark.range.location)))
-                return Emphasis(range: range, style: .underline(color: mark.color))
+                return Emphasis(range: range, style: mark.isWash ? .outline(color: mark.color, fill: true) : .underline(color: mark.color))
             }
             if !emphases.isEmpty { manager.addEmphases(emphases, for: "forge.marks") }
         }
@@ -434,6 +461,30 @@ extension EditorHost.Coordinator {
         var end = NSMaxRange(line)
         while end > line.location, [10, 13].contains(text.character(at: end - 1)) { end -= 1 }
         return caretFrame(controller, end)?.maxX
+    }
+}
+
+extension EditorHost.Coordinator {
+    /// Reports where `anchorLine`'s text is, if it changed (nil when there is no such line or it is out of view).
+    func reportAnchor() {
+        var rect: CGRect?
+        if let line = anchorLine, let controller, line >= 1 {
+            let text = controller.textView.textStorage.string as NSString
+            var start = 0
+            var number = 1
+            while number < line, start < text.length {
+                start = NSMaxRange(text.lineRange(for: NSRange(location: start, length: 0)))
+                number += 1
+            }
+            if number == line, start <= text.length, let caret = caretFrame(controller, start) {
+                let end = lineEnd(controller, start) ?? caret.maxX
+                let frame = CGRect(x: caret.minX, y: caret.minY, width: max(1, end - caret.minX), height: caret.height)
+                rect = controller.view.bounds.intersects(frame) ? frame : nil
+            }
+        }
+        guard rect != lastAnchor else { return }
+        lastAnchor = rect
+        onAnchor(rect)
     }
 }
 

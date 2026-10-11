@@ -247,6 +247,42 @@ final class SweepTests: XCTestCase {
         tasking.terminals.add()
         tasking.showTasks()
 
+        // E7 screen 15: an agent rewrote an open file — its changes washed and barred, the review bar, a chip.
+        let view = "Sources/Ainkrad/Features/Sidebar/SidebarFilter.swift"
+        let original = """
+            import SwiftUI
+
+            /// Narrows the sidebar's threads to those matching what is typed.
+            struct SidebarFilter: View {
+                @Binding var query: String
+                @Environment(\\.ainkradSkin) private var skin
+
+                var body: some View {
+                    HStack(spacing: skin.size.s6) {
+                        Image(systemName: "line.3.horizontal.decrease")
+                        TextField("Filter", text: $query)
+                            .textFieldStyle(.plain)
+                    }
+                    .padding(.horizontal, skin.size.s8)
+                    .accessibilityLabel("Filter threads")
+                }
+            }
+
+            """
+        try original.write(to: repo.appendingPathComponent(view), atomically: true, encoding: .utf8)
+        let agenting = try SweepSupport.model(opening: repo)
+        agenting.open(file: view, pinned: true)
+        try SweepSupport.waitUntilLoaded(agenting)
+        var rewritten = original.components(separatedBy: "\n")
+        rewritten[11] = "                .textFieldStyle(.roundedBorder)"
+        rewritten.insert("                .onSubmit { query = query.trimmingCharacters(in: .whitespaces) }", at: 12)
+        rewritten.remove(at: 15)
+        try rewritten.joined(separator: "\n").write(to: repo.appendingPathComponent(view), atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(5)], ofItemAtPath: repo.appendingPathComponent(view).path)
+        Task { await agenting.diskChanged() }
+        SweepSupport.spin(until: 10) { agenting.agent.files[view] != nil }
+        agenting.agent.showingWas = true
+
         // Screen 5: welcome, with recents (the sample repo has a worktree).
         let docs = MemoryDocs()
         let welcomeStore = ForgeStore(documents: docs)
@@ -280,6 +316,7 @@ final class SweepTests: XCTestCase {
                 ("e61-terminal", terminal),
                 ("e62-git", gitting),
                 ("e63-tasks", tasking),
+                ("e71-agent-inline", agenting),
             ]
             for (name, model) in screens {
                 // The sweep window never becomes key, so an inline name field loses focus right after it shows

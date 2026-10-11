@@ -120,6 +120,8 @@ private struct DocumentView: View {
 
     private var issues: [Issue] { model.languages.issues[path] ?? [] }
     private var isFirstPane: Bool { model.panes.firstIndex { $0.active == path } == pane }
+    /// Where the current outside change's first line is, as the editor last reported it.
+    @State private var anchor: CGRect?
 
     var body: some View {
         switch document.state {
@@ -127,11 +129,20 @@ private struct DocumentView: View {
         case .unreadable(let why):
             AinkradEmptyState(icon: "doc.questionmark", title: "Can't show this file", message: why)
         case .ready:
+            let review = model.agent.files[path]
+            let agentMarks = model.agentMarks(path, color: NSColor(theme.accentSecondary))
+            let hunk = model.agent.current[path] ?? 0
+            VStack(spacing: 0) {
+                if let review {
+                    ReviewBar(model: model, path: path, file: review)
+                        .padding(.horizontal, skin.size.s10)
+                        .padding(.bottom, skin.size.s6)
+                }
             CodeEditor(
                 document: document, palette: palette, options: model.editorOptions, goToLine: goToLine,
                 onGoToLineHandled: { model.pendingLine = nil },
                 // The caret moved here — this pane is the one being worked in.
-                onCaret: { model.focus(pane: pane) }, marks: marks,
+                onCaret: { model.focus(pane: pane) }, marks: marks + agentMarks.wash,
                 definitions: { [model, path] offset in await model.definitions(path: path, offset: offset) },
                 onOpenLink: { [model] link in model.open(link) },
                 onHover: { [model, pane, path] hit in Task { await model.hover(pane: pane, path: path, at: hit) } },
@@ -150,8 +161,16 @@ private struct DocumentView: View {
                     document.caretLineEnd = lineEnd
                     model.blameCaret()
                 },
-                lineMarks: model.git.marks(path, status: status),
-                onLineMarkClick: { [model, pane, path] tag, rect in model.peekChange(pane: pane, path: path, hunk: tag, rect: rect) }
+                lineMarks: model.git.marks(path, status: status) + agentMarks.gutter,
+                onLineMarkClick: { [model, pane, path] tag, rect in
+                    if tag >= ForgeModel.agentTagBase {
+                        model.agent.current[path] = tag - ForgeModel.agentTagBase
+                    } else {
+                        model.peekChange(pane: pane, path: path, hunk: tag, rect: rect)
+                    }
+                },
+                anchorLine: review == nil ? nil : model.agent.anchorLine(path, hunk: hunk),
+                onAnchor: { anchor = $0 }
             ) { model.didEdit(path) }
             .overlay {
                 if let hover = model.hover, hover.pane == pane, hover.path == path {
@@ -175,12 +194,23 @@ private struct DocumentView: View {
                         .padding(.top, document.caretRect.minY)
                 }
             }
+            .overlay(alignment: .topLeading) {
+                if review != nil, let anchor {
+                    // At the line's end, but never so far right that the Was card leaves the editor.
+                    GeometryReader { geo in
+                        ChangeChip(model: model, path: path, hunk: hunk)
+                            .padding(.leading, max(0, min(anchor.maxX + skin.size.s28, geo.size.width - skin.size.s420 - skin.size.s16)))
+                            .padding(.top, max(0, anchor.minY - skin.size.s2))
+                    }
+                }
+            }
             .overlay {
                 if let rename = model.rename, rename.pane == pane, rename.path == path {
                     EditorCardLayer(rect: rename.rect, prefersAbove: false, interactive: true) {
                         RenameField(model: model, state: rename)
                     }
                 }
+            }
             }
         }
     }
