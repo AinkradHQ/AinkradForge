@@ -96,7 +96,7 @@ final class ForgeModel {
         self.store = store
         self.apps = apps
         languages.onApplyEdit = { [weak self] changes in self?.apply(changes) ?? false }
-        tasks.follow(terminals)
+        tasks.follow(terminals, model: self)
     }
 
     /// Opens what another app asked for (`launch`: a folder, or a file — its folder, with the file in a tab);

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 
@@ -47,9 +48,10 @@ final class TaskRunner {
     }
 
     /// Hears from the drawer when a terminal's process ends or its tab closes.
-    func follow(_ drawer: TerminalDrawer) {
+    func follow(_ drawer: TerminalDrawer, model: ForgeModel) {
         drawer.onEnded = { [weak self] tab, code in self?.ended(tab: tab, exitCode: code) }
         drawer.onClosed = { [weak self] tab in self?.tabClosed(tab) }
+        drawer.onOpenLink = { [weak model] link in model?.openTerminalLink(link) }
     }
 
     /// A terminal's process ended: if it was a task's, keep how it went.
@@ -75,6 +77,22 @@ extension ForgeModel {
     /// ⇧⌥⌘R: the last task again (from the list when none has run yet).
     func rerunLastTask() {
         if let last = tasks.last { runTask(last) } else { palette = "!" }
+    }
+
+    /// ⌘-click in a terminal: a workspace file opens in the editor at its line; anything else opens as the
+    /// system would.
+    func openTerminalLink(_ link: String) {
+        guard let parsed = TerminalLink.parse(link), let root = workspace?.root else { return }
+        switch parsed {
+        case .url(let url): NSWorkspace.shared.open(url)
+        case .file(let path, let line):
+            let absolute = path.hasPrefix("/") ? URL(fileURLWithPath: path) : root.appending(path: path)
+            let base = root.standardizedFileURL.path + "/"
+            let full = absolute.standardizedFileURL.path
+            guard full.hasPrefix(base) else { return NSWorkspace.shared.activateFileViewerSelecting([absolute]) }
+            open(file: String(full.dropFirst(base.count)), pinned: true)
+            if let line { pendingLine = line }
+        }
     }
 
     /// The drawer's Tasks tab.

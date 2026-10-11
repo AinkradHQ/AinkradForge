@@ -59,7 +59,7 @@ final class TerminalDrawerTests: XCTestCase {
     func testATaskRunKeepsItsResult() throws {
         let drawer = TerminalDrawer()
         let runner = TaskRunner()
-        runner.follow(drawer)
+        runner.follow(drawer, model: ForgeModel(store: ForgeStore(documents: MemoryDocs())))
         drawer.begin(root: URL(fileURLWithPath: NSTemporaryDirectory()))
         let task = WorkspaceTask(group: "Makefile", name: "fail", shows: "make fail", command: "exit 2")
         runner.run(task, in: drawer)
