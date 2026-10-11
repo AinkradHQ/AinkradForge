@@ -1,3 +1,4 @@
+import AppKit
 import AinkradAppKit
 import SwiftUI
 
@@ -75,10 +76,6 @@ struct BlameView: View {
                 .italic()
                 .foregroundStyle(skin.color(skin.text.faint))
                 .lineLimit(1)
-                .onHover { hovering in
-                    isHovered = hovering
-                    if hovering, let workspace = model.workspace { model.git.loadCard(git: Git(directory: workspace.root)) }
-                }
             if isHovered, let card = note.card {
                 VStack(alignment: .leading, spacing: skin.size.s4) {
                     HStack {
@@ -90,11 +87,28 @@ struct BlameView: View {
                     Text("\(card.hash) · \(card.stat)")
                         .font(skin.font(AinkradFontToken(sizeKey: "t10", mono: "system")))
                         .foregroundStyle(skin.color(skin.text.faint))
+                    HStack(spacing: skin.size.s8) {
+                        AinkradButton(title: "Open in Git Mage", style: .secondary) {
+                            model.openGitMage(sha: note.blame.hash, title: card.subject)
+                        }
+                        .fixedSize()
+                        AinkradButton(title: "Copy Hash", style: .ghost) {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(note.blame.hash, forType: .string)
+                        }
+                        .fixedSize()
+                    }
+                    .padding(.top, skin.size.s4)
                 }
                 .padding(skin.size.s10)
                 .frame(width: skin.size.s360, alignment: .leading)
                 .ainkradPanel()
             }
+        }
+        // The note and its card together: the pointer can move from one to the other's buttons.
+        .onHover { hovering in
+            isHovered = hovering
+            if hovering, let workspace = model.workspace { model.git.loadCard(git: Git(directory: workspace.root)) }
         }
     }
 

@@ -59,10 +59,23 @@ extension ForgeModel {
         }
     }
 
-    /// Opens Git Mage (it does not take a repository or commit to show yet).
-    func openGitMage() {
+    /// Opens Git Mage on this repository — on `sha` in its History, or its Changes.
+    func openGitMage(sha: String? = nil, title: String? = nil) {
         git.peek = nil
-        apps?.open(appID: Self.gitMageAppID, payload: nil)
+        guard let apps, let workspace else { return }
+        Task {
+            let top = (try? await Git(directory: workspace.root).run(["rev-parse", "--show-toplevel"]))?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? workspace.root.path(percentEncoded: false)
+            apps.open(appID: Self.gitMageAppID, payload: Self.gitMagePayload(repository: top, sha: sha, title: title))
+        }
+    }
+
+    /// What Git Mage reads (its `ShowLaunch`).
+    static func gitMagePayload(repository: String, sha: String?, title: String?) -> String? {
+        var body = ["kind": "showInGitMage", "path": repository]
+        body["sha"] = sha
+        body["title"] = title
+        return (try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])).map { String(decoding: $0, as: UTF8.self) }
     }
 
     static let gitMageAppID = "gitmage"
