@@ -48,3 +48,15 @@ struct GitLinesTests {
         #expect(try await git.run(["show", ":a.txt"]) == text)
     }
 }
+
+@MainActor
+@Suite("Open in Git Mage")
+struct GitMagePayloadTests {
+    @Test func theRepositoryAndTheCommitGoAsGitMageReadsThem() throws {
+        let payload = try #require(ForgeModel.gitMagePayload(repository: "/r", sha: "a41c9e2f", title: "feat: x"))
+        let body = try #require(try JSONSerialization.jsonObject(with: Data(payload.utf8)) as? [String: String])
+        #expect(body == ["kind": "showInGitMage", "path": "/r", "sha": "a41c9e2f", "title": "feat: x"])
+        let bare = try #require(ForgeModel.gitMagePayload(repository: "/r", sha: nil, title: nil))
+        #expect(try JSONSerialization.jsonObject(with: Data(bare.utf8)) as? [String: String] == ["kind": "showInGitMage", "path": "/r"])
+    }
+}
