@@ -18,7 +18,7 @@ public struct ForgeApp: AinkradApp, AinkradAppTeardown {
 
     private static func model(host: HostServices) -> ForgeModel {
         let instance = (host as? PluginInstanceIdentity)?.instanceID ?? fallbackInstance
-        return models.value(for: instance) { ForgeModel(store: ForgeStore(documents: host.documents)) }
+        return models.value(for: instance) { ForgeModel(store: ForgeStore(documents: host.documents), apps: host.apps) }
     }
 
     public static func teardown(instance: PluginInstanceID) {

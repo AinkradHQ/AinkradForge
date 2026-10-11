@@ -22,7 +22,10 @@ struct RootView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.tokens.background)
         .foregroundStyle(theme.tokens.foreground)
-        .background { Shortcuts(model: model) }
+        .background { ShortcutLayer(model: model) }
+        .overlay {
+            if let start = model.palette { Palette(model: model, start: start) }
+        }
         .ainkradModal(
             isPresented: Binding(get: { model.pendingClose != nil }, set: { if !$0 { model.resolvePendingClose(save: nil) } }),
             contentWidth: UnsavedDialog.width
@@ -41,7 +44,7 @@ struct RootView: View {
                 message: "\(model.unsavedPaths.count) file(s) have unsaved changes: \(model.unsavedPaths.joined(separator: ", "))",
                 saveTitle: "Save All", resolve: model.resolvePendingLeave(saveAll:))
         }
-        .background { SaveErrorToaster(model: model) }
+        .background { NoticeToaster(model: model) }
         .ainkradToastHost()
         .ainkradHostTheme(theme)
         .task { await model.start(launch: takeLaunch()) }
@@ -77,33 +80,34 @@ private struct UnsavedDialog: View {
     }
 }
 
-/// Shows a failed save as a toast. A child view, because the toast centre lives inside `ainkradToastHost()`.
-private struct SaveErrorToaster: View {
+/// Shows `model.notice` (a failed save, an app that would not open) as a toast. A child view, because the toast centre lives inside `ainkradToastHost()`.
+private struct NoticeToaster: View {
     let model: ForgeModel
     @Environment(\.ainkradToastCenter) private var toasts
 
     var body: some View {
-        Color.clear.onChange(of: model.saveError) { _, error in
+        Color.clear.onChange(of: model.notice) { _, error in
             guard let error else { return }
             toasts.show(error, status: .danger, duration: 6)
-            model.saveError = nil
+            model.notice = nil
         }
     }
 }
 
-/// Window-level keys. Hidden buttons, so the chords work wherever focus is inside the window.
-private struct Shortcuts: View {
+/// Binds every `ForgeCommand` with a shortcut. Zero-sized key-equivalent claims, not controls — SwiftUI has no
+/// other way without a menu bar. Only available commands are mounted: a mounted chord is claimed even when
+/// it would do nothing, and would take the key from the editor.
+private struct ShortcutLayer: View {
     let model: ForgeModel
 
     var body: some View {
-        // Zero-sized key-equivalent claims, not controls (SwiftUI has no other way without a menu bar).
-        // ponytail: three fixed chords; becomes a command list shared with the palette in slice B.
         ZStack {
-            Button("Save") { model.saveActive() }.keyboardShortcut("s")  // design-lint: allow raw-control key-equivalent claim
-            Button("Close Tab") { if let path = model.tabs.active { model.close(path) } }  // design-lint: allow raw-control key-equivalent claim
-                .keyboardShortcut("w")
-            Button("Open Folder") { if let url = FolderPicker.choose() { model.request(.open(url)) } }  // design-lint: allow raw-control key-equivalent claim
-                .keyboardShortcut("o")
+            ForEach(model.availableCommands.filter { $0.shortcut != nil }) { command in
+                if let shortcut = command.shortcut {
+                    Button(command.title) { model.run(command) }  // design-lint: allow raw-control key-equivalent claim
+                        .keyboardShortcut(KeyEquivalent(shortcut.key), modifiers: shortcut.modifiers)
+                }
+            }
         }
         .opacity(0)
         .frame(width: 0, height: 0)

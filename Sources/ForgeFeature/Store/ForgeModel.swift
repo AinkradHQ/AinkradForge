@@ -12,13 +12,21 @@ final class ForgeModel {
     }
 
     let store: ForgeStore
+    /// Opens other Ainkrad apps (Rune for a terminal). `nil` in tests.
+    let apps: PluginAppLauncher?
     private(set) var workspace: Workspace?
+    /// The palette, open with this starting text: "" = files, ">" = commands, ":" = go to line.
+    var palette: String?
+    /// A line for the active editor to jump to, consumed by the editor.
+    var pendingLine: Int?
+    /// Newest first, for ⌘P.
+    private(set) var recentFiles: [String] = []
+    /// Shown as a toast: a failed save, or an app that would not open.
+    var notice: String?
     var sideTab: SideTab = .files
     private(set) var tabs = Tabs()
     private(set) var expanded: Set<String> = []
     private(set) var documents: [String: EditorDocument] = [:]
-    /// Set when saving fails, for the toast.
-    var saveError: String?
     /// A dirty tab the user asked to close: the window asks Save / Don't Save / Cancel.
     var pendingClose: String?
     /// Leaving the workspace (open another, or close it) while files are unsaved: the window asks first.
@@ -31,13 +39,16 @@ final class ForgeModel {
 
     var unsavedPaths: [String] { tabs.paths.filter { documents[$0]?.isDirty == true } }
 
-    init(store: ForgeStore) {
+    init(store: ForgeStore, apps: PluginAppLauncher? = nil) {
         self.store = store
+        self.apps = apps
     }
 
     /// Opens what another app asked for (`launch`: a folder, or a file — its folder, with the file in a tab);
     /// otherwise reopens the last workspace, if its folder still exists.
     func start(launch: String? = nil) async {
+        // Other apps send an `AinkradLaunchIntent` (openDocument / openDirectory); a bare path works too.
+        let launch = launch.flatMap { AinkradLaunchIntent.decode($0)?.path ?? $0 }
         var isFolder: ObjCBool = false
         if let launch, FileManager.default.fileExists(atPath: launch, isDirectory: &isFolder) {
             let url = URL(fileURLWithPath: launch)
@@ -77,7 +88,7 @@ final class ForgeModel {
         case true?:
             for path in unsavedPaths {
                 do { try documents[path]?.save() } catch {
-                    saveError = "Could not save \(path): \(error.localizedDescription)"
+                    notice = "Could not save \(path): \(error.localizedDescription)"
                     return
                 }
             }
@@ -102,6 +113,7 @@ final class ForgeModel {
         let saved = store.document.workspaces[key] ?? .init()
         tabs = saved.tabs
         expanded = saved.expanded
+        recentFiles = saved.recentFiles ?? []
         store.noteOpened(key)
         await workspace.refresh()
         // Tabs whose files are gone since last time are dropped.
@@ -128,6 +140,9 @@ final class ForgeModel {
     func open(file path: String, pinned: Bool) {
         let replaced = tabs.preview
         tabs.open(path, pinned: pinned)
+        recentFiles.removeAll { $0 == path }
+        recentFiles.insert(path, at: 0)
+        recentFiles = Array(recentFiles.prefix(30))
         if let replaced, !tabs.paths.contains(replaced) { documents[replaced] = nil }
         loadActive()
         persist()
@@ -165,7 +180,7 @@ final class ForgeModel {
                 discard(path)
                 Task { await workspace?.refresh() }
             } catch {
-                saveError = "Could not save \(path): \(error.localizedDescription)"
+                notice = "Could not save \(path): \(error.localizedDescription)"
             }
         case false?: discard(path)
         case nil: break
@@ -198,7 +213,7 @@ final class ForgeModel {
             try document.save()
             Task { await workspace?.refresh() }
         } catch {
-            saveError = "Could not save \(path): \(error.localizedDescription)"
+            notice = "Could not save \(path): \(error.localizedDescription)"
         }
     }
 
@@ -221,7 +236,7 @@ final class ForgeModel {
 
     private func persist() {
         guard let key = workspace?.root.path(percentEncoded: false) else { return }
-        let state = ForgeDocument.WorkspaceState(tabs: tabs, expanded: expanded)
+        let state = ForgeDocument.WorkspaceState(tabs: tabs, expanded: expanded, recentFiles: recentFiles)
         store.update { $0.workspaces[key] = state }
     }
 }

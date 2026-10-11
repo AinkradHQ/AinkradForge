@@ -48,6 +48,19 @@ final class SweepTests: XCTestCase {
         closing.didEdit("Sources/Ainkrad/Features/Sidebar/SidebarRow.swift")
         closing.close("Sources/Ainkrad/Features/Sidebar/SidebarRow.swift")
 
+        // Screens 2 and 3: quick open and the command palette over the window.
+        let quick = try SweepSupport.model(opening: repo)
+        for folder in ["Sources", "Sources/Ainkrad", "Sources/Ainkrad/Features", "Sources/Ainkrad/Features/Sidebar"] {
+            quick.toggle(folder: folder)
+        }
+        quick.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift", pinned: true)
+        try SweepSupport.waitUntilLoaded(quick)
+        quick.palette = "sbrow"
+        let commands = try SweepSupport.model(opening: repo)
+        commands.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift", pinned: true)
+        try SweepSupport.waitUntilLoaded(commands)
+        commands.palette = ">"
+
         // Screen 5: welcome, with recents (the sample repo has a worktree).
         let docs = MemoryDocs()
         let welcomeStore = ForgeStore(documents: docs)
@@ -65,6 +78,7 @@ final class SweepTests: XCTestCase {
             hostTheme.updateTerminalPalette(HostTerminalPalette(skin.terminal))
             let screens: [(String, ForgeModel)] = [
                 ("e21-window", window), ("e21-changes", changes), ("e21-unsaved", closing), ("e22-welcome", welcome),
+                ("e24-quick-open", quick), ("e24-command-palette", commands),
             ]
             for (name, model) in screens {
                 try LiveCapture.shoot(
