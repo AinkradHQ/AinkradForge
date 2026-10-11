@@ -173,8 +173,8 @@ struct OutsideChangesButton: View {
     }
 }
 
-/// ⌘I's card at the selection: what goes with the request, and what to do. Ask (⌘↵) copies it and opens
-/// Grimoire — the card says so, until Grimoire can take a request from another app.
+/// ⌘I's card at the selection: what goes with the request, and what to do. Ask (⌘↵) opens a new Grimoire
+/// thread with it.
 struct AskAgentCard: View {
     let model: ForgeModel
     let request: AskRequest
@@ -198,7 +198,7 @@ struct AskAgentCard: View {
                         .foregroundStyle(skin.color(skin.text.muted))
                 },
                 trailing: { EmptyView() })
-            Text("Ask copies the request and opens Grimoire — paste it into the thread.")
+            Text("Ask opens a new Grimoire thread with this — you choose the agent and start it.")
                 .font(skin.font(AinkradFontToken(sizeKey: "t10")))
                 .foregroundStyle(skin.color(skin.text.faint))
         }
