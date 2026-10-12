@@ -90,6 +90,24 @@ final class ForgeStore {
         }
     }
 
+    /// Unsaved buffers kept across a quit (hot exit): workspace root → path → text. Its own key, so the
+    /// main state never carries file contents.
+    static let unsavedKey = "forge.unsaved"
+
+    func unsaved(in workspace: String) -> [String: String] {
+        guard let data = documents.data(forKey: Self.unsavedKey),
+            let all = try? JSONDecoder().decode([String: [String: String]].self, from: data)
+        else { return [:] }
+        return all[workspace] ?? [:]
+    }
+
+    func setUnsaved(_ buffers: [String: String], in workspace: String) {
+        var all = documents.data(forKey: Self.unsavedKey)
+            .flatMap { try? JSONDecoder().decode([String: [String: String]].self, from: $0) } ?? [:]
+        all[workspace] = buffers.isEmpty ? nil : buffers
+        documents.setData(all.isEmpty ? nil : try? JSONEncoder().encode(all), forKey: Self.unsavedKey)
+    }
+
     /// Moves `path` to the top of the recents and makes it the workspace to reopen.
     func noteOpened(_ path: String, at date: Date = Date()) {
         update { doc in
