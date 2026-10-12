@@ -35,7 +35,7 @@ struct NameField: View {
         .padding(.trailing, skin.size.s8)
         .onAppear {
             name = initial
-            focused = true
+            DispatchQueue.main.async { focused = true }  // see Palette's onAppear
         }
         .onChange(of: focused) { _, isFocused in
             if isFocused { hadFocus = true; return }

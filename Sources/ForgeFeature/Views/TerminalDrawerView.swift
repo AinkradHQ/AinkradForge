@@ -158,7 +158,8 @@ private struct TerminalHost: NSViewRepresentable {
         container.terminal = view
         if context.coordinator.focusRequest != focusRequest {
             context.coordinator.focusRequest = focusRequest
-            DispatchQueue.main.async { [view] in view.window?.makeFirstResponder(view) }
+            container.focusPending = true
+            DispatchQueue.main.async { container.focusIfReady() }
         }
     }
 
@@ -176,6 +177,16 @@ final class TerminalContainer: NSView {
             if oldValue !== terminal, oldValue?.superview === self { oldValue?.removeFromSuperview() }
             fit()
         }
+    }
+
+    /// A focus request that came before the terminal was in the window (a new one attaches a turn later, once
+    /// it has a usable size) — honoured on attach, or the drawer opens without the keyboard (E0 FD10).
+    var focusPending = false
+
+    func focusIfReady() {
+        guard focusPending, let terminal, terminal.superview === self, let window else { return }
+        focusPending = false
+        window.makeFirstResponder(terminal)
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -202,5 +213,6 @@ final class TerminalContainer: NSView {
         terminal.frame = bounds
         // SwiftTerm repaints only what changed; back on screen, it paints all of itself once.
         terminal.needsDisplay = true
+        focusIfReady()
     }
 }

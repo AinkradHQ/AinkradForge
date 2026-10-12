@@ -25,7 +25,7 @@ struct RenameField: View {
                 .foregroundStyle(skin.color(skin.text.muted))
         }
         .frame(width: skin.size.s400)
-        .onAppear { focused = true }
+        .onAppear { DispatchQueue.main.async { focused = true } }  // see Palette's onAppear (E0 FD16)
     }
 
     private var hint: String {
