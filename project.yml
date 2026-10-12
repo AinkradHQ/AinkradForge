@@ -24,7 +24,8 @@ packages:
     # host's pin exactly: the settings-catalog merge, which is what
     # `settingsCatalog(host:)` in Sources/ForgeFeature/PluginApp.swift needs.
     # bdf3b0d: kit chat pieces (diff review, composer), = host 0.31.0's pin.
-    revision: bdf3b0d8d235cf792ca4c2a986801162aee3e4fb
+    # 41cd9d9: markdown pipe tables and block quotes in AinkradMarkdownText (#111).
+    revision: 41cd9d9443e89bda6a08e0400a4a8d1377df3308
   # The editor engine (CodeEdit forks) behind Forge's own API — see its Package.swift
   # for why it is a local package. Statically linked into the bundle.
   ForgeEditor:
