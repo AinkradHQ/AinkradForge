@@ -1,4 +1,5 @@
 import AinkradAppKit
+import AppKit
 import ForgeEditor
 import ForgeLanguage
 import Foundation
@@ -97,6 +98,10 @@ final class ForgeModel {
         self.apps = apps
         languages.onApplyEdit = { [weak self] changes in self?.apply(changes) ?? false }
         tasks.follow(terminals, model: self)
+        // The host's quit prompt knows nothing of an app's unsaved files: keep them for the next launch instead.
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) {
+            [weak self] _ in MainActor.assumeIsolated { self?.backupUnsaved() }
+        }
     }
 
     /// Opens what another app asked for (`launch`: a folder, or a file — its folder, with the file in a tab);
@@ -284,6 +289,7 @@ final class ForgeModel {
             Task {
                 await document.load()
                 if document.state == .ready {
+                    restoreUnsaved(path, into: document)
                     languages.opened(path: path, text: document.storage.string)
                     loaded(path)
                 }
@@ -323,14 +329,6 @@ final class ForgeModel {
     func toggle(folder path: String) {
         if expanded.contains(path) { expanded.remove(path) } else { expanded.insert(path) }
         persist()
-    }
-
-    func persist() {
-        guard let key = workspace?.root.path(percentEncoded: false) else { return }
-        let state = ForgeDocument.WorkspaceState(
-            tabs: panes[0], expanded: expanded, recentFiles: recentFiles, panes: panes, activePane: activePane,
-            stacked: stacked)
-        store.update { $0.workspaces[key] = state }
     }
 }
 
