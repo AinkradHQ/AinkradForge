@@ -42,6 +42,23 @@ final class TerminalDrawerTests: XCTestCase {
         XCTAssertFalse(drawer.isBusy(id))
     }
 
+    /// FD26: leaving the workspace asks first while a task runs; with nothing running it goes straight on.
+    func testLeavingAsksWhileATaskRuns() throws {
+        let drawer = TerminalDrawer()
+        drawer.begin(root: URL(fileURLWithPath: NSTemporaryDirectory()))
+        var left = 0
+        drawer.confirmLeaving { left += 1 }
+        XCTAssertEqual(left, 1, "no terminals: leave at once")
+        let id = try XCTUnwrap(drawer.add(command: "sleep 30", title: "dev server"))
+        drawer.confirmLeaving { left += 1 }
+        XCTAssertEqual(left, 1)
+        XCTAssertEqual(drawer.confirmingLeave?.busy, ["sleep 30"])
+        drawer.confirmingLeave = nil
+        drawer.close(id)
+        drawer.confirmLeaving { left += 1 }
+        XCTAssertEqual(left, 2)
+    }
+
     func testAShellThatExitsClosesItsTabAndTheLastOneHidesTheDrawer() throws {
         let drawer = TerminalDrawer()
         drawer.begin(root: URL(fileURLWithPath: NSTemporaryDirectory()))

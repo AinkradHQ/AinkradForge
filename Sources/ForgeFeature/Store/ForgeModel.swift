@@ -159,9 +159,11 @@ final class ForgeModel {
     }
 
     private func perform(_ leave: Leave) {
-        switch leave {
-        case .open(let url): Task { await open(folder: url) }
-        case .close: closeWorkspace()
+        terminals.confirmLeaving { [weak self] in
+            switch leave {
+            case .open(let url): Task { await self?.open(folder: url) }
+            case .close: self?.closeWorkspace()
+            }
         }
     }
 

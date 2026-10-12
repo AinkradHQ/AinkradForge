@@ -29,6 +29,9 @@ final class TerminalDrawer {
     var active: Int?
     /// A busy terminal the user asked to close; the window confirms first.
     var confirmingClose: Int?
+    /// Leaving the workspace while something runs in a terminal: the window names what runs (as it was when
+    /// asked), confirms, then runs `leave`.
+    var confirmingLeave: (busy: [String], leave: () -> Void)?
     /// Bumped to move the keyboard into the active terminal.
     private(set) var focusRequest = 0
     @ObservationIgnored private var views: [Int: ForgeTerminalView] = [:]
@@ -150,6 +153,15 @@ final class TerminalDrawer {
     }
 
     /// Something still runs: a task that has not ended, or a shell with a child process.
+    /// Runs `leave` (which ends every terminal), after asking when something still runs in one.
+    func confirmLeaving(_ leave: @escaping () -> Void) {
+        let busy = busyTitles
+        if busy.isEmpty { leave() } else { confirmingLeave = (busy, leave) }
+    }
+
+    /// The tabs something still runs in: a task, or a shell with a child (a dev server, a build).
+    var busyTitles: [String] { tabs.filter { isBusy($0.id) }.map { $0.command ?? $0.title } }
+
     func isBusy(_ id: Int) -> Bool {
         guard let tab = tabs.first(where: { $0.id == id }), !tab.ended else { return false }
         if tab.command != nil { return true }
