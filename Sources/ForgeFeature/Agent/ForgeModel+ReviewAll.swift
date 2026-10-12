@@ -35,8 +35,15 @@ extension ForgeModel {
             // No baseline: new if the tree did not have it (and shows it now — not an ignored file); else there is
             // nothing to compare with.
             if baseline == nil, current != nil, known.contains(path) || !workspace.files.contains(path) { continue }
+            if baseline == nil, Self.inHiddenFolder(path) { continue }
             agent.outside(path, baseline: baseline, current: current)
         }
+    }
+
+    /// Under a dot-folder (`.build/`, `.swiftpm/`, `.next/`): an untracked file there is tool output — a language
+    /// server's index, a build — not an agent's edit, even in a repo whose `.gitignore` forgot it (E0 FD7).
+    nonisolated static func inHiddenFolder(_ path: String) -> Bool {
+        path.split(separator: "/").dropLast().contains { $0.hasPrefix(".") }
     }
 
     /// Every file in review with its diff (baseline → now), sorted by path.

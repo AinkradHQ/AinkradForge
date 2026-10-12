@@ -92,7 +92,10 @@ extension ForgeModel {
     /// The characters after which `path`'s server offers completions and signature help.
     func triggers(for path: String) -> (completion: Set<String>, signature: Set<String>) {
         guard let (spec, _) = LanguageRegistry.server(for: path) else { return ([], []) }
-        return (languages.completionTriggers[spec.id] ?? [], languages.signatureTriggers[spec.id] ?? [])
+        let signature = languages.signatureTriggers[spec.id] ?? []
+        // A character that opens signature help doesn't also ask for completions: sourcekit-lsp lists "(" for both,
+        // and a completion at "(" after one at "." crashes it — taking signature help down with it (E0 FD15).
+        return ((languages.completionTriggers[spec.id] ?? []).subtracting(signature), signature)
     }
 
     private static func kind(_ kind: Completion.Kind) -> EditorSuggestion.Kind {

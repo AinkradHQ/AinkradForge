@@ -124,6 +124,11 @@ extension EditorHost.Coordinator: @preconcurrency CodeSuggestionDelegate {
         let text = textView.textView.textStorage.string as NSString
         var start = min(caret, text.length)
         while start > 0, isWordUnit(text.character(at: start - 1)) { start -= 1 }
+        // Only inside a word or right after a trigger: whatever path asked, a completion at "(" (a signature
+        // trigger, not ours) crashes sourcekit-lsp after one at "." (E0 FD15).
+        if start == caret, caret > 0, !suggestionTriggers.contains(text.substring(with: NSRange(location: caret - 1, length: 1))) {
+            return nil
+        }
         let found = await suggest(caret)
         offered = found
         wordStart = start

@@ -50,6 +50,34 @@ struct ReviewAllTests {
         #expect(model.agent.count == 0)
     }
 
+    /// sourcekit-lsp writes its index under `.build/`; in a repo whose `.gitignore` forgot it, those files are
+    /// untracked and listed — they must not land in the review as agent edits (E0 FD7).
+    @Test func untrackedFilesInDotFoldersAreNotOutsideChanges() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("forge-review-\(UUID().uuidString.prefix(8))")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try lines.write(to: root.appending(path: "A.txt"), atomically: true, encoding: .utf8)
+        for args in [["init", "-q"], ["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init"]] {
+            let git = Process()
+            git.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+            git.arguments = args
+            git.currentDirectoryURL = root
+            try git.run()
+            git.waitUntilExit()
+        }
+        let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
+        await model.start(launch: root.path)
+
+        let index = root.appending(path: ".build/index/store/v5/units/main.o")
+        try FileManager.default.createDirectory(at: index.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "unit\n".write(to: index, atomically: true, encoding: .utf8)
+        try "brand new\n".write(to: root.appending(path: "D.txt"), atomically: true, encoding: .utf8)
+        await model.diskChanged(paths: [index.path, root.appending(path: "D.txt").path])
+
+        #expect(Set(model.agent.others.keys) == ["D.txt"])
+        #expect(ForgeModel.inHiddenFolder(".build/x.o") && !ForgeModel.inHiddenFolder(".gitignore"))
+    }
+
     @Test func forgesOwnWritesAreNotOutsideChanges() async throws {
         let (model, root) = try await workspace(["A.txt": lines])
         defer { try? FileManager.default.removeItem(at: root) }

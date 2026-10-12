@@ -207,7 +207,9 @@ final class TerminalDrawer {
 
     /// The theme's terminal colours (the ones Rune uses), on a clear background so the drawer's surface shows.
     static func apply(_ palette: HostTerminalPalette?, foreground: NSColor?, to view: ForgeTerminalView) {
-        view.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        // Rune's default font, when installed: a Nerd Font, so powerline / p10k prompt glyphs draw instead of "?" (E0 FD11).
+        // ponytail: fixed family, follow Rune's font setting if Forge grows terminal settings of its own.
+        view.font = NSFont(name: "MesloLGS NF", size: 12) ?? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         // Layer-backed with a clear layer, as Rune does: otherwise the view paints an opaque backdrop.
         view.wantsLayer = true
         view.layer?.isOpaque = false
