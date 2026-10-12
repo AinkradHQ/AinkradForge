@@ -315,7 +315,7 @@ actor LanguageSession {
             completion: CompletionClientCapabilities(
                 dynamicRegistration: false,
                 completionItem: CompletionClientCapabilities.CompletionItem(
-                    snippetSupport: false, documentationFormat: [.markdown, .plaintext], deprecatedSupport: true)),
+                    snippetSupport: true, documentationFormat: [.markdown, .plaintext], deprecatedSupport: true)),
             hover: HoverClientCapabilities(dynamicRegistration: false, contentFormat: [.markdown, .plaintext]),
             signatureHelp: SignatureHelpClientCapabilities(
                 dynamicRegistration: false,

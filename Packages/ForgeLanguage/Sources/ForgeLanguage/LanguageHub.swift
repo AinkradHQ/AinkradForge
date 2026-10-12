@@ -171,9 +171,10 @@ public final class LanguageHub {
         case nil: break
         }
         let raw = newText ?? item.insertText ?? item.label
+        let (insert, selection) = item.insertTextFormat == .snippet ? Snippet.parse(raw) : (raw, nil)
         return Completion(
             label: item.label, kind: kind(item.kind), detail: item.detail, documentation: item.documentation.map(text),
-            insertText: item.insertTextFormat == .snippet ? Snippet.plain(raw) : raw,
+            insertText: insert, selection: selection,
             filterText: item.filterText ?? item.label, sortText: item.sortText ?? item.label, replaceStart: start,
             deprecated: item.deprecated == true)
     }
