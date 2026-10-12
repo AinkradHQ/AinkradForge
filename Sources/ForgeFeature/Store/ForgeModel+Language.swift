@@ -71,7 +71,7 @@ extension ForgeModel {
                 label: item.label, kind: Self.kind(item.kind), detail: item.detail, documentation: item.documentation,
                 insertText: item.insertText, filterText: item.filterText,
                 replaceStart: item.replaceStart.map { index.offset(line: $0.line, character: $0.character) },
-                deprecated: item.deprecated)
+                deprecated: item.deprecated, selection: item.selection)
         }
     }
 

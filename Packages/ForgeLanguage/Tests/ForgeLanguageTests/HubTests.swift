@@ -98,6 +98,9 @@ struct HubTests {
         #expect(bump.kind == .function)
         #expect(bump.insertText.hasPrefix("bump("))
         #expect(!bump.insertText.contains("${"))
+        // FD4: the real server's snippet puts the caret on the first argument, not after ")".
+        let first = try #require(bump.selection)
+        #expect((bump.insertText as NSString).substring(with: first) == "Int")
 
         // Line 1: `let a = bump(1, ` — the caret on the second argument.
         hub.changed(path: "main.swift") { original + "let a = bump(1, " }
@@ -156,6 +159,21 @@ struct HubTests {
         #expect(Snippet.plain("start(at: ${1:date})$0") == "start(at: date)")
         #expect(Snippet.plain("bump(${1:n}, by: ${2:step})") == "bump(n, by: step)")
         #expect(Snippet.plain("cost: \\$${1:price}") == "cost: $price")
+    }
+
+    /// FD4: the caret lands on the first placeholder, not after the closing bracket.
+    @Test func snippetsPutTheCaretOnTheFirstPlaceholder() {
+        let call = Snippet.parse("greet(times: ${1:Int})")
+        #expect(call.text == "greet(times: Int)")
+        #expect(call.selection == NSRange(location: 13, length: 3))
+        #expect(Snippet.parse("run(${2:b}, ${1:a})$0").selection == NSRange(location: 7, length: 1))
+        #expect(Snippet.parse("f($0)").selection == NSRange(location: 2, length: 0))
+        #expect(Snippet.parse("done").selection == nil)
+        #expect(Snippet.parse("${1|let,var|} ${2:x}").text == "let x")
+        #expect(Snippet.parse("${1|let,var|} ${2:x}").selection == NSRange(location: 0, length: 3))
+        #expect(Snippet.parse("é(${1:outer ${2:inner}})").text == "é(outer inner)")
+        #expect(Snippet.parse("é(${1:outer ${2:inner}})").selection == NSRange(location: 2, length: 11))
+        #expect(Snippet.plain("${TM_FILENAME:file}.swift") == "file.swift")
     }
 
     /// A path set in settings takes over at once: the running server stops and the next open uses the new place.

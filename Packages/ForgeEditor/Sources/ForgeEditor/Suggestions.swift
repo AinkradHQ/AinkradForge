@@ -14,6 +14,9 @@ public struct EditorSuggestion: Sendable {
     public let detail: String?
     public let documentation: String?
     public let insertText: String
+    /// What to select in `insertText` once written (UTF-16): a snippet's first placeholder; nil leaves the caret
+    /// after it.
+    public let selection: NSRange?
     public let filterText: String
     /// The UTF-16 offset the replaced text starts at, when the server says; else the word before the caret.
     public let replaceStart: Int?
@@ -21,13 +24,14 @@ public struct EditorSuggestion: Sendable {
 
     public init(
         label: String, kind: Kind, detail: String?, documentation: String?, insertText: String, filterText: String,
-        replaceStart: Int?, deprecated: Bool
+        replaceStart: Int?, deprecated: Bool, selection: NSRange? = nil
     ) {
         self.label = label
         self.kind = kind
         self.detail = detail
         self.documentation = documentation
         self.insertText = insertText
+        self.selection = selection
         self.filterText = filterText
         self.replaceStart = replaceStart
         self.deprecated = deprecated
@@ -154,6 +158,9 @@ extension EditorHost.Coordinator: @preconcurrency CodeSuggestionDelegate {
         else { return }
         let start = min(entry.suggestion.replaceStart ?? wordStart, caret)
         textView.textView.replaceCharacters(in: NSRange(location: start, length: caret - start), with: entry.suggestion.insertText)
+        if let selection = entry.suggestion.selection {
+            textView.textView.selectionManager.setSelectedRange(NSRange(location: start + selection.location, length: selection.length))
+        }
     }
 
     func completionWindowDidClose() { offered = [] }
