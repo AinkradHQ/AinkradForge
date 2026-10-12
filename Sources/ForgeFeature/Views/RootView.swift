@@ -57,6 +57,17 @@ struct RootView: View {
             message: "Something is still running in it. Closing the terminal stops it.",
             confirmTitle: "End Terminal"
         ) { if let id = model.terminals.confirmingClose { model.terminals.close(id) } }
+        .ainkradConfirmDialog(
+            isPresented: Binding(
+                get: { model.terminals.confirmingLeave != nil }, set: { if !$0 { model.terminals.confirmingLeave = nil } }),
+            title: "End running terminals?",
+            message: "Still running: \(model.terminals.confirmingLeave?.busy.joined(separator: ", ") ?? ""). Leaving the workspace stops them.",
+            confirmTitle: "End and Leave"
+        ) {
+            let leave = model.terminals.confirmingLeave?.leave
+            model.terminals.confirmingLeave = nil
+            leave?()
+        }
         .background { NoticeToaster(model: model) }
         .ainkradToastHost()
         .ainkradHostTheme(theme)
