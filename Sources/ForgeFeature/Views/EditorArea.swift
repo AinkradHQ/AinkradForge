@@ -182,7 +182,9 @@ private struct DocumentView: View {
                 onGoToLineHandled: { model.pendingLine = nil },
                 focus: model.activePane == pane && model.pendingFocus, onFocusHandled: { model.pendingFocus = false },
                 // The caret moved here — this pane is the one being worked in.
-                onCaret: { model.focus(pane: pane) }, marks: marks + agentMarks.wash,
+                onCaret: { model.focus(pane: pane) },
+                marks: marks + agentMarks.wash
+                    + model.searchMarks(in: document.storage.string, color: NSColor(status.warning.opacity(skin.opacity.o30))),
                 definitions: { [model, path] offset in await model.definitions(path: path, offset: offset) },
                 onOpenLink: { [model] link in model.open(link) },
                 onHover: { [model, pane, path] hit in Task { await model.hover(pane: pane, path: path, at: hit) } },
@@ -344,8 +346,10 @@ private struct OverflowFade: ViewModifier {
     }
 }
 
-private struct EditorTab: View {
+struct EditorTab: View {
     let name: String
+    /// Shown instead of `name` (whose extension still picks the icon): "SidebarRow.swift ↔ Replace preview".
+    var title: String?
     let isActive: Bool
     let isPreview: Bool
     let isDirty: Bool
@@ -361,7 +365,7 @@ private struct EditorTab: View {
             Image(systemName: FileIcon.symbol(for: FileNode(path: name, name: name, isDirectory: false, children: [])))
                 .font(skin.font(AinkradFontToken(sizeKey: "t10")))
                 .foregroundStyle(FileIcon.tint(for: name, theme: theme) ?? skin.color(skin.text.faint))
-            Text(name)
+            Text(title ?? name)
                 .font(skin.font(AinkradFontToken(sizeKey: "t12", weight: isActive ? "medium" : "regular")))
                 .italic(isPreview)
                 .foregroundStyle(isActive ? theme.foreground : skin.color(skin.text.muted))

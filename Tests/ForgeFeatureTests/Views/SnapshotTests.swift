@@ -159,7 +159,7 @@ final class SnapshotTests: XCTestCase {
         // ponytail: masked; un-mask if the panel ever shows there live.
         try Snapshot.assertMatches(
             model, named: "search",
-            masking: [CGRect(x: 100, y: 260, width: 100, height: 22), CGRect(x: 314, y: 70, width: 886, height: 28)])
+            masking: [CGRect(x: 90, y: 214, width: 210, height: 20), CGRect(x: 314, y: 70, width: 886, height: 28)])
     }
 
     /// Review All: a file Forge had read, changed while closed, and a new one.
