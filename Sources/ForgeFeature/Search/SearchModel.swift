@@ -23,12 +23,12 @@ final class SearchModel {
     /// Lines, across all files, after which a search stops: a broad query stays fast.
     static let cap = 2_000
 
-    var query = SearchQuery()
+    var query = SearchQuery() { didSet { if query != oldValue { forgetDismissed() } } }
     var replacement = ""
     var isReplaceOpen = false
     var preserveCase = false
-    var include = ""
-    var exclude = ""
+    var include = "" { didSet { if include != oldValue { forgetDismissed() } } }
+    var exclude = "" { didSet { if exclude != oldValue { forgetDismissed() } } }
     private(set) var results: [FileResult] = []
     private(set) var status: Status = .idle
     /// Files whose rows are folded.
@@ -39,6 +39,10 @@ final class SearchModel {
     var rejected: [String: Set<Int>] = [:]
     /// Replace All was asked for; the window confirms first.
     var confirmingReplaceAll = false
+    /// Result lines (path → line numbers) and whole files dismissed with ✕: out of the list and out of Replace,
+    /// until the query or the globs change. The files themselves are untouched.
+    private(set) var dismissedLines: [String: Set<Int>] = [:]
+    private(set) var dismissedFiles: Set<String> = []
     @ObservationIgnored private var running: Task<Void, Never>?
 
     var lineCount: Int { results.reduce(0) { $0 + $1.matches.count } }
@@ -75,6 +79,7 @@ final class SearchModel {
     /// Shows a language server's references in place of search results.
     func showReferences(_ found: [FileResult], to symbol: String) {
         running?.cancel()
+        forgetDismissed()
         results = found
         status = .references(symbol: symbol, lines: found.reduce(0) { $0 + $1.matches.count }, files: found.count)
     }
@@ -84,6 +89,29 @@ final class SearchModel {
         running?.cancel()
         results = []
         status = .idle
+    }
+
+    /// ✕ on a result: one line (`line`) or the whole file leaves the list — and Replace's scope.
+    func dismiss(_ path: String, line: Int? = nil) {
+        guard let index = results.firstIndex(where: { $0.path == path }) else { return }
+        if let line {
+            dismissedLines[path, default: []].insert(line)
+            results[index].matches.removeAll { $0.line == line }
+        }
+        if line == nil || results[index].matches.isEmpty {
+            dismissedFiles.insert(path)
+            results.remove(at: index)
+        }
+        switch status {
+        case .done(_, _, let ms, let capped): status = .done(lines: lineCount, files: results.count, milliseconds: ms, capped: capped)
+        case .references(let symbol, _, _): status = .references(symbol: symbol, lines: lineCount, files: results.count)
+        default: break
+        }
+    }
+
+    private func forgetDismissed() {
+        if !dismissedLines.isEmpty { dismissedLines = [:] }
+        if !dismissedFiles.isEmpty { dismissedFiles = [] }
     }
 
     private func search(regex: NSRegularExpression, root: URL, files: [String], buffers: [String: String]) async {
@@ -102,7 +130,9 @@ final class SearchModel {
                 }
             }.value
             guard !Task.isCancelled else { return }
-            for hit in hits {
+            for var hit in hits where !dismissedFiles.contains(hit.path) {
+                if let lines = dismissedLines[hit.path] { hit.matches.removeAll { lines.contains($0.line) } }
+                guard !hit.matches.isEmpty else { continue }
                 let room = Self.cap - found
                 guard room > 0 else { break }
                 let kept = FileResult(path: hit.path, matches: Array(hit.matches.prefix(room)))

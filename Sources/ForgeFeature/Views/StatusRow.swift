@@ -128,7 +128,7 @@ private struct IssueCounts: View {
     private var activeServerStopped: Bool { activeServerStatus.map(ServerChip.isStopped) ?? false }
 
     private var activeServerStatus: ServerStatus? {
-        guard let path = model.tabs.active, let (spec, _) = LanguageRegistry.server(for: path) else { return nil }
+        guard let path = model.tabs.active, let (spec, _) = model.languages.server(for: path) else { return nil }
         return model.languages.statuses[spec.id]
     }
 }
@@ -143,7 +143,7 @@ private struct ServerChip: View {
     @Environment(\.ainkradStatusColors) private var status
 
     var body: some View {
-        if let path = model.tabs.active, let (spec, _) = LanguageRegistry.server(for: path) {
+        if let path = model.tabs.active, let (spec, _) = model.languages.server(for: path) {
             let state = model.languages.statuses[spec.id] ?? .notRunning
             let progress = model.languages.progress[spec.id]
             HStack(spacing: skin.size.s6) {
@@ -220,7 +220,7 @@ private struct ServerChip: View {
     }
 
     private func items(_ active: ServerSpec) -> [AinkradMenuItem] {
-        let used = LanguageRegistry.servers.filter { model.languages.statuses[$0.id] != nil }
+        let used = (LanguageRegistry.servers + model.languages.custom).filter { model.languages.statuses[$0.id] != nil }
         let items = used.map { spec in
             let state = model.languages.statuses[spec.id] ?? .notRunning
             // `● sourcekit-lsp — ready · Swift`: the dot for a running server, the language it serves.

@@ -1,8 +1,8 @@
 import AinkradAppKit
 import SwiftUI
 
-/// A result file: ▾, its icon, name and folder, the count pill — and ⇄ on hover while Replace is open (mockup 07/08
-/// `.hfile`). The Issues tab uses it too.
+/// A result file: ▾, its icon, name and folder, the count pill — and on hover ⇄ while Replace is open, else ✕ to
+/// dismiss it (mockup 07/08 `.hfile`). The Issues tab uses it too (with neither).
 struct ResultFileRow: View {
     let path: String
     let count: Int
@@ -10,6 +10,8 @@ struct ResultFileRow: View {
     let isSelected: Bool
     /// Replace in this file (only while Replace is open).
     let onReplace: (() -> Void)?
+    /// Drop the file from the results.
+    var onDismiss: (() -> Void)?
     let toggle: () -> Void
     @State private var isHovered = false
     @Environment(\.ainkradSkin) private var skin
@@ -43,6 +45,8 @@ struct ResultFileRow: View {
             CountPill(count: count)
             if let onReplace {
                 RowAction(glyph: "⇄", help: "Replace in this file", action: onReplace).opacity(isHovered ? 1 : 0)
+            } else if let onDismiss {
+                RowAction(glyph: "✕", help: "Dismiss this file's results", action: onDismiss).opacity(isHovered ? 1 : 0)
             }
         }
         .padding(.vertical, skin.size.s5)
@@ -93,6 +97,8 @@ struct ResultLineRow: View {
     let isSelected: Bool
     /// While Replace is open: each match is shown struck through, followed by what it becomes.
     let replacement: ((String, NSRange) -> String)?
+    /// The row's `.act`, shown on hover or selection: ⇄ replace this one while Replace is open, else ✕ dismiss.
+    var action: RowAction?
     let onClick: () -> Void
     let onDoubleClick: () -> Void
     @State private var isHovered = false
@@ -115,6 +121,7 @@ struct ResultLineRow: View {
             Text(highlighted)
                 .lineLimit(1)
             Spacer(minLength: 0)
+            if let action { action.opacity(isHovered || isSelected ? 1 : 0) }
         }
         .font(skin.font(AinkradFontToken(size: 11.5, mono: "system")))
         .padding(.vertical, skin.size.s3)

@@ -54,6 +54,8 @@ public final class LanguageHub {
     @ObservationIgnored private var diagnostics: [String: [Diagnostic]] = [:]
     /// Path overrides from settings (server id → executable).
     public var overrides: [String: String] = [:]
+    /// Servers the user set up for languages Forge has none for (generic stdio LSP), after Forge's own.
+    public private(set) var custom: [ServerSpec] = []
 
     @ObservationIgnored private var root: URL?
     @ObservationIgnored private var sessions: [String: LanguageSession] = [:]
@@ -92,14 +94,14 @@ public final class LanguageHub {
     }
 
     public func opened(path: String, text: String) {
-        guard let (spec, languageID) = LanguageRegistry.server(for: path), let uri = uri(for: path) else { return }
+        guard let (spec, languageID) = server(for: path), let uri = uri(for: path) else { return }
         guard let session = session(for: spec) else { return }
         enqueue(spec.id) { await session.open(uri: uri, languageID: languageID, text: text) }
     }
 
     /// A buffer changed: after a short pause the server gets the whole text (`text` is read then, not now).
     public func changed(path: String, text: @escaping @MainActor () -> String) {
-        guard let (spec, _) = LanguageRegistry.server(for: path), let uri = uri(for: path), let session = sessions[spec.id]
+        guard let (spec, _) = server(for: path), let uri = uri(for: path), let session = sessions[spec.id]
         else { return }
         pendingChanges[path]?.cancel()
         pendingTexts[path] = text
@@ -113,7 +115,7 @@ public final class LanguageHub {
     /// Sends a pending change now.
     private func flush(_ path: String) {
         pendingChanges.removeValue(forKey: path)?.cancel()
-        guard let text = pendingTexts.removeValue(forKey: path), let (spec, _) = LanguageRegistry.server(for: path),
+        guard let text = pendingTexts.removeValue(forKey: path), let (spec, _) = server(for: path),
             let uri = uri(for: path), let session = sessions[spec.id]
         else { return }
         let current = text()
@@ -288,7 +290,7 @@ public final class LanguageHub {
     private func request<T: Sendable>(
         _ path: String, _ operation: @escaping @Sendable (LanguageSession, String) async -> T
     ) async -> T? {
-        guard let (spec, _) = LanguageRegistry.server(for: path), let uri = uri(for: path), let session = sessions[spec.id]
+        guard let (spec, _) = server(for: path), let uri = uri(for: path), let session = sessions[spec.id]
         else { return nil }
         flush(path)
         let previous = chains[spec.id]
@@ -311,7 +313,7 @@ public final class LanguageHub {
     }
 
     public func saved(path: String) {
-        guard let (spec, _) = LanguageRegistry.server(for: path), let uri = uri(for: path), let session = sessions[spec.id]
+        guard let (spec, _) = server(for: path), let uri = uri(for: path), let session = sessions[spec.id]
         else { return }
         enqueue(spec.id) { await session.save(uri: uri) }
     }
@@ -319,7 +321,7 @@ public final class LanguageHub {
     public func closed(path: String) {
         pendingChanges.removeValue(forKey: path)?.cancel()
         pendingTexts.removeValue(forKey: path)
-        guard let (spec, _) = LanguageRegistry.server(for: path), let uri = uri(for: path), let session = sessions[spec.id]
+        guard let (spec, _) = server(for: path), let uri = uri(for: path), let session = sessions[spec.id]
         else { return }
         enqueue(spec.id) { await session.close(uri: uri) }
     }
@@ -329,11 +331,28 @@ public final class LanguageHub {
     public func setOverride(_ specID: String, path: String?) {
         guard overrides[specID] != path else { return }
         overrides[specID] = path
+        stop(specID)
+    }
+
+    /// The user's own servers changed: any added, removed or changed one stops, and the next file opened for
+    /// it starts it as it is now.
+    public func setCustom(_ specs: [ServerSpec]) {
+        let ids = Set(custom.map(\.id)).union(specs.map(\.id))
+        for id in ids where custom.first(where: { $0.id == id }) != specs.first(where: { $0.id == id }) { stop(id) }
+        custom = specs
+    }
+
+    /// The server for a file — Forge's own first, then the user's — with the `languageId` to open it under.
+    public func server(for path: String) -> (spec: ServerSpec, languageID: String)? {
+        LanguageRegistry.server(for: path, among: LanguageRegistry.servers + custom)
+    }
+
+    private func stop(_ specID: String) {
         if let session = sessions.removeValue(forKey: specID) { Task { await session.shutdown() } }
         chains[specID] = nil
         statuses[specID] = nil
         progress[specID] = nil
-        for (path, list) in issues where LanguageRegistry.server(for: path)?.0.id == specID && !list.isEmpty { issues[path] = nil }
+        for (path, list) in issues where server(for: path)?.0.id == specID && !list.isEmpty { issues[path] = nil }
     }
 
     public func restart(_ specID: String) {

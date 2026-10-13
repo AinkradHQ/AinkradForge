@@ -18,13 +18,21 @@ struct ServerBar: Equatable {
     /// The server it is about, when Forge has one for the language.
     let spec: ServerSpec?
     let message: String
+    /// The file it is shown over.
+    var path = ""
 }
 
 extension ForgeModel {
     /// The bar for `path`, if its server needs saying something about. Pure over the model's state, so tested.
     func serverBar(for path: String) -> ServerBar? {
+        var bar = serverBarState(for: path)
+        bar?.path = path
+        return bar
+    }
+
+    private func serverBarState(for path: String) -> ServerBar? {
         guard let document = documents[path], document.state == .ready else { return nil }
-        guard let (spec, _) = LanguageRegistry.server(for: path) else {
+        guard let (spec, _) = languages.server(for: path) else {
             let language = document.language.name
             guard language != "Plaintext", !isQuiet(language) else { return nil }
             return ServerBar(

@@ -56,6 +56,7 @@ private struct TaskRow: View {
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
     @Environment(\.ainkradStatusColors) private var status
+    @Environment(\.ainkradMotionBudget) private var budget
 
     private var isRunning: Bool { model.tasks.running[task.id] != nil }
 
@@ -100,12 +101,24 @@ private struct TaskRow: View {
     @ViewBuilder private var outcome: some View {
         let font = skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true))
         if isRunning {
-            Text("running").font(font).foregroundStyle(skin.color(skin.text.muted))
+            // `running · 0:18`, ticking once a second — only while the window is visible (the motion budget says
+            // so); otherwise drawn once. No animation, so reduce motion has nothing to calm.
+            if budget.isWindowVisible {
+                TimelineView(.periodic(from: .now, by: 1)) { _ in running(font) }
+            } else {
+                running(font)
+            }
         } else if let result = model.tasks.results[task.id] {
             let when = result.at.formatted(.relative(presentation: .named, unitsStyle: .abbreviated))
             Text(result.succeeded ? "✓ \(result.seconds) s · \(when)" : "✗ exit \(result.exitCode.map(String.init) ?? "?") · \(when)")
                 .font(font)
                 .foregroundStyle(result.succeeded ? status.success : status.danger)
         }
+    }
+
+    private func running(_ font: Font) -> some View {
+        Text(model.tasks.elapsed(task.id).map { "running · \($0)" } ?? "running")
+            .font(font)
+            .foregroundStyle(skin.color(skin.text.muted))
     }
 }

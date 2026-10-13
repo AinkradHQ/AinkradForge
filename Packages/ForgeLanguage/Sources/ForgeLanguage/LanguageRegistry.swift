@@ -13,6 +13,18 @@ public struct ServerSpec: Identifiable, Equatable, Sendable {
     public let languageIDs: [String: String]
     /// Where to point people when it is not installed.
     public let installHint: String
+
+    public init(
+        id: String, language: String, command: String, arguments: [String], languageIDs: [String: String],
+        installHint: String
+    ) {
+        self.id = id
+        self.language = language
+        self.command = command
+        self.arguments = arguments
+        self.languageIDs = languageIDs
+        self.installHint = installHint
+    }
 }
 
 /// The servers Forge runs, one per language family. Pure, so the file → server mapping is tested.
@@ -56,9 +68,10 @@ public enum LanguageRegistry {
     ]
 
     /// The server for a file, with the `languageId` to open it under; nil when no server serves it.
-    public static func server(for path: String) -> (spec: ServerSpec, languageID: String)? {
+    /// `specs` are the servers to choose from: Forge's own, then any the user set up for another language.
+    public static func server(for path: String, among specs: [ServerSpec] = servers) -> (spec: ServerSpec, languageID: String)? {
         let ext = (path as NSString).pathExtension.lowercased()
-        for spec in servers {
+        for spec in specs {
             if let id = spec.languageIDs[ext] { return (spec, id) }
         }
         return nil

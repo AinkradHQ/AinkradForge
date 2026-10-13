@@ -11,8 +11,8 @@ import SwiftUI
 
 /// A file's language, for highlighting and the status bar.
 public struct EditorLanguage: Equatable, Sendable {
-    /// `TreeSitterLanguage` raw value, e.g. "swift".
-    let id: String
+    /// `TreeSitterLanguage` raw value, e.g. "swift" — also its LSP `languageId` for most languages.
+    public let id: String
     /// e.g. "Swift", "Json".
     public let name: String
 
@@ -21,6 +21,9 @@ public struct EditorLanguage: Equatable, Sendable {
         let code = CodeLanguage.detectLanguageFrom(url: url, prefixBuffer: prefix)
         return EditorLanguage(id: code.id.rawValue, name: code.tsName.capitalized)
     }
+
+    /// The file extensions it is detected from, e.g. ["rb"].
+    public var extensions: Set<String> { code.extensions }
 
     var code: CodeLanguage {
         CodeLanguage.allLanguages.first { $0.id.rawValue == id } ?? .default

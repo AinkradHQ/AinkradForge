@@ -13,9 +13,11 @@ struct ReplacePlan: Equatable {
     static let previewLineLimit = 4_000
 
     static func make(
-        path: String, text: String, regex: NSRegularExpression, replacement: String, isRegex: Bool, preserveCase: Bool
+        path: String, text: String, regex: NSRegularExpression, replacement: String, isRegex: Bool, preserveCase: Bool,
+        lines: ((Int) -> Bool)? = nil
     ) -> ReplacePlan {
-        let result = TextSearch.replace(in: text, regex: regex, with: replacement, isRegex: isRegex, preserveCase: preserveCase)
+        let result = TextSearch.replace(
+            in: text, regex: regex, with: replacement, isRegex: isRegex, preserveCase: preserveCase, lines: lines)
         return make(path: path, original: text, updated: result.text, count: result.count)
     }
 
