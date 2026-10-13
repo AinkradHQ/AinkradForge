@@ -20,16 +20,18 @@ struct SearchPanel: View {
                 AinkradFieldToggle("⌶", isOn: $search.query.wholeWord, help: "Whole word")
                 AinkradFieldToggle("✱", isOn: $search.query.regex, help: "Regular expression")
             }
-            Button { search.isReplaceOpen.toggle() } label: {  // design-lint: allow raw-control disclosure text (mockup .sexp)
-                Text("\(search.isReplaceOpen ? "▾" : "▸") Replace")
-                    .font(skin.font(AinkradFontToken(sizeKey: "t11")))
-                    .foregroundStyle(skin.color(skin.text.faint))
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, skin.size.s2)
-            .help(search.isReplaceOpen ? "Hide Replace" : "Show Replace")
-            if search.isReplaceOpen {
+            // "▸ Replace" gives way to the replace field (mockup 08); Esc in the field closes it again.
+            if !search.isReplaceOpen {
+                Button { search.isReplaceOpen = true } label: {  // design-lint: allow raw-control disclosure text (mockup .sexp)
+                    Text("▸ Replace")
+                        .font(skin.font(AinkradFontToken(sizeKey: "t11")))
+                        .foregroundStyle(skin.color(skin.text.faint))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, skin.size.s2)
+                .help("Show Replace")
+            } else {
                 AinkradSearchField(
                     text: $search.replacement, placeholder: search.query.regex ? "$1 for a group" : "Replace", focus: $replaceFocused
                 ).codeQuery().trailingAccessory {
@@ -40,6 +42,9 @@ struct SearchPanel: View {
                         .disabled(search.results.isEmpty)
                         .help(model.titled("Replace every match below", .replaceAll))
                 }
+                // Through the responder chain while the field has the keyboard — not an Esc claim the editor would lose.
+                .onExitCommand { search.isReplaceOpen = false }
+                .help("Esc hides Replace")
             }
             VStack(spacing: skin.size.s6) {
                 AinkradTextField(text: $search.include, placeholder: "Sources/**, *.swift").leadingLabel("include").compact()
@@ -50,6 +55,10 @@ struct SearchPanel: View {
         }
         .onAppear { DispatchQueue.main.async { queryFocused = true } }  // see Palette's onAppear
         .onChange(of: model.searchFocusRequest) { _, _ in queryFocused = true }
+        // Opened: the replace field takes the keyboard (a turn later, as on appear), so Esc closes it straight away.
+        .onChange(of: search.isReplaceOpen) { _, open in
+            if open { DispatchQueue.main.async { replaceFocused = true } } else { queryFocused = true }
+        }
         .onChange(of: search.query) { _, _ in rerun() }
         .onChange(of: search.include) { _, _ in rerun() }
         .onChange(of: search.exclude) { _, _ in rerun() }
