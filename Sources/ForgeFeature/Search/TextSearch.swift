@@ -26,7 +26,17 @@ struct LineMatch: Equatable, Sendable, Identifiable {
     let line: Int
     let text: String
     let ranges: [NSRange]
+    /// How many earlier matching lines of the file have this same text: with `text`, the match's identity.
+    var occurrence = 0
     var id: Int { line }
+
+    /// Who this match is, whatever line it moves to (FD44): its text and which of the identical lines it is.
+    struct Key: Hashable, Sendable {
+        let text: String
+        let occurrence: Int
+    }
+
+    var key: Key { Key(text: text, occurrence: occurrence) }
 }
 
 /// Search and replace over text. Pure, so every rule is asserted directly.
@@ -36,6 +46,7 @@ enum TextSearch {
     static func matches(in text: String, regex: NSRegularExpression) -> [LineMatch] {
         var result: [LineMatch] = []
         var number = 0
+        var seen: [String: Int] = [:]
         text.enumerateLines { line, _ in
             number += 1
             let ns = line as NSString
@@ -44,33 +55,33 @@ enum TextSearch {
             guard !found.isEmpty else { return }
             let shown = ns.length > 2_000 ? ns.substring(to: 2_000) : line
             let limit = (shown as NSString).length
+            let occurrence = seen[shown, default: 0]
+            seen[shown] = occurrence + 1
             result.append(LineMatch(line: number, text: shown, ranges: found.map {
                 NSRange(location: min($0.location, limit), length: max(0, min($0.length, limit - min($0.location, limit))))
-            }))
+            }, occurrence: occurrence))
         }
         return result
     }
 
     /// `text` with every match replaced. With `regex`, `$1`… in `replacement` are capture groups; otherwise
     /// it is literal. `preserveCase` adapts the replacement to each match: ALL CAPS, Capitalised, lower.
-    /// `lines`, when given, picks the matches to replace by the (1-based) line they start on.
+    /// `lines`, when given, picks the matches to replace by their (1-based) line.
+    /// Each line is matched on its own, as `matches(in:)` lists them (FD45): `^`/`$` anchor at every line and
+    /// a match never spans a line break, so what the list shows is what gets replaced.
     static func replace(
         in text: String, regex: NSRegularExpression, with replacement: String, isRegex: Bool, preserveCase: Bool,
         limit: Int? = nil, lines: ((Int) -> Bool)? = nil
     ) -> (text: String, count: Int) {
         let ns = text as NSString
-        var found = regex.matches(in: text, range: NSRange(location: 0, length: ns.length))
-        if let lines {
-            // Line starts in UTF-16 offsets, by the same rule as `matches(in:)`'s line numbers.
-            var starts: [Int] = []
-            ns.enumerateSubstrings(in: NSRange(location: 0, length: ns.length), options: [.byLines, .substringNotRequired]) {
-                _, _, enclosing, _ in starts.append(enclosing.location)
-            }
-            var line = 0
-            found = found.filter { match in
-                while line + 1 < starts.count, starts[line + 1] <= match.range.location { line += 1 }
-                return lines(line + 1)
-            }
+        var found: [NSTextCheckingResult] = []
+        var line = 0
+        // A line's range (without its break) as the search bound: the bounds anchor `^`/`$` and hide the other lines.
+        ns.enumerateSubstrings(in: NSRange(location: 0, length: ns.length), options: [.byLines, .substringNotRequired]) {
+            _, range, _, _ in
+            line += 1
+            guard lines?(line) ?? true else { return }
+            found += regex.matches(in: text, range: range).filter { $0.range.length > 0 }
         }
         if let limit { found = Array(found.prefix(limit)) }
         guard !found.isEmpty else { return (text, 0) }

@@ -44,6 +44,23 @@ struct TextSearchTests {
         #expect(cased.text == "isActive IsActive ISACTIVE")
     }
 
+    @Test func replaceMatchesEachLineOnItsOwnAsTheListDoes() throws {
+        // FD45: `^import` lists every import line, so Replace All replaces every one, and line 2 alone is line 2.
+        let text = "import A\r\nimport B\nlet x = 1 // import C\nimport D"
+        let start = try regex("^import", regex: true)
+        #expect(TextSearch.matches(in: text, regex: start).map(\.line) == [1, 2, 4])
+        let all = TextSearch.replace(in: text, regex: start, with: "@import", isRegex: true, preserveCase: false)
+        #expect(all.count == 3 && all.text == "@import A\r\n@import B\nlet x = 1 // import C\n@import D")
+        let two = TextSearch.replace(in: text, regex: start, with: "@import", isRegex: true, preserveCase: false, limit: 1) { $0 == 2 }
+        #expect(two.count == 1 && two.text == "import A\r\n@import B\nlet x = 1 // import C\nimport D")
+        // `$` ends every line, and no match spans a break.
+        let end = TextSearch.replace(in: "a\nb", regex: try regex("$", regex: true), with: ";", isRegex: true, preserveCase: false)
+        #expect(end.count == 0)
+        let across = try regex("a\\sb", regex: true)
+        let span = TextSearch.replace(in: "a\nb", regex: across, with: "x", isRegex: true, preserveCase: false)
+        #expect(span.count == 0 && TextSearch.matches(in: "a\nb", regex: across).isEmpty)
+    }
+
     @Test func globsMatchPathsTheWayTheySay() {
         let sources = GlobSet("Sources/**, Tests/**")
         #expect(sources.matches("Sources/A/B.swift") && sources.matches("Tests/X.swift"))

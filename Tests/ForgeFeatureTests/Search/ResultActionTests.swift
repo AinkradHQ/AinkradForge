@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ForgeFeature
@@ -97,5 +98,51 @@ struct ResultActionTests {
         #expect(open.storage.string == "isSelected\nvar isActive = 2\n" && open.isDirty)
         #expect(try String(contentsOf: root.appending(path: "Open.swift"), encoding: .utf8) == "isSelected\nvar isSelected = 2\n")
         #expect(model.search.lineCount == 2)
+    }
+
+    @Test func replacingOneOnALineThatNoLongerMatchesSaysSo() async throws {
+        // FD45: ⇄ on a row whose line changed since the search is a notice, not a silent no-op.
+        let (model, root) = try await workspace(["A.swift": Data("isSelected()\n".utf8)])
+        defer { try? FileManager.default.removeItem(at: root) }
+        try await search(model, "isSelected")
+        try Data("done()\n".utf8).write(to: root.appending(path: "A.swift"))
+        model.notice = nil
+        #expect(model.replace(in: "A.swift", line: 1) == 0)
+        #expect(model.notice?.hasPrefix("Nothing to replace on line 1 of A.swift") == true)
+    }
+
+    @Test func aDismissedMatchStaysDismissedWhenItsLinesShift() async throws {
+        // FD44: ✕ on line 2, then a line added above (the list is not re-run): Replace All and ⇄ follow the
+        // matches, not the old line numbers — the dismissed one is never touched, the others all are.
+        let (model, root) = try await workspace(["A.swift": Data("isSelected(1)\nisSelected(2)\nisSelected(1)\n".utf8)])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appending(path: "A.swift")
+        try await search(model, "isSelected")
+        model.search.dismiss("A.swift", line: 2)
+        try Data("// new\nisSelected(1)\nisSelected(2)\nisSelected(1)\n".utf8).write(to: file)
+        #expect(model.search.results.first?.matches.map(\.line) == [1, 3])
+
+        // ⇄ on the listed line 3 (the second `isSelected(1)`, now on line 4).
+        #expect(model.replace(in: "A.swift", line: 3) == 1)
+        #expect(try String(contentsOf: file, encoding: .utf8) == "// new\nisSelected(1)\nisSelected(2)\nisActive(1)\n")
+        try await settle(model)
+        #expect(model.search.results.first?.matches.map(\.line) == [2])
+
+        try Data("// new\n// newer\nisSelected(1)\nisSelected(2)\nisActive(1)\n".utf8).write(to: file)
+        model.replaceAll()
+        try await settle(model)
+        #expect(try String(contentsOf: file, encoding: .utf8) == "// new\n// newer\nisActive(1)\nisSelected(2)\nisActive(1)\n")
+        #expect(model.search.results.isEmpty)
+    }
+
+    @Test func aFocusedRowRunsItsActionFromTheKeyboard() {
+        // FD46: the nested ✕ / ⇄ can't take Full Keyboard Access focus, so the focused row runs them: ⌫ and ⇧↵.
+        let dismiss = RowAction(glyph: "✕", help: "Dismiss") {}
+        #expect(dismiss.runs(on: .delete, modifiers: []))
+        #expect(!dismiss.runs(on: .delete, modifiers: .command) && !dismiss.runs(on: .return, modifiers: .shift))
+        let replace = RowAction(glyph: "⇄", help: "Replace this one") {}
+        #expect(replace.runs(on: .return, modifiers: .shift))
+        #expect(!replace.runs(on: .return, modifiers: []) && !replace.runs(on: .delete, modifiers: []))
+        #expect(!RowAction(glyph: "‹", help: "Previous") {}.runs(on: .delete, modifiers: []))
     }
 }

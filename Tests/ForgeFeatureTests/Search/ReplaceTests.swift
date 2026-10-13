@@ -1,3 +1,4 @@
+import AinkradAppKit
 import Foundation
 import Testing
 
@@ -83,5 +84,15 @@ struct ReplaceTests {
         #expect(try String(contentsOf: root.appending(path: "Open.swift"), encoding: .utf8) == "var isSelected = 2\n")
         // The re-run finds nothing left (the open file's unsaved buffer is searched, not its stale file).
         #expect(model.search.results.isEmpty)
+    }
+
+    @Test func previewTicksLeaveTheCodeWhenAFirstRowWouldReachThem() {
+        // FD51: at 520 pt the first hunk's row ran under its ✓ Keep; the ticks then take their own row.
+        let old = "    @Environment(\\.ainkradSkin) private var skin\nlet thread: ThreadSummary\nlet isSelected: Bool\n"
+        let diff = AinkradDiffEngine.compute(old: old, new: old.replacingOccurrences(of: "isSelected", with: "isActive"), path: "A.swift", context: 2)
+        let skin = AinkradSkin.standard
+        #expect(AinkradDiffReview.firstRowReachesTick(diff, width: 492, skin: skin))
+        #expect(!AinkradDiffReview.firstRowReachesTick(diff, width: 900, skin: skin))
+        #expect(!AinkradDiffReview.firstRowReachesTick(diff, width: nil, skin: skin))
     }
 }

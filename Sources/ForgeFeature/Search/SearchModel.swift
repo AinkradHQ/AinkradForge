@@ -42,9 +42,10 @@ final class SearchModel {
     var rejected: [String: Set<Int>] = [:]
     /// Replace All was asked for; the window confirms first.
     var confirmingReplaceAll = false
-    /// Result lines (path → line numbers) and whole files dismissed with ✕: out of the list and out of Replace,
-    /// until the query or the globs change. The files themselves are untouched.
-    private(set) var dismissedLines: [String: Set<Int>] = [:]
+    /// Result lines (path → match identities) and whole files dismissed with ✕: out of the list and out of Replace,
+    /// until the query or the globs change. The files themselves are untouched. Keyed by the match, not its line
+    /// number, so an edit above it can't move the dismissal onto another match (FD44).
+    private(set) var dismissedMatches: [String: Set<LineMatch.Key>] = [:]
     private(set) var dismissedFiles: Set<String> = []
     @ObservationIgnored private var running: Task<Void, Never>?
 
@@ -98,8 +99,8 @@ final class SearchModel {
     func dismiss(_ path: String, line: Int? = nil) {
         guard let index = results.firstIndex(where: { $0.path == path }) else { return }
         rejected[path] = nil
-        if let line {
-            dismissedLines[path, default: []].insert(line)
+        if let line, let match = results[index].matches.first(where: { $0.line == line }) {
+            dismissedMatches[path, default: []].insert(match.key)
             results[index].matches.removeAll { $0.line == line }
         }
         if line == nil || results[index].matches.isEmpty {
@@ -114,7 +115,7 @@ final class SearchModel {
     }
 
     private func forgetDismissed() {
-        if !dismissedLines.isEmpty { dismissedLines = [:] }
+        if !dismissedMatches.isEmpty { dismissedMatches = [:] }
         if !dismissedFiles.isEmpty { dismissedFiles = [] }
         if !rejected.isEmpty { rejected = [:] }
     }
@@ -136,7 +137,7 @@ final class SearchModel {
             }.value
             guard !Task.isCancelled else { return }
             for var hit in hits where !dismissedFiles.contains(hit.path) {
-                if let lines = dismissedLines[hit.path] { hit.matches.removeAll { lines.contains($0.line) } }
+                if let keys = dismissedMatches[hit.path] { hit.matches.removeAll { keys.contains($0.key) } }
                 guard !hit.matches.isEmpty else { continue }
                 let room = Self.cap - found
                 guard room > 0 else { break }

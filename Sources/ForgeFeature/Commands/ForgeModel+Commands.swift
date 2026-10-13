@@ -99,6 +99,7 @@ extension ForgeModel {
         case .joinSplits: joinSplits()
         case .splitTerminal: terminals.split()
         case .openInGitMage: openGitMage()
+        case .setServerPath: if let path = tabs.active { chooseServerPath(forFileAt: path) }
         case .maximiseTerminal:
             if !terminals.isOpen { terminals.toggle() }
             terminals.isMaximised.toggle()

@@ -2,25 +2,58 @@ import AppKit
 import SwiftUI
 
 /// Takes the app's next key press, once, before anything else sees it (a local monitor), and swallows it: the
-/// second step of a ⌘K chord, or a shortcut being recorded.
+/// second step of a ⌘K chord, or a shortcut being recorded. Only while Forge has the keyboard (FD47): a key
+/// press in another window, or once Forge's pane loses focus (a click on a Rune terminal beside it), ends the
+/// listening — the key goes where it was typed, and `onRelease` lets the caller put its state back.
 @MainActor
 final class NextKey {
     private var monitor: Any?
+    /// The window Forge was in when listening began.
+    private weak var window: NSWindow?
+    private var onRelease: (@MainActor () -> Void)?
+    /// Whether Forge's pane has the keyboard; the view that listens keeps it current.
+    var paneFocused = true {
+        didSet { if !paneFocused { release() } }
+    }
 
     var isListening: Bool { monitor != nil }
 
-    /// `handle` returns whether it is done; until then every key press goes to it.
-    func listen(_ handle: @escaping @MainActor (NSEvent) -> Bool) {
+    /// `handle` returns whether it is done; until then every key press Forge gets goes to it.
+    func listen(onRelease: @escaping @MainActor () -> Void = {}, _ handle: @escaping @MainActor (NSEvent) -> Bool) {
         stop()
+        window = NSApp.keyWindow
+        self.onRelease = onRelease
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            MainActor.assumeIsolated { if handle(event) { self?.stop() } }
-            return nil
+            let taken = MainActor.assumeIsolated {
+                guard let self else { return false }
+                guard Self.claims(eventWindow: event.window, window: self.window, paneFocused: self.paneFocused) else {
+                    self.release()
+                    return false
+                }
+                if handle(event) { self.stop() }
+                return true
+            }
+            return taken ? nil : event
         }
+    }
+
+    /// Whether a key press is Forge's to take: typed in the window it listens in, while its pane has focus.
+    nonisolated static func claims(eventWindow: NSWindow?, window: NSWindow?, paneFocused: Bool) -> Bool {
+        paneFocused && eventWindow != nil && eventWindow === window
     }
 
     func stop() {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
+        onRelease = nil
+    }
+
+    /// Stops listening because Forge lost the keyboard, and tells the caller.
+    private func release() {
+        guard isListening else { return }
+        let done = onRelease
+        stop()
+        done?()
     }
 }
 

@@ -1,5 +1,6 @@
 import ForgeLanguage
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ForgeFeature
@@ -54,5 +55,12 @@ struct EditsTests {
         let written = try String(contentsOf: root.appending(path: "A.swift"), encoding: .utf8)
         #expect(written.contains("let total = 2") && written.contains("let count = 17"))
         #expect(model.pendingEdit == nil)
+    }
+
+    @Test func returnPreviewsARenameAndShiftReturnRenamesNow() {
+        // The kit field's onReturn hands over the held modifiers (kit batch 6): ↵ previews, ⇧↵ renames now.
+        #expect(RenameField.previews(on: []))
+        #expect(!RenameField.previews(on: .shift))
+        #expect(!RenameField.previews(on: [.shift, .command]))
     }
 }
