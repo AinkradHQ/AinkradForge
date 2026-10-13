@@ -59,8 +59,14 @@ private struct PaneView: View {
             Group {
                 if let path = tabs.active, let document = model.documents[path] {
                     VStack(alignment: .leading, spacing: 0) {
-                        AinkradBreadcrumb(items: path.split(separator: "/").map(String.init))
-                            .padding(.horizontal, skin.size.s14)
+                        // One line, never wrapped letter by letter: the whole path when it fits, else the file name,
+                        // truncated if even that is too long (E1D1 FD27).
+                        ViewThatFits(in: .horizontal) {
+                            AinkradBreadcrumb(items: path.split(separator: "/").map(String.init))
+                            AinkradBreadcrumb(items: [(path as NSString).lastPathComponent])
+                        }
+                        .lineLimit(1)
+                        .padding(.horizontal, skin.size.s14)
                             .padding(.top, skin.size.s8)
                             .padding(.bottom, skin.size.s4)
                         if let conflict = document.conflict {

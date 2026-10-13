@@ -82,6 +82,18 @@ final class SnapshotTests: XCTestCase {
             masking: [CGRect(x: 280, y: 70, width: 480, height: 28)])
     }
 
+    /// Split editor at 900 pt: each breadcrumb stays on one line (E1D1 FD27); the right pane's tabs overflow.
+    func testSplitNarrow() throws {
+        let model = try Snapshot.model(opening: repo)
+        model.open(file: Self.sidebarRow, pinned: true)
+        model.splitEditor(stacked: false)
+        for path in ["AGENTS.md", "Makefile", "project.yml"] { model.open(file: path, pinned: true) }
+        try SweepSupport.waitUntilLoaded(model)
+        try Snapshot.assertMatches(
+            model, named: "split-narrow", size: CGSize(width: 900, height: 560),
+            masking: [CGRect(x: 300, y: 70, width: 600, height: 28)])
+    }
+
     /// ⌘P over the window, filtered to "sbrow".
     func testQuickOpen() throws {
         let model = try Snapshot.model(opening: repo)
