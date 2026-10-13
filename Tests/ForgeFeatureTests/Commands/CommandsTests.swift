@@ -41,6 +41,17 @@ struct CommandsTests {
         #expect(ForgeModel.problem(in: [], after: nil, backward: false) == nil)
     }
 
+    /// A narrow window starts without the sidebar; asking for a sidebar tab brings it back (E1D2 FD41).
+    @MainActor @Test func aNarrowWindowHidesTheSidebarUntilATabIsAskedFor() {
+        let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
+        #expect(model.isSidebarShown)
+        model.windowIsNarrow = true
+        #expect(!model.isSidebarShown)
+        model.sideTab = .search
+        #expect(model.isSidebarShown)
+        #expect(ForgeCommand.toggleSidebar.shortcut?.display == "⌘0")
+    }
+
     @Test func commandSearchMatchesTitleWords() {
         let found = ForgeCommand.matching("rev", in: ForgeCommand.allCases)
         #expect(found.first == .revealInTree)

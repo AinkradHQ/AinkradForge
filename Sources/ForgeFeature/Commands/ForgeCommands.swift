@@ -38,7 +38,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
     case goToDefinition, findReferences, renameSymbol, codeActions, formatDocument
     case toggleTerminal, newTerminal, maximiseTerminal, toggleBlame, runTask, rerunLastTask
     case keepChange, undoChange, keepAllChanges, undoAllChanges, askAgent, showHover, closeHints
-    case reviewOutside, showIssues, nextProblem, previousProblem
+    case reviewOutside, showIssues, nextProblem, previousProblem, toggleSidebar
 
     var id: String { rawValue }
 
@@ -99,6 +99,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .showIssues: "Show Issues"
         case .nextProblem: "Go to Next Problem"
         case .previousProblem: "Go to Previous Problem"
+        case .toggleSidebar: "Toggle Sidebar"
         }
     }
 
@@ -152,6 +153,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .showIssues: "exclamationmark.triangle"
         case .nextProblem: "arrow.down.to.line"
         case .previousProblem: "arrow.up.to.line"
+        case .toggleSidebar: "sidebar.left"
         }
     }
 
@@ -199,6 +201,8 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .closeHints: Shortcut(key: Shortcut.escape, modifiers: [])
         case .nextProblem: Shortcut(key: Shortcut.f8, modifiers: [])
         case .previousProblem: Shortcut(key: Shortcut.f8, modifiers: .shift)
+        // Xcode's navigator chord: VS Code's ⌘B is Bold wherever a text menu is installed.
+        case .toggleSidebar: Shortcut(key: "0", modifiers: .command)
         case .closeWorkspace, .revealInTree, .refresh, .openTerminal, .splitDown, .closePane, .renameActiveFile,
             .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8, .keepAllChanges, .undoAllChanges, .showHover,
             .reviewOutside, .showIssues:
@@ -211,7 +215,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .quickOpen, .commandPalette, .openFolder: .none
         case .closeWorkspace, .saveAll, .showFiles, .showChanges, .refresh, .openTerminal, .newFile, .newFolder,
             .findInFiles, .replaceAll, .toggleTerminal, .newTerminal, .maximiseTerminal, .runTask, .rerunLastTask,
-            .reviewOutside, .showIssues, .nextProblem, .previousProblem:
+            .reviewOutside, .showIssues, .nextProblem, .previousProblem, .toggleSidebar:
             .workspace
         case .goToLine, .save, .closeTab, .nextTab, .previousTab, .revealInTree, .copyPath, .splitRight, .splitDown,
             .renameActiveFile, .revealInFinder, .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8,

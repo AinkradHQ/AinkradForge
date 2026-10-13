@@ -29,7 +29,13 @@ final class ForgeModel {
     private(set) var recentFiles: [String] = []
     /// Shown as a toast: a failed save, or an app that would not open.
     var notice: String?
-    var sideTab: SideTab = .files
+    /// Asking for a sidebar tab (⇧⌘E, ⇧⌘F, Show Issues…) brings a hidden sidebar back.
+    var sideTab: SideTab = .files { didSet { if !isSidebarShown { sidebarShown = true } } }
+    /// The sidebar as last toggled (⌘0); `nil` = by the window, hidden while it is narrow (E1D2 FD41).
+    var sidebarShown: Bool?
+    /// Set by the window: too narrow to give the sidebar its room by default.
+    var windowIsNarrow = false
+    var isSidebarShown: Bool { sidebarShown ?? !windowIsNarrow }
     /// The hover card on screen, if any.
     var hover: HoverInfo?
     /// The hover asked for last; an answer for any other is stale and dropped.

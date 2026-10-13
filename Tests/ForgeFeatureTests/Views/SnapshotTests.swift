@@ -82,6 +82,19 @@ final class SnapshotTests: XCTestCase {
             masking: [CGRect(x: 280, y: 70, width: 480, height: 28)])
     }
 
+    /// Three apps tiled (520 pt): the sidebar gives way to the editor until ⌘0 (E1D2 FD41).
+    func testTiledWindow() throws {
+        let model = try Snapshot.model(opening: repo)
+        model.open(file: Self.sidebarRow, pinned: true)
+        try SweepSupport.waitUntilLoaded(model)
+        try Snapshot.assertMatches(
+            model, named: "tiled-520", size: CGSize(width: 520, height: 560),
+            masking: [CGRect(x: 0, y: 70, width: 520, height: 28)])
+        XCTAssertFalse(model.isSidebarShown)
+        model.run(.toggleSidebar)
+        XCTAssertTrue(model.isSidebarShown)
+    }
+
     /// Split editor at 900 pt: each breadcrumb stays on one line (E1D1 FD27); the right pane's tabs overflow.
     func testSplitNarrow() throws {
         let model = try Snapshot.model(opening: repo)
@@ -226,9 +239,13 @@ final class SnapshotTests: XCTestCase {
         CGRect(x: 470, y: 462, width: 210, height: 28), CGRect(x: 690, y: 514, width: 130, height: 28),
     ]
 
-    /// Per width: the header's "since …", turn 3's "… ago" line and the outside group's time line.
-    static let turnReviewNarrowClock: [(CGFloat, [CGRect])] = [900, 760, 640, 520].map { width in
-        (width, [44, 146, 476].map { CGRect(x: 300, y: $0, width: width - 300, height: 20) })
+    /// Per width: the header's "since …", turn 3's "… ago" line, the outside group's time and (640) turn 2's
+    /// "… ago". From 640 down the sidebar is hidden (FD41), so the pane starts at the window's edge.
+    static let turnReviewNarrowClock: [(CGFloat, [CGRect])] = [
+        (900, [44, 146, 476]), (760, [44, 146, 476]), (640, [44, 146, 452, 506]), (520, [44, 146, 476]),
+    ].map { width, rows in
+        let x: CGFloat = width < RootView.narrowWidth ? 0 : 300
+        return (width, rows.map { CGRect(x: x, y: CGFloat($0), width: width - x, height: 20) })
     }
 
     /// The header's "since …", each turn's "… ago" and the outside group's time window.
