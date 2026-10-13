@@ -47,7 +47,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
     case toggleTerminal, newTerminal, maximiseTerminal, toggleBlame, runTask, rerunLastTask
     case keepChange, undoChange, keepAllChanges, undoAllChanges, askAgent, showHover, closeHints
     case reviewOutside, showIssues, nextProblem, previousProblem, toggleSidebar
-    case joinSplits, splitTerminal, openInGitMage
+    case joinSplits, splitTerminal, openInGitMage, setServerPath
 
     var id: String { rawValue }
 
@@ -123,6 +123,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .joinSplits: "Join All Splits"
         case .splitTerminal: "Split Terminal"
         case .openInGitMage: "Open in Git Mage"
+        case .setServerPath: "Set Server Path…"
         }
     }
 
@@ -143,6 +144,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .toggleBlame, .openInGitMage: "Git"
         case .runTask, .rerunLastTask: "Tasks"
         case .keepChange, .undoChange, .keepAllChanges, .undoAllChanges, .askAgent, .reviewOutside: "Agent"
+        case .setServerPath: "Language"
         }
     }
 
@@ -204,6 +206,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .joinSplits: "rectangle"
         case .splitTerminal: "rectangle.split.2x1"
         case .openInGitMage: "arrow.up.forward.app"
+        case .setServerPath: "server.rack"
         }
     }
 
@@ -261,7 +264,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .toggleSidebar: Shortcut(key: "0", modifiers: .command)
         case .closeWorkspace, .revealInTree, .refresh, .openTerminal, .closePane, .joinSplits, .renameActiveFile,
             .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8, .keepAllChanges, .undoAllChanges, .showHover,
-            .reviewOutside, .showIssues:
+            .reviewOutside, .showIssues, .setServerPath:
             nil
         }
     }
@@ -275,7 +278,8 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
             .workspace
         case .goToLine, .save, .closeTab, .nextTab, .previousTab, .revealInTree, .copyPath, .splitRight, .splitDown,
             .renameActiveFile, .revealInFinder, .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8,
-            .goToDefinition, .findReferences, .renameSymbol, .codeActions, .formatDocument, .toggleBlame, .askAgent, .showHover:
+            .goToDefinition, .findReferences, .renameSymbol, .codeActions, .formatDocument, .toggleBlame, .askAgent, .showHover,
+            .setServerPath:
             .file
         case .focusFirstPane, .focusSecondPane, .closePane, .joinSplits: .split
         case .keepChange, .undoChange: .agentChange

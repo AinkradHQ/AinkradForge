@@ -4,8 +4,8 @@ import SwiftUI
 
 /// The language-server bar under the breadcrumb (E6, screen 19 B and D). A hint is a quiet fill (a capsule under
 /// Glass); a stopped server's bar is washed red. Told apart by fill, never by a line.
-/// In a narrow pane (a split) the actions move under the message and keep only the essential ones — Set Server
-/// Path… and Show Log stay in the status bar's server menu — so the bar never widens the pane.
+/// In a narrow pane (a split) the actions move under the message and keep only the essential ones — Show Log
+/// stays in the status bar's server menu, Set server path… in the bar and the palette — so the bar never widens the pane.
 struct ServerBarView: View {
     let model: ForgeModel
     let bar: ServerBar
@@ -66,25 +66,12 @@ struct ServerBarView: View {
     @ViewBuilder private func actions(compact: Bool) -> some View {
         switch bar.kind {
         case .missing:
-            if !compact {
-                // Forge's own server: where it is. No server for the language (FP112): any stdio LSP and its arguments.
-                AinkradButton(title: "Set server path…", style: .secondary) {
-                    if let spec = bar.spec {
-                        if let path = ServerPathPicker.choose(spec) { model.setServerPath(spec.id, path) }
-                    } else if let chosen = CustomServerPicker.choose(language: bar.language) {
-                        model.setCustomServer(forFileAt: bar.path, executable: chosen.path, arguments: chosen.arguments)
-                    }
-                }
-                .secondaryAccent()
-                .fixedSize()
+            // Set server path… stays at every width (FD48); "Not for …" gives way first when the row runs out.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: skin.size.s10) { setPath; notFor; hide }
+                HStack(spacing: skin.size.s10) { setPath; hide }
             }
-            AinkradButton(title: "Not for \(bar.language)", style: .ghost) {
-                model.dismissServerHint(bar.language, forever: true)
-            }
-            .borderless()
-            .secondaryAccent()
-            .fixedSize()
-            RowAction(glyph: "✕", help: "Hide for this session") { model.dismissServerHint(bar.language, forever: false) }
+            .layoutPriority(1)
         case .stopped:
             if let spec = bar.spec {
                 if !compact {
@@ -93,6 +80,24 @@ struct ServerBarView: View {
                 AinkradButton(title: "Restart Server", style: .primary) { model.languages.restart(spec.id) }.fixedSize()
             }
         }
+    }
+
+    /// Forge's own server: where it is. No server for the language (FP112): any stdio LSP and its arguments.
+    private var setPath: some View {
+        AinkradButton(title: "Set server path…", style: .secondary) { model.chooseServerPath(forFileAt: bar.path) }
+            .secondaryAccent()
+            .fixedSize()
+    }
+
+    private var notFor: some View {
+        AinkradButton(title: "Not for \(bar.language)", style: .ghost) { model.dismissServerHint(bar.language, forever: true) }
+            .borderless()
+            .secondaryAccent()
+            .fixedSize()
+    }
+
+    private var hide: some View {
+        RowAction(glyph: "✕", help: "Hide for this session") { model.dismissServerHint(bar.language, forever: false) }
     }
 
     @ViewBuilder private var background: some View {

@@ -25,6 +25,16 @@ struct CustomServer: Codable, Equatable, Sendable {
 }
 
 extension ForgeModel {
+    /// Set server path… (the bar's button, or `Language: Set Server Path…` at any width — FD48): asks for the
+    /// executable of the server for the file at `path` — Forge's own where it has one, else a custom one.
+    func chooseServerPath(forFileAt path: String) {
+        if let (spec, _) = languages.server(for: path) {
+            if let chosen = ServerPathPicker.choose(spec) { setServerPath(spec.id, chosen) }
+        } else if let language = documents[path]?.language.name, let chosen = CustomServerPicker.choose(language: language) {
+            setCustomServer(forFileAt: path, executable: chosen.path, arguments: chosen.arguments)
+        }
+    }
+
     /// Set server path… on a file whose language Forge has no server for: runs `executable arguments` for that
     /// language from now on (kept in settings), starting with the open files in it. Arguments split on spaces.
     func setCustomServer(forFileAt path: String, executable: String, arguments: String) {

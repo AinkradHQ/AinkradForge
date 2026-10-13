@@ -26,6 +26,9 @@ struct CommandsTests {
         let workspace = ForgeCommand.available(hasWorkspace: true, hasFile: false)
         #expect(workspace.contains(.showChanges) && !workspace.contains(.goToLine))
         #expect(!ForgeCommand.available(hasWorkspace: true, hasFile: true).contains(.closePane))
+        // A language server's path can be set from the palette at any pane width (FD48).
+        #expect(ForgeCommand.available(hasWorkspace: true, hasFile: true).contains(.setServerPath))
+        #expect(!workspace.contains(.setServerPath) && ForgeCommand.setServerPath.paletteTitle == "Language: Set Server Path…")
         #expect(ForgeCommand.available(hasWorkspace: true, hasFile: true, hasSplit: true, inAgentChange: true, agentFile: true, hintShown: true).count == ForgeCommand.allCases.count)
     }
 
