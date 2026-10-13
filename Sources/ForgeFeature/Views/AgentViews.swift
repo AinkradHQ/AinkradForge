@@ -245,36 +245,42 @@ struct OutsideChangesButton: View {
     }
 }
 
-/// ⌘I's card at the selection: what goes with the request, and what to do. Ask (⌘↵) opens a new Grimoire
-/// thread with it.
+/// ⌘I's card at the selection (mockup 17 `.ask`): what goes with the request, the request itself, and
+/// "Grimoire · this workspace … Esc  Ask ⌘↵". Ask opens a new Grimoire thread with it.
 struct AskAgentCard: View {
     let model: ForgeModel
     let request: AskRequest
     @Environment(\.ainkradSkin) private var skin
 
     var body: some View {
-        let lines = request.lines.count == 1 ? "line \(request.lines.lowerBound)" : "lines \(request.lines.lowerBound)–\(request.lines.upperBound)"
-        VStack(alignment: .leading, spacing: skin.size.s6) {
+        let count = request.lines.count
+        let lines = count == 1 ? "line \(request.lines.lowerBound)" : "lines \(request.lines.lowerBound)–\(request.lines.upperBound) (\(count) lines selected)"
+        let canSend = !request.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        VStack(alignment: .leading, spacing: 0) {
             Text("\((request.path as NSString).lastPathComponent) · \(lines)")
                 .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "system")))
                 .foregroundStyle(skin.color(skin.text.faint))
-            AinkradComposer(
+                .lineLimit(1)
+                .padding(.horizontal, skin.size.s4)
+                .padding(.bottom, skin.size.s8)
+            AinkradTextArea(
                 text: Binding(get: { model.agent.ask?.prompt ?? "" }, set: { model.agent.ask?.prompt = $0 }),
-                placeholder: "What should the agent do?", isEditable: true,
-                canSend: !request.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, autoFocus: true,
-                suggestions: { _ in [] }, onPick: { _, _ in }, onDrop: nil, onSend: { model.sendAsk() },
-                chips: { EmptyView() },
-                leading: {
-                    Label("Grimoire · this workspace", systemImage: "sparkles")
-                        .font(skin.font(AinkradFontToken(sizeKey: "t11")))
-                        .foregroundStyle(skin.color(skin.text.muted))
-                },
-                trailing: { EmptyView() })
-            Text("Ask opens a new Grimoire thread with this — you choose the agent and start it.")
-                .font(skin.font(AinkradFontToken(sizeKey: "t10")))
-                .foregroundStyle(skin.color(skin.text.faint))
+                placeholder: "What should the agent do?", minHeight: skin.size.s54, maxHeight: skin.size.s120, autoFocus: true,
+                onSubmit: { if canSend { model.sendAsk() } })
+            HStack(spacing: skin.size.s8) {
+                Text("Grimoire · this workspace")
+                Spacer(minLength: skin.size.s8)
+                Text("Esc")
+                AinkradButton(title: "Ask ⌘↵", style: .primary) { model.sendAsk() }
+                    .fixedSize()
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .disabled(!canSend)
+            }
+            .font(skin.font(AinkradFontToken(sizeKey: "t11")))
+            .foregroundStyle(skin.color(skin.text.faint))
+            .padding(.top, skin.size.s8)
         }
-        .frame(width: skin.size.s440)
+        .frame(width: skin.size.s420)
         .onExitCommand { model.agent.ask = nil }
     }
 }
