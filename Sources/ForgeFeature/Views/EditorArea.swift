@@ -146,7 +146,8 @@ extension PaneView {
     /// `Sources › Ainkrad › ◆ SidebarRow.swift › SidebarRow › body`, in the path's own case.
     @ViewBuilder func breadcrumb(_ path: String, document: EditorDocument) -> some View {
         let parts = path.split(separator: "/").map(String.init)
-        let folders = Array(parts.dropLast())
+        // A file at the root is shown under the workspace's name (mockup 19 B: `deploy-scripts › release.rb`).
+        let folders = parts.count > 1 ? Array(parts.dropLast()) : [model.workspace?.root.lastPathComponent].compactMap { $0 }
         let file = parts.last ?? path
         let symbols = trail.path == path ? trail.names : []
         ViewThatFits(in: .horizontal) {

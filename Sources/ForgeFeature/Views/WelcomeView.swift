@@ -154,8 +154,9 @@ private struct RecentRow: View {
                             .font(skin.font(AinkradFontToken(sizeKey: "t13")))
                             .foregroundStyle(theme.foreground)
                         Spacer(minLength: skin.size.s10)
+                        // The row's 13 pt, in mono (mockup 05 `.rr .faint.mono`).
                         Text(Self.ago(recent.opened))
-                            .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "family")))
+                            .font(skin.font(AinkradFontToken(sizeKey: "t13", mono: "family")))
                             .foregroundStyle(skin.color(skin.text.faint))
                     }
                     Text((recent.path as NSString).abbreviatingWithTildeInPath)

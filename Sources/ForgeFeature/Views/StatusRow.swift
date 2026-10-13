@@ -168,6 +168,8 @@ private struct ServerChip: View {
                                 .shadow(color: state == .ready ? color(state) : .clear, radius: skin.size.s4)
                         }
                         Text(label(spec, state, progress))
+                            // A stopped server reads in red (mockup 19 D).
+                            .foregroundStyle(Self.isStopped(state) ? status.danger : skin.color(skin.text.muted))
                         if let fraction = Self.fraction(progress), state == .starting || state == .ready {
                             ProgressMeter(fraction: fraction)
                         }

@@ -37,7 +37,7 @@ struct FileTreeList: View {
             } else if workspace.tree.isEmpty, model.treeEdit == nil {
                 // An empty folder: say so, and offer the first file (E1D1 FD32).
                 SidebarEmptyState(
-                    icon: "doc.plaintext", title: "This folder is empty", message: "Create a file, or drop files here to copy them in."
+                    icon: "doc.plaintext", glyph: "▤", title: "This folder is empty", message: "Create a file, or drop files here to copy them in."
                 ) {
                     AinkradButton(title: model.labelled("New File", .newFile), style: .secondary) { model.beginNew(folder: false, in: "") }
                         .secondaryAccent().fixedSize()
@@ -160,7 +160,7 @@ struct ChangesList: View {
             if workspace.branch == nil, !workspace.isLoading {
                 // E6: what needs git, and the way to it; the rest of Forge works without.
                 SidebarEmptyState(
-                    icon: "arrow.triangle.branch", title: "Not a git repository",
+                    icon: "arrow.triangle.branch", glyph: "⑂", title: "Not a git repository",
                     message: "Changes, gutter marks and blame need git. The rest works as usual."
                 ) {
                     AinkradButton(title: "Initialize Repository", style: .secondary) { model.initializeRepository() }

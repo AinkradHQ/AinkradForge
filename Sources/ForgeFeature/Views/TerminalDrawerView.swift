@@ -75,10 +75,12 @@ struct TerminalDrawerView: View {
         .overlay(alignment: .top) { grab }
     }
 
-    /// The resize handle: a short bar that shows on hover; dragging moves the drawer's top edge.
+    /// The resize handle (`.drawer .grab`): a short faint bar, brighter on hover; dragging moves the drawer's top edge.
     private var grab: some View {
         Capsule()
-            .fill(theme.foreground.opacity(isGrabHovered || dragStart != nil ? skin.opacity.o45 : 0))
+            .fill(
+                isGrabHovered || dragStart != nil
+                    ? theme.foreground.opacity(skin.opacity.o45) : skin.color(skin.text.faint).opacity(skin.opacity.o50))
             .frame(width: skin.size.s36, height: skin.size.s4)
             .frame(maxWidth: .infinity, minHeight: skin.size.s10)
             .contentShape(Rectangle())

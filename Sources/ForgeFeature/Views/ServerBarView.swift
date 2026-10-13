@@ -88,7 +88,7 @@ struct ServerBarView: View {
         case .stopped:
             if let spec = bar.spec {
                 if !compact {
-                    AinkradButton(title: "Show Log", style: .ghost) { model.showServerLog(spec.id) }.borderless().fixedSize()
+                    AinkradButton(title: "Show Log", style: .ghost) { model.showServerLog(spec.id) }.borderless().secondaryAccent().fixedSize()
                 }
                 AinkradButton(title: "Restart Server", style: .primary) { model.languages.restart(spec.id) }.fixedSize()
             }
@@ -160,14 +160,17 @@ struct EmptyEditorHints: View {
 /// side when they fit the sidebar, else stacked — both in the mockups' outlined style, not a primary.
 struct SidebarEmptyState<Actions: View>: View {
     let icon: String
+    /// The mockup's text glyph (`▤`, `⑂`) in place of the symbol: 26 pt, the cyan accent at 70 % (`.sempty .glyph`).
+    var glyph: String?
     let title: String
     let message: String
     @ViewBuilder let actions: Actions
     @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
 
     var body: some View {
         VStack(spacing: 0) {
-            AinkradEmptyState(icon: icon, title: title, message: message)
+            state
                 .fixedSize(horizontal: false, vertical: true)
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: skin.size.s8) { actions }
@@ -177,5 +180,11 @@ struct SidebarEmptyState<Actions: View>: View {
         }
         .padding(.bottom, skin.size.s40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var state: AinkradEmptyState {
+        let state = AinkradEmptyState(icon: icon, title: title, message: message)
+        guard let glyph else { return state }
+        return state.glyph(glyph).glyphSize(26).iconTint(theme.accentSecondary.opacity(skin.opacity.o70))
     }
 }
