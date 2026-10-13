@@ -159,7 +159,7 @@ final class SnapshotTests: XCTestCase {
         // ponytail: masked; un-mask if the panel ever shows there live.
         try Snapshot.assertMatches(
             model, named: "search",
-            masking: [CGRect(x: 100, y: 260, width: 100, height: 22), CGRect(x: 314, y: 70, width: 886, height: 28)])
+            masking: [CGRect(x: 90, y: 214, width: 210, height: 20), CGRect(x: 314, y: 70, width: 886, height: 28)])
     }
 
     /// Review All: a file Forge had read, changed while closed, and a new one.
@@ -181,7 +181,8 @@ final class SnapshotTests: XCTestCase {
         XCTAssertEqual(
             model.reviewEntries.map(\.path), ["CHANGELOG.md", sort], "Review All should list both changed files")
         model.agent.reviewingAll = true
-        try Snapshot.assertMatches(model, named: "review-all")
+        // The subtitle's "since 2:31 PM" reads the clock.
+        try Snapshot.assertMatches(model, named: "review-all", masking: [CGRect(x: 420, y: 44, width: 200, height: 20)])
     }
 
     /// The review by Grimoire turn (E5, screen 18): turn 3 open with its request and first diff, an outside edit
@@ -234,24 +235,27 @@ final class SnapshotTests: XCTestCase {
         }
     }
 
+    /// The header's "since …", turn 3's "… ago" (and the prompt's end, which its width moves), the outside
+    /// group's time and the kept turn 2's "… ago".
     static let turnReviewAskClock = [
-        CGRect(x: 30, y: 44, width: 310, height: 20), CGRect(x: 300, y: 82, width: 170, height: 28),
-        CGRect(x: 470, y: 462, width: 210, height: 28), CGRect(x: 690, y: 514, width: 130, height: 28),
+        CGRect(x: 30, y: 44, width: 310, height: 20), CGRect(x: 250, y: 82, width: 220, height: 28),
+        CGRect(x: 470, y: 418, width: 210, height: 28), CGRect(x: 690, y: 470, width: 130, height: 28),
     ]
 
-    /// Per width: the header's "since …", turn 3's "… ago" line, the outside group's time and (640) turn 2's
+    /// Per width: the header's "since …", turn 3's "… ago" line, the outside group's time and (900, 640) turn 2's
     /// "… ago". From 640 down the sidebar is hidden (FD41), so the pane starts at the window's edge.
     static let turnReviewNarrowClock: [(CGFloat, [CGRect])] = [
-        (900, [44, 146, 476]), (760, [44, 146, 476]), (640, [44, 146, 452, 506]), (520, [44, 146, 476]),
+        (900, [44, 146, 408, 460]), (760, [44, 146, 432]), (640, [44, 110, 372, 426]), (520, [44, 146, 432]),
     ].map { width, rows in
         let x: CGFloat = width < RootView.narrowWidth ? 0 : 300
         return (width, rows.map { CGRect(x: x, y: CGFloat($0), width: width - x, height: 20) })
     }
 
-    /// The header's "since …", each turn's "… ago" and the outside group's time window.
+    /// The header's "since …", each turn's "… ago" (with the end of turn 3's prompt, which its width moves) and the
+    /// outside group's time window.
     static let turnReviewClock = [
-        CGRect(x: 330, y: 44, width: 380, height: 20), CGRect(x: 600, y: 84, width: 180, height: 24),
-        CGRect(x: 760, y: 364, width: 220, height: 26), CGRect(x: 600, y: 424, width: 180, height: 28),
+        CGRect(x: 330, y: 44, width: 380, height: 20), CGRect(x: 560, y: 84, width: 220, height: 24),
+        CGRect(x: 760, y: 320, width: 220, height: 26), CGRect(x: 600, y: 380, width: 180, height: 28),
     ]
 }
 

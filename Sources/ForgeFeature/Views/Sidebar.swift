@@ -73,7 +73,9 @@ private struct WorkspaceCard: View {
                     if let branch = workspace.branch {
                         Label(branch, systemImage: "arrow.triangle.branch").labelStyle(.titleAndIcon)
                     } else {
-                        Text("Not a git repository")
+                        // An empty folder names where it is; otherwise that git is missing (mockup 19 A, B).
+                        Text(workspace.files.isEmpty ? (workspace.root.path as NSString).abbreviatingWithTildeInPath : "not a git repository")
+                            .foregroundStyle(skin.color(skin.text.faint))
                     }
                     if !workspace.marks.isEmpty {
                         Text("● \(workspace.marks.count)").foregroundStyle(statusColors.warning)

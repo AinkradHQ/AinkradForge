@@ -1,8 +1,10 @@
 import AinkradAppKit
 import SwiftUI
 
-/// The editor area while a replace is being previewed: that file's changes as a diff, each hunk untickable,
-/// nothing written until Replace in File (or Replace All). Built on the kit's diff review.
+/// The editor area while a replace is being previewed (mockup 08): a tab "SidebarRow.swift ↔ Replace preview" and
+/// a pane with the breadcrumb "Replace preview › SidebarRow.swift › 2 changes" over that file's changes, drawn like
+/// the editor — line numbers, syntax colours, full-row washes, unchanged lines folded. Each hunk can be unticked;
+/// nothing is written until ⇄ on the file row or Replace All. The tab's ✕ closes the preview.
 struct ReplacePreview: View {
     let model: ForgeModel
     let path: String
@@ -12,55 +14,79 @@ struct ReplacePreview: View {
 
     var body: some View {
         @Bindable var search = model.search
-        VStack(alignment: .leading, spacing: skin.size.s10) {
-            HStack(spacing: skin.size.s8) {
-                VStack(alignment: .leading, spacing: skin.size.s2) {
-                    Text("Replace preview · \((path as NSString).lastPathComponent)")
-                        .font(skin.font(AinkradFontToken(sizeKey: "t14", weight: "semibold")))
-                    Text(subtitle)
-                        .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
-                        .foregroundStyle(skin.color(skin.text.muted))
-                }
-                Spacer(minLength: skin.size.s8)
-                AinkradButton(title: "Close Preview", style: .ghost) { search.previewPath = nil }.fixedSize()
-                AinkradButton(title: "Replace in File", style: .primary) { model.replace(in: path) }
-                    .fixedSize()
-                    .disabled((plan?.count ?? 0) == 0)
+        let name = (path as NSString).lastPathComponent
+        VStack(spacing: 0) {
+            HStack(spacing: skin.size.s2) {
+                EditorTab(
+                    name: name, title: "\(name) ↔ Replace preview", isActive: true, isPreview: false, isDirty: false,
+                    onSelect: {}, onDoubleClick: {}, onClose: { search.previewPath = nil }
+                )
+                .help("\(path) — nothing is written until you replace")
+                Spacer(minLength: 0)
             }
-            Group {
-                if let diff = plan?.diff {
-                    ScrollView {
-                        AinkradDiffReview(
-                            fileDiff: diff,
-                            rejectedHunkIDs: Binding(get: { search.rejected[path] ?? [] }, set: { search.rejected[path] = $0 }))
+            .padding(.horizontal, skin.size.s14)
+            .padding(.top, skin.size.s12)
+            .frame(height: skin.size.s44, alignment: .bottom)
+            VStack(alignment: .leading, spacing: 0) {
+                AinkradBreadcrumb(items: ["Replace preview", name, changes])
+                    .preservesCase()
+                    .icon(at: 1) {
+                        Image(systemName: FileIcon.symbol(for: FileNode(path: path, name: name, isDirectory: false, children: [])))
+                            .font(skin.font(AinkradFontToken(sizeKey: "t10")))
+                            .foregroundStyle(FileIcon.tint(for: name, theme: theme) ?? skin.color(skin.text.faint))
                     }
-                } else if plan != nil {
-                    AinkradEmptyState(
-                        icon: "doc.text", title: "Too long to preview",
-                        message: "This file has more than \(ReplacePlan.previewLineLimit) lines. Replace in File still works.")
-                } else {
-                    AinkradLoadingState(label: "Preparing the preview…")
+                    .lineLimit(1)
+                    .padding(.horizontal, skin.size.s14)
+                    .padding(.top, skin.size.s8)
+                    .padding(.bottom, skin.size.s4)
+                Group {
+                    if let diff = plan?.diff {
+                        ScrollView {
+                            AinkradDiffReview(
+                                fileDiff: diff,
+                                rejectedHunkIDs: Binding(get: { search.rejected[path] ?? [] }, set: { search.rejected[path] = $0 })
+                            )
+                            .hidesHeader()
+                            .keepUndoHunkControls()
+                            .editorLines()
+                            .syntaxColoured()
+                            .lineNumberGutter()
+                            .unchangedLineFolds()
+                            .padding(.vertical, skin.size.s4)
+                            .padding(.trailing, skin.size.s14)
+                        }
+                    } else if plan != nil {
+                        AinkradEmptyState(
+                            icon: "doc.text", title: "Too long to preview",
+                            message: "This file has more than \(ReplacePlan.previewLineLimit) lines. ⇄ on its row still replaces in it.")
+                    } else {
+                        AinkradLoadingState(label: "Preparing the preview…")
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(
+                UnevenRoundedRectangle(
+                    topLeadingRadius: 0, bottomLeadingRadius: skin.size.s10, bottomTrailingRadius: skin.size.s10,
+                    topTrailingRadius: skin.size.s10
+                )
+                .fill(theme.surface.opacity(skin.opacity.o45))
+            )
+            .padding(.horizontal, skin.size.s14)
         }
-        .padding(skin.size.s16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(RoundedRectangle(cornerRadius: skin.size.s10).fill(theme.surface.opacity(skin.opacity.o45)))
-        .padding(.horizontal, skin.size.s14)
-        .padding(.top, skin.size.s12)
         // Recomputed only when the file, query or replacement changes — the diff is real work on long files.
         .task(id: "\(path)\u{0}\(search.query.text)\u{0}\(search.replacement)\u{0}\(search.preserveCase)\u{0}\(search.query.regex)") {
             plan = model.replacePlan(for: path)
         }
     }
 
-    private var subtitle: String {
+    /// "2 changes", or what is left of them once some are unticked.
+    private var changes: String {
         guard let plan else { return " " }
-        let rejected = model.search.rejected[path]?.count ?? 0
         let hunks = plan.diff?.hunks.count ?? 0
-        return "\(plan.count) match\(plan.count == 1 ? "" : "es")"
-            + (hunks > 0 ? " in \(hunks) change\(hunks == 1 ? "" : "s")" : "")
-            + (rejected > 0 ? " · \(rejected) left as is" : "") + " · nothing is written until you replace"
+        let rejected = model.search.rejected[path]?.count ?? 0
+        let text = hunks == 0 ? "\(plan.count) match\(plan.count == 1 ? "" : "es")" : "\(hunks) change\(hunks == 1 ? "" : "s")"
+        return text + (rejected > 0 ? " · \(rejected) left as is" : "")
     }
 }

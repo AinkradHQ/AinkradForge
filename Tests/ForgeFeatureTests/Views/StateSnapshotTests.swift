@@ -35,7 +35,7 @@ final class StateSnapshotTests: XCTestCase {
         try SweepSupport.waitUntilLoaded(model)
         XCTAssertEqual(model.serverBar(for: "release.rb")?.language, "Ruby")
         // CESE's parked find panel over line 1 (see `SnapshotTests.testSearch`), below the hint bar here.
-        try Snapshot.assertMatches(model, named: "no-git-no-server", masking: [CGRect(x: 314, y: 114, width: 886, height: 28)])
+        try Snapshot.assertMatches(model, named: "no-git-no-server", masking: [CGRect(x: 314, y: 114, width: 886, height: 34)])
     }
 
     /// C: the server is up but has not answered `initialize`, and reports indexing: spinner, progress, "–" counts.
@@ -54,7 +54,7 @@ final class StateSnapshotTests: XCTestCase {
         let model = try model(server: "kill -SEGV $$")
         SweepSupport.spin(until: 10) { model.languages.statuses["sourcekit-lsp"] == .crashed("signal 11 (SEGV)") }
         XCTAssertEqual(model.serverBar(for: SnapshotTests.sidebarRow)?.kind, .stopped)
-        try Snapshot.assertMatches(model, named: "server-crashed", masking: [CGRect(x: 314, y: 114, width: 886, height: 28)])
+        try Snapshot.assertMatches(model, named: "server-crashed", masking: [CGRect(x: 314, y: 114, width: 886, height: 34)])
     }
 
     /// The sample repo with SidebarRow.swift open, its Swift server the script `body`.

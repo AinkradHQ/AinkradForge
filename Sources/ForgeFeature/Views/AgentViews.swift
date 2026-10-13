@@ -1,7 +1,8 @@
 import AinkradAppKit
 import SwiftUI
 
-/// Heads a file changed from outside Forge: how much, how long ago, ‹ › through the changes, Undo / Keep All.
+/// Heads a file changed from outside Forge (mockup 15 `.rbar`): how much, how long ago, ‹ 1 of 3 › through the
+/// changes, Undo All / Keep All. A soft second-accent wash, square-ended under Neon; a capsule under Glass.
 struct ReviewBar: View {
     let model: ForgeModel
     let path: String
@@ -11,29 +12,38 @@ struct ReviewBar: View {
 
     var body: some View {
         let count = file.diff.hunks.count
-        HStack(spacing: skin.size.s8) {
-            Image(systemName: "sparkle").foregroundStyle(theme.accentSecondary)
+        HStack(spacing: skin.size.s10) {
+            Text("✦").foregroundStyle(theme.accentSecondary)
             TimelineView(.periodic(from: .now, by: 30)) { _ in
-                Text("Changed outside Forge · \(count) change\(count == 1 ? "" : "s") · \(file.since.formatted(.relative(presentation: .named)))")
+                Text("Changed outside Forge · \(count) change\(count == 1 ? "" : "s") · \(ShortAgo.text(file.since))")
                     .foregroundStyle(skin.color(skin.text.muted))
+                    .lineLimit(1)
             }
             Spacer(minLength: skin.size.s8)
-            AinkradIconButton(systemName: "chevron.left", size: skin.size.s18, tooltip: "Previous Change") { model.stepChange(path, by: -1) }
-            Text("\((model.agent.current[path] ?? 0) + 1) of \(count)")
-                .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
-                .foregroundStyle(skin.color(skin.text.faint))
-            AinkradIconButton(systemName: "chevron.right", size: skin.size.s18, tooltip: "Next Change") { model.stepChange(path, by: 1) }
-            AinkradButton(title: "Undo All", style: .secondary) { model.undoAllChanges(path) }.fixedSize()
+            HStack(spacing: skin.size.s4) {
+                RowAction(glyph: "‹", help: "Previous Change") { model.stepChange(path, by: -1) }
+                Text("\((model.agent.current[path] ?? 0) + 1) of \(count)")
+                    .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
+                    .foregroundStyle(skin.color(skin.text.faint))
+                RowAction(glyph: "›", help: "Next Change") { model.stepChange(path, by: 1) }
+            }
+            .fixedSize()
+            AinkradButton(title: "Undo All", style: .secondary) { model.undoAllChanges(path) }.secondaryAccent().fixedSize()
             AinkradButton(title: "Keep All", style: .primary) { model.keepAllChanges(path) }.fixedSize()
         }
-        .font(skin.font(AinkradFontToken(sizeKey: "t12")))
-        .padding(.vertical, skin.size.s4)
+        .font(skin.font(AinkradFontToken(size: 11.5)))
+        .padding(.vertical, skin.size.s6)
         .padding(.horizontal, skin.size.s10)
-        .background(Capsule().fill(theme.accentSecondary.opacity(skin.opacity.o08)))
+        .background(shape.fill(skin.usesNativeGlass ? theme.foreground.opacity(skin.opacity.o07) : theme.accentSecondary.opacity(skin.opacity.o08)))
+    }
+
+    private var shape: AnyShape {
+        skin.usesNativeGlass ? AnyShape(Capsule()) : AnyShape(RoundedRectangle(cornerRadius: skin.size.s8))
     }
 }
 
-/// The current change's actions, at the end of its first line: Keep, Undo, and what it was.
+/// The current change's actions, at the end of its first line (mockup 15 `.achip`): ✓ Keep, ↶ Undo, ▾ Was — and
+/// what it was, under a "✦ Was · lines 18–19 before the change · 12 s ago" head.
 struct ChangeChip: View {
     let model: ForgeModel
     let path: String
@@ -45,36 +55,60 @@ struct ChangeChip: View {
     var body: some View {
         VStack(alignment: .leading, spacing: skin.size.s6) {
             HStack(spacing: skin.size.s2) {
-                chipButton("checkmark", "Keep", status.success, "⌘↵") { model.keepChange(path, hunk: hunk) }
-                chipButton("arrow.uturn.backward", "Undo", status.danger, "⌘⌫") { model.undoChange(path, hunk: hunk) }
-                chipButton(model.agent.showingWas ? "chevron.up" : "chevron.down", "Was", skin.color(skin.text.muted), nil) {
+                chipButton("✓ Keep ⌘↵", status.success, "Keep (⌘↵)") { model.keepChange(path, hunk: hunk) }
+                chipButton("↶ Undo ⌘⌫", status.danger, "Undo (⌘⌫)") { model.undoChange(path, hunk: hunk) }
+                chipButton(model.agent.showingWas ? "▴ Was" : "▾ Was", skin.color(skin.text.muted), "What these lines were") {
                     model.agent.showingWas.toggle()
                 }
             }
             .padding(skin.size.s2)
-            .background(Capsule().fill(theme.surface.opacity(skin.opacity.o90)))
-            if model.agent.showingWas, let change = model.agent.files[path]?.diff.hunks[safe: hunk] {
-                let old = Self.dedented(change.lines.filter { $0.kind == .deletion }.map(\.text))
-                VStack(alignment: .leading, spacing: 0) {
-                    if old.isEmpty {
-                        Text("Nothing — these lines are new.")
-                            .font(skin.font(AinkradFontToken(sizeKey: "t11")))
-                            .foregroundStyle(skin.color(skin.text.faint))
-                    }
-                    ForEach(Array(old.prefix(12).enumerated()), id: \.offset) { _, line in
-                        Text(line.isEmpty ? " " : line)
-                            .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "system")))
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, skin.size.s6)
-                            .background(status.danger.opacity(skin.opacity.o16))
-                    }
-                }
-                .padding(skin.size.s8)
-                .frame(width: skin.size.s420)
-                .ainkradPanel()
+            .background(chipShape.fill(theme.surface.opacity(skin.opacity.o92)))
+            .shadow(color: theme.background.opacity(skin.opacity.o35), radius: skin.size.s8, y: skin.size.s6)
+            if model.agent.showingWas, let file = model.agent.files[path], let change = file.diff.hunks[safe: hunk] {
+                was(change, since: file.since)
             }
         }
+    }
+
+    private var chipShape: AnyShape {
+        skin.usesNativeGlass ? AnyShape(Capsule()) : AnyShape(RoundedRectangle(cornerRadius: skin.size.s6))
+    }
+
+    private func was(_ change: AinkradDiffHunk, since: Date) -> some View {
+        let removed = change.lines.filter { $0.kind == .deletion }
+        let old = Self.dedented(removed.map(\.text))
+        let numbers = removed.compactMap(\.oldNumber)
+        let lines = numbers.first.map { first in
+            let last = numbers.last ?? first
+            return first == last ? "line \(first)" : "lines \(first)–\(last)"
+        }
+        return VStack(alignment: .leading, spacing: skin.size.s4) {
+            HStack(spacing: skin.size.s8) {
+                Text("✦").foregroundStyle(theme.accentSecondary)
+                Text(lines.map { "Was · \($0) before the change" } ?? "Was · nothing — these lines are new")
+                    .foregroundStyle(skin.color(skin.text.muted))
+                Spacer(minLength: skin.size.s8)
+                Text(ShortAgo.text(since)).foregroundStyle(skin.color(skin.text.faint))
+            }
+            .font(skin.font(AinkradFontToken(sizeKey: "t11")))
+            .padding(.horizontal, skin.size.s12)
+            .padding(.top, skin.size.s8)
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(old.prefix(12).enumerated()), id: \.offset) { _, line in
+                    Text(line.isEmpty ? " " : line)
+                        .font(skin.font(AinkradFontToken(size: 11.5, mono: "system")))
+                        .foregroundStyle(theme.foreground)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, skin.size.s6)
+                        .background(status.danger.opacity(skin.opacity.o14))
+                }
+            }
+            .padding(.horizontal, skin.size.s12)
+            .padding(.bottom, skin.size.s10)
+        }
+        .frame(width: skin.size.s460)
+        .ainkradPanel()
     }
 
     /// The lines without the indentation they share.
@@ -84,17 +118,17 @@ struct ChangeChip: View {
         return lines.map { String($0.dropFirst(min(indent, $0.prefix { $0 == " " || $0 == "\t" }.count))) }
     }
 
-    private func chipButton(_ symbol: String, _ title: String, _ tint: Color, _ keys: String?, action: @escaping () -> Void) -> some View {
+    private func chipButton(_ title: String, _ tint: Color, _ help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {  // design-lint: allow raw-control compact chip action (kit has no pill segment button)
-            Label(keys.map { "\(title) \($0)" } ?? title, systemImage: symbol)
-                .font(skin.font(AinkradFontToken(sizeKey: "t11")))
+            Text(title)
+                .font(skin.font(AinkradFontToken(sizeKey: "t10_5")))
                 .foregroundStyle(tint)
                 .padding(.vertical, skin.size.s2)
                 .padding(.horizontal, skin.size.s8)
-                .contentShape(Capsule())
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(keys.map { "\(title) (\($0))" } ?? title)
+        .help(help)
     }
 }
 
@@ -102,9 +136,10 @@ struct ChangeChip: View {
 /// untick to undo it. Done undoes the unticked ones and clears the review.
 struct ReviewAllPane: View {
     let model: ForgeModel
+    /// Files whose diff is showing; until the first click, only the first file's (mockup 16).
+    @State private var shown: Set<String>?
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
-    @Environment(\.ainkradStatusColors) private var status
 
     var body: some View {
         // Once Grimoire has announced a turn, the review groups by turn (screen 18).
@@ -113,51 +148,61 @@ struct ReviewAllPane: View {
 
     @ViewBuilder private var list: some View {
         let entries = model.reviewEntries
-        let changes = entries.reduce(0) { $0 + $1.diff.hunks.count }
-        let unticked = model.agent.unticked.values.reduce(0) { $0 + $1.count }
-        VStack(alignment: .leading, spacing: skin.size.s10) {
-            HStack(spacing: skin.size.s8) {
+        let open = shown ?? Set(entries.first.map { [$0.path] } ?? [])
+        VStack(alignment: .leading, spacing: skin.size.s12) {
+            HStack(spacing: skin.size.s10) {
                 VStack(alignment: .leading, spacing: skin.size.s2) {
                     Text("Changes outside Forge").font(skin.font(AinkradFontToken(sizeKey: "t14", weight: "semibold")))
-                    Text("\(entries.count) file\(entries.count == 1 ? "" : "s") · \(changes) change\(changes == 1 ? "" : "s")"
-                        + (unticked > 0 ? " · \(unticked) unticked — Done undoes \(unticked == 1 ? "it" : "them")" : ""))
+                    Text(subtitle(entries))
                         .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
                         .foregroundStyle(skin.color(skin.text.muted))
+                        .lineLimit(1)
                 }
                 Spacer(minLength: skin.size.s8)
-                AinkradButton(title: "Undo All", style: .secondary) { model.finishReview(undoAll: true) }.fixedSize()
-                AinkradButton(title: "Keep All", style: .secondary) { model.keepAllOutside() }.fixedSize()
+                AinkradButton(title: "Undo All", style: .secondary) { model.finishReview(undoAll: true) }.secondaryAccent().fixedSize()
+                AinkradButton(title: "Keep All", style: .secondary) { model.keepAllOutside() }.secondaryAccent().fixedSize()
                 AinkradButton(title: "Done", style: .primary) { model.finishReview() }.fixedSize()
             }
             if entries.isEmpty {
                 AinkradEmptyState(icon: "checkmark.circle", title: "Nothing to review", message: "No file has changed from outside Forge since the last review.")
             }
             ScrollView {
-                VStack(alignment: .leading, spacing: skin.size.s14) {
+                VStack(alignment: .leading, spacing: skin.size.s12) {
                     ForEach(entries, id: \.path) { entry in
-                        VStack(alignment: .leading, spacing: skin.size.s6) {
-                            // The diff's own header names the file; this only says what happened to it (E1D1 FD13).
-                            if entry.isNew || entry.isDeleted {
-                                Text(entry.isNew ? "New file" : "Deleted")
-                                    .font(skin.font(AinkradFontToken(sizeKey: "t12", weight: "medium")))
-                                    .foregroundStyle(entry.isNew ? status.success : status.danger)
-                            }
+                        let counts = ReviewFileRow.counts(entry.diff)
+                        ReviewFileRow(
+                            path: entry.path, note: entry.isNew ? "new file" : entry.isDeleted ? "deleted" : nil,
+                            added: counts.added, removed: counts.removed
+                        ) {
+                            var next = open
+                            if next.remove(entry.path) == nil { next.insert(entry.path) }
+                            shown = next
+                        }
+                        if open.contains(entry.path) {
                             AinkradDiffReview(
                                 fileDiff: entry.diff,
                                 rejectedHunkIDs: Binding(
                                     get: { model.agent.unticked[entry.path] ?? [] },
-                                    set: { model.agent.unticked[entry.path] = $0 }))
+                                    set: { model.agent.unticked[entry.path] = $0 })
+                            )
+                            .reviewStyle()
                         }
                     }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(skin.size.s16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(RoundedRectangle(cornerRadius: skin.size.s10).fill(theme.surface.opacity(skin.opacity.o45)))
-        .padding(.horizontal, skin.size.s14)
-        .padding(.top, skin.size.s12)
+        .reviewSurface(skin, theme)
+    }
+
+    /// "5 files · 9 changes · since 10:42 · 1 change unticked — Done undoes it".
+    private func subtitle(_ entries: [(path: String, diff: AinkradFileDiff, isNew: Bool, isDeleted: Bool)]) -> String {
+        let changes = entries.reduce(0) { $0 + $1.diff.hunks.count }
+        let unticked = model.agent.unticked.values.reduce(0) { $0 + $1.count }
+        let since = (model.agent.files.values.map(\.since) + model.agent.others.values.map(\.since)).min()
+        return "\(entries.count) file\(entries.count == 1 ? "" : "s") · \(changes) change\(changes == 1 ? "" : "s")"
+            + (since.map { " · since " + $0.formatted(date: .omitted, time: .shortened) } ?? "")
+            + (unticked > 0 ? " · \(unticked) change\(unticked == 1 ? "" : "s") unticked — Done undoes \(unticked == 1 ? "it" : "them")" : "")
     }
 }
 
@@ -200,36 +245,42 @@ struct OutsideChangesButton: View {
     }
 }
 
-/// ⌘I's card at the selection: what goes with the request, and what to do. Ask (⌘↵) opens a new Grimoire
-/// thread with it.
+/// ⌘I's card at the selection (mockup 17 `.ask`): what goes with the request, the request itself, and
+/// "Grimoire · this workspace … Esc  Ask ⌘↵". Ask opens a new Grimoire thread with it.
 struct AskAgentCard: View {
     let model: ForgeModel
     let request: AskRequest
     @Environment(\.ainkradSkin) private var skin
 
     var body: some View {
-        let lines = request.lines.count == 1 ? "line \(request.lines.lowerBound)" : "lines \(request.lines.lowerBound)–\(request.lines.upperBound)"
-        VStack(alignment: .leading, spacing: skin.size.s6) {
+        let count = request.lines.count
+        let lines = count == 1 ? "line \(request.lines.lowerBound)" : "lines \(request.lines.lowerBound)–\(request.lines.upperBound) (\(count) lines selected)"
+        let canSend = !request.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        VStack(alignment: .leading, spacing: 0) {
             Text("\((request.path as NSString).lastPathComponent) · \(lines)")
                 .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "system")))
                 .foregroundStyle(skin.color(skin.text.faint))
-            AinkradComposer(
+                .lineLimit(1)
+                .padding(.horizontal, skin.size.s4)
+                .padding(.bottom, skin.size.s8)
+            AinkradTextArea(
                 text: Binding(get: { model.agent.ask?.prompt ?? "" }, set: { model.agent.ask?.prompt = $0 }),
-                placeholder: "What should the agent do?", isEditable: true,
-                canSend: !request.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, autoFocus: true,
-                suggestions: { _ in [] }, onPick: { _, _ in }, onDrop: nil, onSend: { model.sendAsk() },
-                chips: { EmptyView() },
-                leading: {
-                    Label("Grimoire · this workspace", systemImage: "sparkles")
-                        .font(skin.font(AinkradFontToken(sizeKey: "t11")))
-                        .foregroundStyle(skin.color(skin.text.muted))
-                },
-                trailing: { EmptyView() })
-            Text("Ask opens a new Grimoire thread with this — you choose the agent and start it.")
-                .font(skin.font(AinkradFontToken(sizeKey: "t10")))
-                .foregroundStyle(skin.color(skin.text.faint))
+                placeholder: "What should the agent do?", minHeight: skin.size.s54, maxHeight: skin.size.s120, autoFocus: true,
+                onSubmit: { if canSend { model.sendAsk() } })
+            HStack(spacing: skin.size.s8) {
+                Text("Grimoire · this workspace")
+                Spacer(minLength: skin.size.s8)
+                Text("Esc")
+                AinkradButton(title: "Ask ⌘↵", style: .primary) { model.sendAsk() }
+                    .fixedSize()
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .disabled(!canSend)
+            }
+            .font(skin.font(AinkradFontToken(sizeKey: "t11")))
+            .foregroundStyle(skin.color(skin.text.faint))
+            .padding(.top, skin.size.s8)
         }
-        .frame(width: skin.size.s440)
+        .frame(width: skin.size.s420)
         .onExitCommand { model.agent.ask = nil }
     }
 }

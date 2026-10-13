@@ -45,11 +45,7 @@ struct TurnReviewPane: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(skin.size.s16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(RoundedRectangle(cornerRadius: skin.size.s10).fill(theme.surface.opacity(skin.opacity.o45)))
-        .padding(.horizontal, skin.size.s14)
-        .padding(.top, skin.size.s12)
+        .reviewSurface(skin, theme)
         .ainkradConfirmDialog(
             isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
             title: "Undo \(confirming?.title ?? "")?",
@@ -107,8 +103,8 @@ struct TurnReviewPane: View {
             AinkradIconButton(systemName: "checkmark.circle", tooltip: "Keep All") { model.keepAllOutside() }
             AinkradIconButton(systemName: "checkmark", tooltip: "Done") { model.finishTurnReview() }
         } else {
-            AinkradButton(title: "Undo All", style: .secondary) { model.finishReview(undoAll: true) }.fixedSize()
-            AinkradButton(title: "Keep All", style: .secondary) { model.keepAllOutside() }.fixedSize()
+            AinkradButton(title: "Undo All", style: .secondary) { model.finishReview(undoAll: true) }.secondaryAccent().fixedSize()
+            AinkradButton(title: "Keep All", style: .secondary) { model.keepAllOutside() }.secondaryAccent().fixedSize()
             AinkradButton(title: "Done", style: .primary) { model.finishTurnReview() }.fixedSize()
         }
     }
@@ -146,7 +142,7 @@ private struct TurnGroupView: View {
         .padding(.horizontal, skin.size.s6)
         .padding(.top, skin.size.s4)
         .padding(.bottom, isOpen && !group.kept ? skin.size.s8 : skin.size.s4)
-        .background(skin.shape(cut: AinkradRadius.md).fill(washColor.opacity(hovering ? skin.opacity.o08 : skin.opacity.o05)))
+        .background(washShape.fill(washColor.opacity(hovering ? skin.opacity.o06 : skin.opacity.o03)))
         .opacity(group.kept ? skin.opacity.o55 : hovering || isOpen ? 1 : skin.opacity.o88)
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
@@ -155,7 +151,10 @@ private struct TurnGroupView: View {
         .animation(reduceMotion ? nil : skin.animation(skin.motion.hover), value: hovering)
     }
 
-    private var washColor: Color { group.turn == nil ? theme.accentSecondary : theme.accentPrimary }
+    /// One neutral wash for every group — a turn and an outside window alike; only the dot tells them apart
+    /// (mockup 18 `.turn`): the second accent under Neon, white under Glass. Square under Neon.
+    private var washColor: Color { skin.usesNativeGlass ? theme.foreground : theme.accentSecondary }
+    private var washShape: RoundedRectangle { RoundedRectangle(cornerRadius: skin.usesNativeGlass ? skin.size.s10 : 0) }
 
     private func motion(_ duration: Double) -> Animation? {
         reduceMotion ? nil : skin.animation(AinkradAnimationToken(curve: "easeInOut", duration: duration))
@@ -212,9 +211,12 @@ private struct TurnGroupView: View {
                 .foregroundStyle(skin.color(skin.text.faint))
                 .rotationEffect(.degrees(isOpen && !group.kept ? 90 : 0))
                 .frame(width: skin.size.s10)
+            // The agent's colour (Claude's orange) for a turn, softly glowing; an outside window's is the second accent.
+            let dot = group.turn.map { skin.agentColor(AinkradAgent(identifier: $0.agent)) } ?? theme.accentSecondary.opacity(skin.opacity.o70)
             Circle()
-                .fill(group.turn == nil ? theme.accentSecondary.opacity(skin.opacity.o70) : theme.accentPrimary)
+                .fill(dot)
                 .frame(width: skin.size.s8, height: skin.size.s8)
+                .shadow(color: group.turn == nil ? .clear : dot.opacity(skin.opacity.o60), radius: skin.size.s3)
         }
     }
 
@@ -265,8 +267,8 @@ private struct TurnGroupView: View {
                 AinkradIconButton(systemName: "arrow.uturn.backward", tooltip: undoTitle, action: undo)
                 AinkradIconButton(systemName: "checkmark", tooltip: keepTitle) { model.keep(group: group) }
             } else {
-                AinkradButton(title: undoTitle, style: .secondary, icon: "arrow.uturn.backward", action: undo).fixedSize()
-                AinkradButton(title: keepTitle, style: .primary, icon: "checkmark") { model.keep(group: group) }.fixedSize()
+                AinkradButton(title: "↶ " + undoTitle, style: .secondary, action: undo).secondaryAccent().fixedSize()
+                AinkradButton(title: "✓ " + keepTitle, style: .primary) { model.keep(group: group) }.fixedSize()
             }
         }
     }
@@ -285,7 +287,7 @@ private struct TurnGroupView: View {
             let to = group.to.formatted(date: .omitted, time: .shortened)
             return (from == to ? from : "\(from)–\(to)") + " · not from a Grimoire turn"
         }
-        let ago = group.to.formatted(.relative(presentation: .named))
+        let ago = ShortAgo.text(group.to)
         return group.kept ? ago : "Grimoire · " + ago
     }
 
@@ -313,46 +315,23 @@ private struct TurnGroupView: View {
     private func fileRow(_ file: TurnLedger.FileChange) -> some View {
         let shown = shownFiles ?? [group.files.first?.path ?? ""]
         let counts = LineMerge.counts(file.before, file.after)
-        let folder = (file.path as NSString).deletingLastPathComponent
-        let isShown = shown.contains(file.path)
-        // Open, the diff's own header names the file (it can't be hidden); the row then only says what happened
-        // to it — as Review All does (E1D1 FD13).
-        let note = file.before == nil ? "new file" : file.after == nil ? "deleted" : isShown ? nil : folder.isEmpty ? "·" : folder
-        return VStack(alignment: .leading, spacing: skin.size.s4) {
-            // A plain button: Full Keyboard Access shows or hides the diff with Space (E1D2 FD40).
-            Button {  // design-lint: allow raw-control keyboard-reachable row (kit has no row button)
+        return VStack(alignment: .leading, spacing: skin.size.s6) {
+            ReviewFileRow(
+                path: file.path, note: file.before == nil ? "new file" : file.after == nil ? "deleted" : nil,
+                added: counts.added, removed: counts.removed
+            ) {
                 var next = shown
                 if next.remove(file.path) == nil { next.insert(file.path) }
                 shownFiles = next
-            } label: {
-                HStack(spacing: skin.size.s8) {
-                    Image(systemName: isShown ? "chevron.down" : "doc.text").foregroundStyle(skin.color(skin.text.faint))
-                    if !isShown {
-                        Text((file.path as NSString).lastPathComponent).font(skin.font(AinkradFontToken(sizeKey: "t12")))
-                            .lineLimit(1).truncationMode(.middle).layoutPriority(1)
-                    }
-                    if let note {
-                        Text(note)
-                            .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "system")))
-                            .foregroundStyle(skin.color(skin.text.faint))
-                            .lineLimit(1)
-                            .truncationMode(.head)
-                    }
-                    Spacer(minLength: skin.size.s8)
-                    Text("+\(counts.added)").foregroundStyle(status.success).fixedSize()
-                    Text("−\(counts.removed)").foregroundStyle(status.danger).fixedSize()
-                }
-                .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "system")))
-                .padding(.vertical, skin.size.s3)
-                .padding(.horizontal, skin.size.s6)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            if isShown {
+            if shown.contains(file.path) {
                 let key = group.id + "|" + file.path
                 AinkradDiffReview(
                     fileDiff: ForgeModel.diff(file),
-                    rejectedHunkIDs: Binding(get: { model.agent.turns.unticked[key] ?? [] }, set: { model.agent.turns.unticked[key] = $0 }))
+                    rejectedHunkIDs: Binding(get: { model.agent.turns.unticked[key] ?? [] }, set: { model.agent.turns.unticked[key] = $0 })
+                )
+                .reviewStyle()
+                .padding(.leading, skin.size.s22)
             }
         }
     }

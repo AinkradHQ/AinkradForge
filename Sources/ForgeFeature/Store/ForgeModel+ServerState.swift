@@ -41,7 +41,7 @@ extension ForgeModel {
         case .crashed(let how):
             return ServerBar(
                 kind: .stopped, language: spec.language, spec: spec,
-                message: "\(spec.command) stopped: \(how), twice in 5 minutes. Diagnostics and completion are paused.")
+                message: "\(spec.command) stopped (\(how.replacingOccurrences(of: " (", with: ", ").replacingOccurrences(of: ")", with: ""))) — 2nd time in 5 min. Diagnostics and completion are paused.")
         case .failed(let why):
             return ServerBar(
                 kind: .stopped, language: spec.language, spec: spec, message: "\(spec.command) could not start: \(why)")

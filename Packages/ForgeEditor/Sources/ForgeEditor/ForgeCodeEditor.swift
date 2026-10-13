@@ -107,17 +107,20 @@ public struct EditorOptions: Equatable, Sendable {
     }
 }
 
-/// A range of the buffer to mark: underlined (a diagnostic, in its severity's colour), or washed (a change
-/// made outside Forge — a soft fill behind its text).
+/// A range of the buffer to mark: underlined (a diagnostic, in its severity's colour), washed (a search match —
+/// a soft fill behind its text), or line-washed (a change made outside Forge — its lines filled edge to edge).
 public struct EditorMark: Equatable, Sendable {
     public let range: NSRange
     public let color: NSColor
     public let isWash: Bool
+    /// Wash every line the range touches across the editor's full width, not just the text.
+    public let isLineWash: Bool
 
-    public init(range: NSRange, color: NSColor, isWash: Bool = false) {
+    public init(range: NSRange, color: NSColor, isWash: Bool = false, isLineWash: Bool = false) {
         self.range = range
         self.color = color
         self.isWash = isWash
+        self.isLineWash = isLineWash
     }
 }
 
@@ -342,7 +345,10 @@ struct EditorHost: View {
                 coordinator.apply(marks)
                 coordinator.apply(edits)
                 coordinator.open(menu)
-                if let controller = coordinator.controller { coordinator.installLineMarks(controller) }
+                if let controller = coordinator.controller {
+                    coordinator.installLineMarks(controller)
+                    coordinator.installLineWash(controller)
+                }
                 coordinator.reportAnchor()
             }
         }
@@ -409,6 +415,8 @@ struct EditorHost: View {
         var onCaretRect: (CGRect, CGFloat) -> Void = { _, _ in }
         var onLineMarkClick: (Int, CGRect) -> Void = { _, _ in }
         let lineMarkView = LineMarkView()
+        let lineWashView = LineWashView()
+        var washObserver: (any NSObjectProtocol)?
         var gutterObserver: (any NSObjectProtocol)?
         var anchorLine: Int?
         var onAnchor: (CGRect?) -> Void = { _ in }
@@ -436,6 +444,7 @@ struct EditorHost: View {
         func textViewDidChangeText(controller: TextViewController) {
             hover.dismiss()
             lineMarkView.needsDisplay = true
+            lineWashView.needsDisplay = true
             DispatchQueue.main.async { [weak self] in self?.reportAnchor() }
             onEdit()
         }
@@ -445,8 +454,9 @@ struct EditorHost: View {
             guard let textView = controller?.textView, let manager = textView.emphasisManager else { return }
             manager.removeEmphases(for: "forge.marks")
             let length = textView.textStorage.length
+            lineWashView.washes = marks.filter(\.isLineWash)
             let emphases = marks.compactMap { mark -> Emphasis? in
-                guard mark.range.location < length else { return nil }
+                guard !mark.isLineWash, mark.range.location < length else { return nil }
                 let range = NSRange(location: mark.range.location, length: max(1, min(mark.range.length, length - mark.range.location)))
                 return Emphasis(range: range, style: mark.isWash ? .outline(color: mark.color, fill: true) : .underline(color: mark.color))
             }

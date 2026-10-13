@@ -49,6 +49,10 @@ struct StatusRow: View {
                     }
                 })
                 Text(document.language.name)
+            } else if showsFormat, model.activeDocument == nil, !workspace.isLoading {
+                // No file open: what a new file gets (mockup 19 A).
+                Text(TextFormat().encoding.rawValue)
+                Text(TextFormat().lineEnding.rawValue)
             }
         }
     }
@@ -130,11 +134,18 @@ private struct ServerChip: View {
                             Circle().fill(color(state)).frame(width: skin.size.s6, height: skin.size.s6)
                         }
                         Text(label(spec, state, progress))
+                        if let fraction = Self.fraction(progress), state == .starting || state == .ready {
+                            ProgressMeter(fraction: fraction)
+                        }
                     }
                 }
                 .help(Self.describe(state, spec: spec))
                 if Self.isStopped(state) {
-                    AinkradButton(title: "Restart", style: .ghost) { model.languages.restart(spec.id) }.fixedSize()
+                    // An inline link, the bar's height (mockup 19 D), not a boxed button.
+                    Button("Restart") { model.languages.restart(spec.id) }  // design-lint: allow raw-control inline status-bar link
+                        .buttonStyle(.plain)
+                        .foregroundStyle(theme.accentSecondary)
+                        .help("Restart \(spec.command)")
                 }
             }
         } else if model.tabs.active != nil {
@@ -152,12 +163,28 @@ private struct ServerChip: View {
 
     private func label(_ spec: ServerSpec, _ state: ServerStatus, _ progress: String?) -> String {
         switch state {
-        case .starting: "\(spec.command) starting\(progress.map { " · \($0.lowercased())" } ?? "")"
+        case .starting: "\(spec.command) starting\(progress.map { " · \(Self.grouped($0).lowercased())" } ?? "")"
         case .notInstalled: "\(spec.command) not installed"
         case .failed: "\(spec.command) failed"
         case .crashed: "\(spec.command) stopped"
-        case .ready, .notRunning: progress.map { "\(spec.command) · \($0.lowercased())" } ?? spec.command
+        case .ready, .notRunning: progress.map { "\(spec.command) · \(Self.grouped($0).lowercased())" } ?? spec.command
         }
+    }
+
+    /// "Indexing 412 / 1280" → "Indexing 412 / 1,280".
+    static func grouped(_ progress: String) -> String {
+        progress.split(separator: " ", omittingEmptySubsequences: false)
+            .map { word in Int(word).map { $0.formatted(.number.grouping(.automatic)) } ?? String(word) }
+            .joined(separator: " ")
+    }
+
+    /// How far "412 / 1280" is, when the server reports a count.
+    static func fraction(_ progress: String?) -> Double? {
+        let words = progress?.split(separator: " ") ?? []
+        guard let slash = words.firstIndex(of: "/"), slash > 0, slash + 1 < words.count,
+            let done = Double(words[slash - 1]), let total = Double(words[slash + 1]), total > 0
+        else { return nil }
+        return min(1, done / total)
     }
 
     static func isStopped(_ state: ServerStatus) -> Bool {

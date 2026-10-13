@@ -36,8 +36,8 @@ struct ServerBarView: View {
                 }
             }
         }
-        .font(skin.font(AinkradFontToken(sizeKey: "t11")))
-        .padding(.vertical, skin.size.s4)
+        .font(skin.font(AinkradFontToken(size: 11.5)))
+        .padding(.vertical, skin.size.s6)
         .padding(.horizontal, skin.size.s10)
         // Sized by the pane, never by its content: the width decides the layout.
         .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
@@ -46,12 +46,18 @@ struct ServerBarView: View {
     }
 
     private var icon: some View {
-        Image(systemName: bar.kind == .stopped ? "xmark.octagon" : "info.circle")
-            .foregroundStyle(bar.kind == .stopped ? status.danger : theme.accentSecondary)
+        Image(systemName: bar.kind == .stopped ? "xmark.circle" : "info.circle")
+            .foregroundStyle(bar.kind == .stopped ? status.danger : status.warning)
     }
 
+    /// The message, the language's name in bold (mockup 19 B: "No language server for **Ruby** — …").
     private var message: some View {
-        Text(bar.message)
+        var text = AttributedString(bar.message)
+        if let range = text.range(of: bar.language) {
+            text[range].font = skin.font(AinkradFontToken(size: 11.5, weight: "semibold"))
+            text[range].foregroundColor = theme.foreground
+        }
+        return Text(text)
             .foregroundStyle(skin.color(skin.text.muted))
             .lineLimit(3)
             .fixedSize(horizontal: false, vertical: true)
@@ -64,19 +70,20 @@ struct ServerBarView: View {
                 AinkradButton(title: "Set Server Path…", style: .secondary) {
                     if let path = ServerPathPicker.choose(spec) { model.setServerPath(spec.id, path) }
                 }
+                .secondaryAccent()
                 .fixedSize()
             }
             AinkradButton(title: "Not for \(bar.language)", style: .ghost) {
                 model.dismissServerHint(bar.language, forever: true)
             }
+            .borderless()
+            .secondaryAccent()
             .fixedSize()
-            AinkradIconButton(systemName: "xmark", size: skin.size.s18, tooltip: "Hide for this session") {
-                model.dismissServerHint(bar.language, forever: false)
-            }
+            RowAction(glyph: "✕", help: "Hide for this session") { model.dismissServerHint(bar.language, forever: false) }
         case .stopped:
             if let spec = bar.spec {
                 if !compact {
-                    AinkradButton(title: "Show Log", style: .ghost) { model.showServerLog(spec.id) }.fixedSize()
+                    AinkradButton(title: "Show Log", style: .ghost) { model.showServerLog(spec.id) }.borderless().fixedSize()
                 }
                 AinkradButton(title: "Restart Server", style: .primary) { model.languages.restart(spec.id) }.fixedSize()
             }
@@ -103,5 +110,76 @@ enum ServerPathPicker {
         panel.message = "Choose the \(spec.command) executable for \(spec.language)."
         panel.prompt = "Use"
         return panel.runModal() == .OK ? panel.url?.path : nil
+    }
+}
+
+/// A server's indexing progress in the status bar (mockup 19 C): a thin 90 pt bar, the done part in the second
+/// accent.
+struct ProgressMeter: View {
+    let fraction: Double
+    @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
+
+    var body: some View {
+        Capsule()
+            .fill(theme.foreground.opacity(skin.opacity.o10))
+            .frame(width: skin.size.s90, height: skin.size.s3)
+            .overlay(alignment: .leading) {
+                Capsule().fill(theme.accentSecondary).frame(width: skin.size.s90 * fraction, height: skin.size.s3)
+            }
+    }
+}
+
+/// The editor area with no file open in an empty folder (mockup 19 A): a faint ⚒ and the ways in, as keycaps.
+struct EmptyEditorHints: View {
+    @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
+
+    var body: some View {
+        VStack(spacing: skin.size.s8) {
+            Image(systemName: "hammer")
+                .font(skin.font(AinkradFontToken(sizeKey: "t34")))
+                .foregroundStyle(theme.accentSecondary.opacity(skin.opacity.o50))
+            HStack(spacing: skin.size.s4) {
+                hint("⌘P", "open a file ·")
+                hint("⇧⌘P", "commands ·")
+                hint("⌘O", "switch workspace")
+            }
+            .font(skin.font(AinkradFontToken(sizeKey: "t12")))
+            .foregroundStyle(skin.color(skin.text.muted))
+        }
+        .padding(.bottom, skin.size.s40)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func hint(_ keys: String, _ text: String) -> some View {
+        HStack(spacing: skin.size.s4) {
+            AinkradKbd(keys).outlined()
+            Text(text)
+        }
+    }
+}
+
+/// A sidebar tab's empty state (mockup 19 A, B): the kit's glyph, title and message, then its actions — side by
+/// side when they fit the sidebar, else stacked — both in the mockups' outlined style, not a primary.
+struct SidebarEmptyState<Actions: View>: View {
+    let icon: String
+    let title: String
+    let message: String
+    @ViewBuilder let actions: Actions
+    @Environment(\.ainkradSkin) private var skin
+
+    var body: some View {
+        VStack(spacing: 0) {
+            AinkradEmptyState(icon: icon, title: title, message: message)
+                .fixedSize(horizontal: false, vertical: true)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: skin.size.s8) { actions }
+                VStack(spacing: skin.size.s8) { actions }
+            }
+            .padding(.top, -skin.size.s16)
+        }
+        .padding(.bottom, skin.size.s40)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

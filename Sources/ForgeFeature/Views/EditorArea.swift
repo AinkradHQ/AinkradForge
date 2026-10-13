@@ -14,6 +14,11 @@ struct EditorArea: View {
     var body: some View {
         VStack(spacing: 0) {
             if model.agent.reviewingAll {
+                // The tab row stays above the review (mockups 16, 18); picking a tab leaves the review for later.
+                if !model.tabs.paths.isEmpty {
+                    TabStrip(model: model, pane: model.activePane)
+                        .simultaneousGesture(TapGesture().onEnded { model.agent.reviewingAll = false })
+                }
                 ReviewAllPane(model: model)
             } else if let pending = model.pendingEdit {
                 EditPreview(model: model, pending: pending)
@@ -92,7 +97,7 @@ private struct PaneView: View {
                     .animation(reduceMotion ? nil : skin.animation(skin.motion.present), value: model.serverBar(for: path))
                 } else if model.workspace?.files.isEmpty == true {
                     // Nothing to pick in an empty folder (E1D1 FD32): the ways in instead of a blank pane (E6).
-                    AinkradEmptyState(icon: "hammer", title: "No file open", message: "⌘N new file · ⇧⌘P commands · ⌘O open folder")
+                    EmptyEditorHints()
                 } else {
                     AinkradEmptyState(
                         icon: "doc.text", title: "No file open",
@@ -182,7 +187,9 @@ private struct DocumentView: View {
                 onGoToLineHandled: { model.pendingLine = nil },
                 focus: model.activePane == pane && model.pendingFocus, onFocusHandled: { model.pendingFocus = false },
                 // The caret moved here — this pane is the one being worked in.
-                onCaret: { model.focus(pane: pane) }, marks: marks + agentMarks.wash,
+                onCaret: { model.focus(pane: pane) },
+                marks: marks + agentMarks.wash
+                    + model.searchMarks(in: document.storage.string, color: NSColor(status.warning.opacity(skin.opacity.o30))),
                 definitions: { [model, path] offset in await model.definitions(path: path, offset: offset) },
                 onOpenLink: { [model] link in model.open(link) },
                 onHover: { [model, pane, path] hit in Task { await model.hover(pane: pane, path: path, at: hit) } },
@@ -239,7 +246,7 @@ private struct DocumentView: View {
                     // At the line's end, but never so far right that the Was card leaves the editor.
                     GeometryReader { geo in
                         ChangeChip(model: model, path: path, hunk: hunk)
-                            .padding(.leading, max(0, min(anchor.maxX + skin.size.s28, geo.size.width - skin.size.s420 - skin.size.s16)))
+                            .padding(.leading, max(0, min(anchor.maxX + skin.size.s28, geo.size.width - skin.size.s460 - skin.size.s16)))
                             .padding(.top, max(0, anchor.minY - skin.size.s2))
                     }
                 }
@@ -344,8 +351,10 @@ private struct OverflowFade: ViewModifier {
     }
 }
 
-private struct EditorTab: View {
+struct EditorTab: View {
     let name: String
+    /// Shown instead of `name` (whose extension still picks the icon): "SidebarRow.swift ↔ Replace preview".
+    var title: String?
     let isActive: Bool
     let isPreview: Bool
     let isDirty: Bool
@@ -361,7 +370,7 @@ private struct EditorTab: View {
             Image(systemName: FileIcon.symbol(for: FileNode(path: name, name: name, isDirectory: false, children: [])))
                 .font(skin.font(AinkradFontToken(sizeKey: "t10")))
                 .foregroundStyle(FileIcon.tint(for: name, theme: theme) ?? skin.color(skin.text.faint))
-            Text(name)
+            Text(title ?? name)
                 .font(skin.font(AinkradFontToken(sizeKey: "t12", weight: isActive ? "medium" : "regular")))
                 .italic(isPreview)
                 .foregroundStyle(isActive ? theme.foreground : skin.color(skin.text.muted))

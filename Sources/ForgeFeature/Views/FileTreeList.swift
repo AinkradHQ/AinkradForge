@@ -36,10 +36,14 @@ struct FileTreeList: View {
                 AinkradSpinner()
             } else if workspace.tree.isEmpty, model.treeEdit == nil {
                 // An empty folder: say so, and offer the first file (E1D1 FD32).
-                AinkradEmptyState(
-                    icon: "folder", title: "This folder is empty",
-                    message: "Create a file, or a folder with ⌥⌘N, or drop files here to copy them in.", actionTitle: "New File"
-                ) { model.beginNew(folder: false, in: "") }
+                SidebarEmptyState(
+                    icon: "doc.plaintext", title: "This folder is empty", message: "Create a file, or drop files here to copy them in."
+                ) {
+                    AinkradButton(title: "New File ⌘N", style: .secondary) { model.beginNew(folder: false, in: "") }
+                        .secondaryAccent().fixedSize()
+                    AinkradButton(title: "New Folder", style: .secondary) { model.beginNew(folder: true, in: "") }
+                        .secondaryAccent().fixedSize()
+                }
                 .dropDestination(for: URL.self) { urls, _ in drop(urls, into: "") }
             }
         }
@@ -139,11 +143,15 @@ struct ChangesList: View {
         .overlay {
             if workspace.branch == nil, !workspace.isLoading {
                 // E6: what needs git, and the way to it; the rest of Forge works without.
-                AinkradEmptyState(
+                SidebarEmptyState(
                     icon: "arrow.triangle.branch", title: "Not a git repository",
-                    message: "Changes, gutter marks and blame need git. The rest works as usual.",
-                    actionTitle: "Initialize Repository"
-                ) { model.initializeRepository() }
+                    message: "Changes, gutter marks and blame need git. The rest works as usual."
+                ) {
+                    AinkradButton(title: "Initialize Repository", style: .secondary) { model.initializeRepository() }
+                        .secondaryAccent().fixedSize()
+                    AinkradButton(title: "Open in Git Mage", style: .ghost) { model.openGitMage() }
+                        .borderless().secondaryAccent().fixedSize()
+                }
             } else if workspace.changes.isEmpty {
                 Text("No changes.")
                     .font(skin.font(AinkradFontToken(sizeKey: "t12")))
