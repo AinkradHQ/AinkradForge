@@ -74,6 +74,11 @@ extension ForgeModel {
         case .askAgent: beginAsk()
         case .showHover: showHoverAtCaret()
         case .closeHints: closeHints()
+        case .reviewOutside: agent.reviewingAll = true
+        case .showIssues: sideTab = .problems
+        case .nextProblem: goToProblem(backward: false)
+        case .previousProblem: goToProblem(backward: true)
+        case .toggleSidebar: sidebarShown = !isSidebarShown
         case .undoAllChanges: if let path = tabs.active { undoAllChanges(path) }
         case .maximiseTerminal:
             if !terminals.isOpen { terminals.toggle() }
@@ -87,6 +92,26 @@ extension ForgeModel {
         guard line > 0, tabs.active != nil else { return }
         pendingLine = line
         pendingFocus = true
+    }
+
+    /// F8 / ⇧F8: the next (previous) issue after the caret, across files in path order, wrapping around.
+    private func goToProblem(backward: Bool) {
+        let issues = languages.issues.values.joined().sorted { ($0.path, $0.start.line, $0.start.character) < ($1.path, $1.start.line, $1.start.character) }
+        let at = tabs.active.flatMap { path in documents[path].map { (path, $0.cursor.line - 1) } }
+        guard let index = Self.problem(in: issues.map { ($0.path, $0.start.line) }, after: at, backward: backward) else {
+            notice = "No problems."
+            return
+        }
+        open(file: issues[index].path, pinned: false)
+        goTo(line: issues[index].start.line + 1)
+    }
+
+    /// The index in `positions` (sorted) strictly after — or before — `at`, wrapping; `nil` when empty.
+    static func problem(in positions: [(String, Int)], after at: (String, Int)?, backward: Bool) -> Int? {
+        guard !positions.isEmpty else { return nil }
+        guard let at else { return backward ? positions.count - 1 : 0 }
+        if backward { return positions.lastIndex { $0 < at } ?? positions.count - 1 }
+        return positions.firstIndex { $0 > at } ?? 0
     }
 
     private func cycleTab(by step: Int) {

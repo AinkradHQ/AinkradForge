@@ -368,6 +368,7 @@ struct EditorHost: View {
         // One turn later: on first appearance the controller has not loaded its view yet.
         DispatchQueue.main.async {
             coordinator.controller?.setCursorPositions([CursorPosition(line: line, column: 1)], scrollToVisible: true)
+            coordinator.flash(line: line)
             onGoToLineHandled()
         }
     }

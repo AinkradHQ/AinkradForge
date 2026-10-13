@@ -219,7 +219,7 @@ struct HubTests {
         for _ in 0..<100 where hub.statuses["gopls"] != .crashed("signal 11 (SEGV)") { try await Task.sleep(for: .milliseconds(50)) }
         #expect(hub.statuses["gopls"] == .crashed("signal 11 (SEGV)"))
         let log = hub.logs["gopls"] ?? []
-        #expect(log.filter { $0.hasSuffix("Stopped (signal 11 (SEGV))") }.count == 2, "\(log)")
+        #expect(log.filter { $0.hasSuffix("Stopped: signal 11 (SEGV)") }.count == 2, "\(log)")
         // It stays down: no third start.
         try await Task.sleep(for: .milliseconds(1500))
         #expect(hub.statuses["gopls"] == .crashed("signal 11 (SEGV)"))

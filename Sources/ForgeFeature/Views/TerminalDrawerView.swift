@@ -81,6 +81,13 @@ private struct TasksPill: View {
     @Environment(\.ainkradTheme) private var theme
 
     var body: some View {
+        // A plain button, so Full Keyboard Access reaches it (E1D2 FD40).
+        Button(action: action) { label }  // design-lint: allow raw-control keyboard-reachable tab (kit has no tab button)
+            .buttonStyle(.plain)
+            .help("Tasks (⇧⌘B to run one)")
+    }
+
+    private var label: some View {
         Label("Tasks", systemImage: "play")
             .font(skin.font(AinkradFontToken(sizeKey: "t11", weight: isActive ? "medium" : "regular")))
             .foregroundStyle(isActive ? theme.foreground : skin.color(skin.text.muted))
@@ -90,8 +97,6 @@ private struct TasksPill: View {
                 Capsule().fill(isActive ? theme.foreground.opacity(skin.opacity.o10) : isHovered ? theme.foreground.opacity(skin.opacity.o05) : .clear))
             .contentShape(Capsule())
             .onHover { isHovered = $0 }
-            .onTapGesture(perform: action)
-            .help("Tasks (⇧⌘B to run one)")
     }
 }
 
@@ -108,11 +113,17 @@ private struct DrawerTab: View {
 
     var body: some View {
         HStack(spacing: skin.size.s6) {
-            badge.frame(width: skin.size.s12)
-            Text(tab.title)
-                .font(skin.font(AinkradFontToken(sizeKey: "t11", weight: isActive ? "medium" : "regular")))
-                .foregroundStyle(isActive ? theme.foreground : skin.color(skin.text.muted))
-                .lineLimit(1)
+            // A plain button, so Full Keyboard Access reaches the tab (E1D2 FD40); the close button stays its own.
+            Button(action: onSelect) {  // design-lint: allow raw-control keyboard-reachable tab (kit has no tab button)
+                HStack(spacing: skin.size.s6) {
+                    badge.frame(width: skin.size.s12)
+                    Text(tab.title)
+                        .font(skin.font(AinkradFontToken(sizeKey: "t11", weight: isActive ? "medium" : "regular")))
+                        .foregroundStyle(isActive ? theme.foreground : skin.color(skin.text.muted))
+                        .lineLimit(1)
+                }
+            }
+            .buttonStyle(.plain)
             AinkradIconButton(systemName: "xmark", size: skin.size.s14, tooltip: "Close Terminal", action: onClose)
                 .opacity(isHovered || isActive ? 1 : 0)
         }

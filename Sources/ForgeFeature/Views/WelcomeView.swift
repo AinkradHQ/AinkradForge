@@ -56,36 +56,45 @@ private struct RecentRow: View {
     @Environment(\.ainkradTheme) private var theme
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: skin.size.s2) {
-                Text((recent.path as NSString).lastPathComponent)
-                    .font(skin.font(AinkradFontToken(sizeKey: "t13", weight: "medium")))
-                    .foregroundStyle(theme.foreground.opacity(skin.opacity.o90))
-                Text((recent.path as NSString).abbreviatingWithTildeInPath)
-                    .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
-                    .foregroundStyle(skin.color(skin.text.faint))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                if !worktrees.isEmpty {
-                    HStack(spacing: skin.size.s6) {
-                        ForEach(worktrees.prefix(4), id: \.path) { tree in
-                            AinkradChip(label: tree.branch, systemName: "arrow.triangle.branch")
-                                .onTapGesture { open(tree.path) }
-                                .help(tree.path)
-                        }
-                        if worktrees.count > 4 {
-                            Text("+\(worktrees.count - 4)")
-                                .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
-                                .foregroundStyle(skin.color(skin.text.faint))
-                        }
+        VStack(alignment: .leading, spacing: skin.size.s2) {
+            // Plain buttons, so Full Keyboard Access reaches the recent and each worktree (E1D2 FD40).
+            Button { open(recent.path) } label: {  // design-lint: allow raw-control keyboard-reachable row (kit has no row button)
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: skin.size.s2) {
+                        Text((recent.path as NSString).lastPathComponent)
+                            .font(skin.font(AinkradFontToken(sizeKey: "t13", weight: "medium")))
+                            .foregroundStyle(theme.foreground.opacity(skin.opacity.o90))
+                        Text((recent.path as NSString).abbreviatingWithTildeInPath)
+                            .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
+                            .foregroundStyle(skin.color(skin.text.faint))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
-                    .padding(.top, skin.size.s4)
+                    Spacer(minLength: skin.size.s8)
+                    Text(recent.opened.formatted(.relative(presentation: .named)))
+                        .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
+                        .foregroundStyle(skin.color(skin.text.faint))
                 }
+                .contentShape(Rectangle())
             }
-            Spacer(minLength: skin.size.s8)
-            Text(recent.opened.formatted(.relative(presentation: .named)))
-                .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
-                .foregroundStyle(skin.color(skin.text.faint))
+            .buttonStyle(.plain)
+            if !worktrees.isEmpty {
+                HStack(spacing: skin.size.s6) {
+                    ForEach(worktrees.prefix(4), id: \.path) { tree in
+                        Button { open(tree.path) } label: {  // design-lint: allow raw-control keyboard-reachable chip
+                            AinkradChip(label: tree.branch, systemName: "arrow.triangle.branch")
+                        }
+                        .buttonStyle(.plain)
+                        .help(tree.path)
+                    }
+                    if worktrees.count > 4 {
+                        Text("+\(worktrees.count - 4)")
+                            .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
+                            .foregroundStyle(skin.color(skin.text.faint))
+                    }
+                }
+                .padding(.top, skin.size.s4)
+            }
         }
         .padding(.vertical, skin.size.s8)
         .padding(.horizontal, skin.size.s10)

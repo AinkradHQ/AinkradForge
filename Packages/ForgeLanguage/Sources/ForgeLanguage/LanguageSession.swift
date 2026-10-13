@@ -332,7 +332,7 @@ actor LanguageSession {
         progress = ProgressTracker()
         emit.yield(.progress(nil))
         let how = process.map { CrashPolicy.describe(status: $0.terminationStatus, bySignal: $0.terminationReason == .uncaughtSignal) } ?? "exit"
-        emit.yield(.log("Stopped (\(how))"))
+        emit.yield(.log("Stopped: \(how)"))
         guard policy.crashed(at: Date()) else {
             emit.yield(.status(.crashed(how)))
             return

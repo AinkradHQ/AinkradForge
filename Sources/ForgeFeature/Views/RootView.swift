@@ -8,6 +8,10 @@ struct RootView: View {
     /// What another app asked Forge to open (`host.apps.takePendingLaunch()`), read once at first appearance.
     var takeLaunch: () -> String? = { nil }
     @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradReduceMotion) private var reduceMotion
+
+    /// Below this the sidebar would leave the editor too little room: it starts hidden.
+    static let narrowWidth: CGFloat = 700
 
     var body: some View {
         Group {
@@ -15,12 +19,21 @@ struct RootView: View {
                 GeometryReader { window in
                     HStack(spacing: 0) {
                         // 300 pt, giving way in a narrow window down to 280 (the tab picker's width) so the editor
-                        // keeps its room (E1D1 FD28).
-                        Sidebar(
-                            model: model, workspace: workspace,
-                            width: min(skin.size.s300, max(skin.size.s280, window.size.width * 0.3)))
+                        // keeps its room (E1D1 FD28); below `narrowWidth` (apps tiled three up) it hides until ⌘0
+                        // brings it back (E1D2 FD41).
+                        // From the window's own width (not the model's copy of it): a narrow window opens without
+                        // the sidebar instead of sliding it away.
+                        if model.sidebarShown ?? (window.size.width >= Self.narrowWidth) {
+                            Sidebar(
+                                model: model, workspace: workspace,
+                                width: min(skin.size.s300, max(skin.size.s280, window.size.width * 0.3)))
+                            .transition(.move(edge: .leading).combined(with: .opacity))
+                        }
                         EditorArea(model: model, workspace: workspace, palette: theme.terminalPalette)
                     }
+                    // Only a toggle slides it; a resize just reflows.
+                    .animation(reduceMotion ? nil : skin.animation(skin.motion.present), value: model.sidebarShown)
+                    .onGeometryChange(for: Bool.self) { $0.size.width < Self.narrowWidth } action: { model.windowIsNarrow = $0 }
                 }
             } else {
                 WelcomeView(model: model)

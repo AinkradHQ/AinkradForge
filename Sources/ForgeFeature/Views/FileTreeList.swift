@@ -38,7 +38,7 @@ struct FileTreeList: View {
                 // An empty folder: say so, and offer the first file (E1D1 FD32).
                 AinkradEmptyState(
                     icon: "folder", title: "This folder is empty",
-                    message: "Create a file, or drop files here to copy them in.", actionTitle: "New File"
+                    message: "Create a file, or a folder with ⌥⌘N, or drop files here to copy them in.", actionTitle: "New File"
                 ) { model.beginNew(folder: false, in: "") }
                 .dropDestination(for: URL.self) { urls, _ in drop(urls, into: "") }
             }

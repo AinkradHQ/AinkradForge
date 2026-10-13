@@ -12,6 +12,7 @@ struct CommandsTests {
         #expect(ForgeCommand.showChanges.shortcut?.display == "⌃⇧G")
         #expect(ForgeCommand.goToDefinition.shortcut?.display == "F12")
         #expect(ForgeCommand.findReferences.shortcut?.display == "⇧F12")
+        #expect(ForgeCommand.previousProblem.shortcut?.display == "⇧F8")
     }
 
     @Test func noTwoCommandsShareAChord() {
@@ -26,6 +27,29 @@ struct CommandsTests {
         #expect(workspace.contains(.showChanges) && !workspace.contains(.goToLine))
         #expect(!ForgeCommand.available(hasWorkspace: true, hasFile: true).contains(.closePane))
         #expect(ForgeCommand.available(hasWorkspace: true, hasFile: true, hasSplit: true, inAgentChange: true, agentFile: true, hintShown: true).count == ForgeCommand.allCases.count)
+    }
+
+    /// F8 / ⇧F8 step past the caret's line, across files, and wrap (E1D2 FD40).
+    @MainActor @Test func nextProblemStepsPastTheCaretAndWraps() {
+        let issues = [("a.swift", 3), ("a.swift", 9), ("b.swift", 0)]
+        #expect(ForgeModel.problem(in: issues, after: ("a.swift", 3), backward: false) == 1)
+        #expect(ForgeModel.problem(in: issues, after: ("a.swift", 9), backward: false) == 2)
+        #expect(ForgeModel.problem(in: issues, after: ("b.swift", 0), backward: false) == 0)
+        #expect(ForgeModel.problem(in: issues, after: ("a.swift", 3), backward: true) == 2)
+        #expect(ForgeModel.problem(in: issues, after: ("a.swift", 5), backward: true) == 0)
+        #expect(ForgeModel.problem(in: issues, after: nil, backward: false) == 0)
+        #expect(ForgeModel.problem(in: [], after: nil, backward: false) == nil)
+    }
+
+    /// A narrow window starts without the sidebar; asking for a sidebar tab brings it back (E1D2 FD41).
+    @MainActor @Test func aNarrowWindowHidesTheSidebarUntilATabIsAskedFor() {
+        let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
+        #expect(model.isSidebarShown)
+        model.windowIsNarrow = true
+        #expect(!model.isSidebarShown)
+        model.sideTab = .search
+        #expect(model.isSidebarShown)
+        #expect(ForgeCommand.toggleSidebar.shortcut?.display == "⌘0")
     }
 
     @Test func commandSearchMatchesTitleWords() {

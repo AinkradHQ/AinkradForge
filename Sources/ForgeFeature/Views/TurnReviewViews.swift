@@ -74,14 +74,39 @@ struct TurnReviewPane: View {
         let turns = groups.filter { $0.turn != nil && !$0.kept }.count
         let files = Set(groups.filter { !$0.kept }.flatMap { $0.files.map(\.path) }).count
         let since = groups.map(\.from).min().map { " · since " + $0.formatted(date: .omitted, time: .shortened) } ?? ""
-        return HStack(spacing: skin.size.s8) {
-            VStack(alignment: .leading, spacing: skin.size.s2) {
-                Text("Changes outside Forge").font(skin.font(AinkradFontToken(sizeKey: "t14", weight: "semibold")))
-                Text("\(turns) turn\(turns == 1 ? "" : "s") · \(files) file\(files == 1 ? "" : "s")\(since) · grouped by agent turn")
-                    .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
-                    .foregroundStyle(skin.color(skin.text.muted))
+        let title = VStack(alignment: .leading, spacing: skin.size.s2) {
+            Text("Changes outside Forge").font(skin.font(AinkradFontToken(sizeKey: "t14", weight: "semibold")))
+            Text("\(turns) turn\(turns == 1 ? "" : "s") · \(files) file\(files == 1 ? "" : "s")\(since) · grouped by agent turn")
+                .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
+                .foregroundStyle(skin.color(skin.text.muted))
+        }
+        .lineLimit(1)
+        // Narrow (FD38): the buttons wrap under the title, then fold to icons — never off the pane's edge.
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: skin.size.s8) {
+                title.fixedSize()
+                Spacer(minLength: skin.size.s8)
+                headerButtons(icons: false)
             }
-            Spacer(minLength: skin.size.s8)
+            VStack(alignment: .leading, spacing: skin.size.s6) {
+                title
+                HStack(spacing: skin.size.s8) {
+                    Spacer(minLength: 0)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: skin.size.s8) { headerButtons(icons: false) }
+                        HStack(spacing: skin.size.s4) { headerButtons(icons: true) }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func headerButtons(icons: Bool) -> some View {
+        if icons {
+            AinkradIconButton(systemName: "arrow.uturn.backward", tooltip: "Undo All") { model.finishReview(undoAll: true) }
+            AinkradIconButton(systemName: "checkmark.circle", tooltip: "Keep All") { model.keepAllOutside() }
+            AinkradIconButton(systemName: "checkmark", tooltip: "Done") { model.finishTurnReview() }
+        } else {
             AinkradButton(title: "Undo All", style: .secondary) { model.finishReview(undoAll: true) }.fixedSize()
             AinkradButton(title: "Keep All", style: .secondary) { model.keepAllOutside() }.fixedSize()
             AinkradButton(title: "Done", style: .primary) { model.finishTurnReview() }.fixedSize()
@@ -136,7 +161,51 @@ private struct TurnGroupView: View {
         reduceMotion ? nil : skin.animation(AinkradAnimationToken(curve: "easeInOut", duration: duration))
     }
 
+    /// Wide: one row. Narrow (FD38): the actions wrap under the title — then fold to icons — and the meta joins
+    /// the title's lines, so the title and prompt truncate instead of being squeezed out.
     private var header: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: skin.size.s10) {
+                foldButton(meta: false).frame(minWidth: 0, idealWidth: skin.size.s160, maxWidth: .infinity, alignment: .leading)
+                metaText.fixedSize()
+                actions(icons: false)
+            }
+            VStack(alignment: .trailing, spacing: skin.size.s4) {
+                foldButton(meta: true).frame(maxWidth: .infinity, alignment: .leading)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: skin.size.s10) { actions(icons: false) }
+                    HStack(spacing: skin.size.s4) { actions(icons: true) }
+                }
+            }
+        }
+        .padding(.vertical, skin.size.s6)
+        .padding(.horizontal, skin.size.s6)
+        .contentShape(Rectangle())
+        .onTapGesture { if !group.kept { toggle() } }
+    }
+
+    /// The chevron, dot and title: a plain button, so Full Keyboard Access reaches the fold (Space), and ←/→
+    /// fold and open it (E1D2 FD40).
+    private func foldButton(meta: Bool) -> some View {
+        Button { if !group.kept { toggle() } } label: {  // design-lint: allow raw-control keyboard-reachable fold (kit has no row button)
+            HStack(spacing: skin.size.s10) {
+                marks
+                titleLines(meta: meta)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onKeyPress(.leftArrow) { fold(open: false) }
+        .onKeyPress(.rightArrow) { fold(open: true) }
+    }
+
+    private func fold(open: Bool) -> KeyPress.Result {
+        guard !group.kept, isOpen != open else { return .ignored }
+        toggle()
+        return .handled
+    }
+
+    private var marks: some View {
         HStack(spacing: skin.size.s10) {
             Image(systemName: "chevron.right")
                 .font(skin.font(AinkradFontToken(sizeKey: "t9", weight: "semibold")))
@@ -146,49 +215,63 @@ private struct TurnGroupView: View {
             Circle()
                 .fill(group.turn == nil ? theme.accentSecondary.opacity(skin.opacity.o70) : theme.accentPrimary)
                 .frame(width: skin.size.s8, height: skin.size.s8)
-            VStack(alignment: .leading, spacing: skin.size.s1) {
-                Text(group.title)
-                    .font(skin.font(AinkradFontToken(sizeKey: "t12", weight: "semibold")))
+        }
+    }
+
+    private func titleLines(meta: Bool) -> some View {
+        VStack(alignment: .leading, spacing: skin.size.s1) {
+            Text(group.title)
+                .font(skin.font(AinkradFontToken(sizeKey: "t12", weight: "semibold")))
+                .lineLimit(1)
+            if let line = promptLine, !group.kept {
+                Text(line)
+                    .font(skin.font(AinkradFontToken(sizeKey: "t11")))
+                    .italic(group.turn != nil)
+                    .foregroundStyle(skin.color(skin.text.faint))
                     .lineLimit(1)
-                if let line = promptLine, !group.kept {
-                    Text(line)
-                        .font(skin.font(AinkradFontToken(sizeKey: "t11")))
-                        .italic(group.turn != nil)
-                        .foregroundStyle(skin.color(skin.text.faint))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    .truncationMode(.tail)
+            }
+            if meta { metaText }
+        }
+    }
+
+    private var metaText: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { _ in
+            Text(meta).font(skin.font(AinkradFontToken(sizeKey: "t11"))).foregroundStyle(skin.color(skin.text.muted)).lineLimit(1)
+        }
+    }
+
+    @ViewBuilder private func actions(icons: Bool) -> some View {
+        if group.kept {
+            Label("Kept", systemImage: "checkmark").font(skin.font(AinkradFontToken(sizeKey: "t11"))).foregroundStyle(status.success).fixedSize()
+        } else {
+            if group.turn != nil {
+                if icons {
+                    AinkradIconButton(systemName: "arrow.turn.down.right", tooltip: "Ask about this turn…") { ask() }
+                } else {
+                    Button(action: ask) {  // design-lint: allow raw-control keyboard-reachable link label (FD40)
+                        Label("Ask about this turn…", systemImage: "arrow.turn.down.right")
+                            .font(skin.font(AinkradFontToken(sizeKey: "t11")))
+                            .foregroundStyle(theme.accentSecondary)
+                            .opacity(hovering || asking == group.id ? 1 : skin.opacity.o70)
+                            .fixedSize()
+                    }
+                    .buttonStyle(.plain)
+                    .help("Ask about this turn in the same Grimoire thread")
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            TimelineView(.periodic(from: .now, by: 30)) { _ in
-                Text(meta).font(skin.font(AinkradFontToken(sizeKey: "t11"))).foregroundStyle(skin.color(skin.text.muted)).lineLimit(1)
-            }
-            .fixedSize()
-            if group.kept {
-                Label("Kept", systemImage: "checkmark").font(skin.font(AinkradFontToken(sizeKey: "t11"))).foregroundStyle(status.success)
+            let undoTitle = group.turn == nil ? "Undo" : "Undo turn", keepTitle = group.turn == nil ? "Keep" : "Keep turn"
+            if icons {
+                AinkradIconButton(systemName: "arrow.uturn.backward", tooltip: undoTitle, action: undo)
+                AinkradIconButton(systemName: "checkmark", tooltip: keepTitle) { model.keep(group: group) }
             } else {
-                if group.turn != nil {
-                    Label("Ask about this turn…", systemImage: "arrow.turn.down.right")
-                        .font(skin.font(AinkradFontToken(sizeKey: "t11")))
-                        .foregroundStyle(theme.accentSecondary)
-                        .opacity(hovering || asking == group.id ? 1 : skin.opacity.o70)
-                        .fixedSize()
-                        .onTapGesture { asking = asking == group.id ? nil : group.id }
-                        .help("Ask about this turn in the same Grimoire thread")
-                }
-                AinkradButton(title: group.turn == nil ? "Undo" : "Undo turn", style: .secondary, icon: "arrow.uturn.backward", action: undo)
-                    .fixedSize()
-                AinkradButton(title: group.turn == nil ? "Keep" : "Keep turn", style: .primary, icon: "checkmark") {
-                    model.keep(group: group)
-                }
-                .fixedSize()
+                AinkradButton(title: undoTitle, style: .secondary, icon: "arrow.uturn.backward", action: undo).fixedSize()
+                AinkradButton(title: keepTitle, style: .primary, icon: "checkmark") { model.keep(group: group) }.fixedSize()
             }
         }
-        .padding(.vertical, skin.size.s6)
-        .padding(.horizontal, skin.size.s6)
-        .contentShape(Rectangle())
-        .onTapGesture { if !group.kept { toggle() } }
     }
+
+    private func ask() { asking = asking == group.id ? nil : group.id }
 
     /// The request that caused the turn; for outside edits, which files.
     private var promptLine: String? {
@@ -218,9 +301,10 @@ private struct TurnGroupView: View {
             },
             chips: { EmptyView() },
             leading: {
-                Text("turn \(turn.turn) · \(group.files.count == 1 ? "1 file" : "\(group.files.count) files") attached · Send to Grimoire ⌘↵")
+                Text("turn \(turn.turn) · \(group.files.count == 1 ? "1 file" : "\(group.files.count) files") attached · Send to Grimoire ⌘↵ · Esc")
                     .font(skin.font(AinkradFontToken(sizeKey: "t11")))
                     .foregroundStyle(skin.color(skin.text.faint))
+                    .lineLimit(1)
             },
             trailing: { EmptyView() })
         .onExitCommand { asking = nil }
@@ -235,31 +319,35 @@ private struct TurnGroupView: View {
         // to it — as Review All does (E1D1 FD13).
         let note = file.before == nil ? "new file" : file.after == nil ? "deleted" : isShown ? nil : folder.isEmpty ? "·" : folder
         return VStack(alignment: .leading, spacing: skin.size.s4) {
-            HStack(spacing: skin.size.s8) {
-                Image(systemName: isShown ? "chevron.down" : "doc.text").foregroundStyle(skin.color(skin.text.faint))
-                if !isShown {
-                    Text((file.path as NSString).lastPathComponent).font(skin.font(AinkradFontToken(sizeKey: "t12")))
-                }
-                if let note {
-                    Text(note)
-                        .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "system")))
-                        .foregroundStyle(skin.color(skin.text.faint))
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                }
-                Spacer(minLength: skin.size.s8)
-                Text("+\(counts.added)").foregroundStyle(status.success)
-                Text("−\(counts.removed)").foregroundStyle(status.danger)
-            }
-            .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "system")))
-            .padding(.vertical, skin.size.s3)
-            .padding(.horizontal, skin.size.s6)
-            .contentShape(Rectangle())
-            .onTapGesture {
+            // A plain button: Full Keyboard Access shows or hides the diff with Space (E1D2 FD40).
+            Button {  // design-lint: allow raw-control keyboard-reachable row (kit has no row button)
                 var next = shown
                 if next.remove(file.path) == nil { next.insert(file.path) }
                 shownFiles = next
+            } label: {
+                HStack(spacing: skin.size.s8) {
+                    Image(systemName: isShown ? "chevron.down" : "doc.text").foregroundStyle(skin.color(skin.text.faint))
+                    if !isShown {
+                        Text((file.path as NSString).lastPathComponent).font(skin.font(AinkradFontToken(sizeKey: "t12")))
+                            .lineLimit(1).truncationMode(.middle).layoutPriority(1)
+                    }
+                    if let note {
+                        Text(note)
+                            .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "system")))
+                            .foregroundStyle(skin.color(skin.text.faint))
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                    }
+                    Spacer(minLength: skin.size.s8)
+                    Text("+\(counts.added)").foregroundStyle(status.success).fixedSize()
+                    Text("−\(counts.removed)").foregroundStyle(status.danger).fixedSize()
+                }
+                .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "system")))
+                .padding(.vertical, skin.size.s3)
+                .padding(.horizontal, skin.size.s6)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             if isShown {
                 let key = group.id + "|" + file.path
                 AinkradDiffReview(

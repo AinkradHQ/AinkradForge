@@ -171,11 +171,14 @@ struct OutsideChangesButton: View {
     var body: some View {
         let count = model.agent.count
         if count > 0 {
-            label(count)
-                .foregroundStyle(theme.accentSecondary)
-                .contentShape(Rectangle())
-                .onTapGesture { model.agent.reviewingAll = true }
-                .help("Review changes made outside Forge")
+            // A plain button, so Full Keyboard Access reaches it (E1D2 FD40); the palette has Review Changes too.
+            Button { model.agent.reviewingAll = true } label: {  // design-lint: allow raw-control keyboard-reachable status item
+                label(count)
+                    .foregroundStyle(theme.accentSecondary)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Review changes made outside Forge")
         }
     }
 
