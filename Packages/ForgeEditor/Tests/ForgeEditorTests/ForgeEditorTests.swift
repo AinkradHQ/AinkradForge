@@ -1,4 +1,5 @@
 import AppKit
+import CodeEditSourceEditor
 import Testing
 
 @testable import ForgeEditor
@@ -49,5 +50,22 @@ struct ForgeEditorTests {
         #expect(start("0x1F") == nil)
         #expect(start("int32") == 0)
         #expect(start("greet(") == nil)
+    }
+
+    /// The completion panel takes Forge's finish, and its footer shows only with documentation — not the label
+    /// again under a separator (FD5).
+    @Test func completionPanelTakesTheSkinAndDropsTheBareFooter() {
+        func entry(documentation: String?) -> SuggestionEntry {
+            SuggestionEntry(
+                suggestion: EditorSuggestion(
+                    label: "state", kind: .property, detail: nil, documentation: documentation, insertText: "state",
+                    filterText: "state", replaceStart: nil, deprecated: false),
+                colors: nil)
+        }
+        #expect(entry(documentation: nil).sourcePreview == nil)
+        #expect(entry(documentation: "The state.").sourcePreview == "state")
+
+        let panel = EditorPanelStyle(background: .black, selection: .blue, cornerRadius: 14).suggestionPanelStyle
+        #expect(panel == SuggestionPanelStyle(background: .black, selectedRowBackground: .blue, cornerRadius: 14))
     }
 }

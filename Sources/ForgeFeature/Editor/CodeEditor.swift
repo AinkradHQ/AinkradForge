@@ -43,7 +43,7 @@ struct CodeEditor: View {
     var body: some View {
         ForgeCodeEditor(
             storage: document.storage, language: document.language,
-            colors: EditorPalette.colors(tokens: theme, palette: palette), options: options,
+            colors: EditorPalette.colors(tokens: theme, palette: palette, skin: skin), options: options,
             insets: NSEdgeInsets(top: skin.size.s4, left: 0, bottom: skin.size.s12, right: 0),
             onEdit: onEdit,
             onCursor: { line, column in document.cursor = (line, column) },
@@ -60,7 +60,7 @@ struct CodeEditor: View {
 /// Syntax colours from the active theme's terminal palette — the same ANSI colours Rune uses, so code reads
 /// the same in the editor and the terminal. A host that publishes no palette falls back to the theme accents.
 enum EditorPalette {
-    static func colors(tokens: HostThemeTokens, palette: HostTerminalPalette?) -> EditorColors {
+    static func colors(tokens: HostThemeTokens, palette: HostTerminalPalette?, skin: AinkradSkin) -> EditorColors {
         let fg = NSColor(tokens.foreground)
         func ansi(_ index: Int, _ fallback: Color) -> NSColor {
             guard let palette, palette.ansi.indices.contains(index), let color = color(hex: palette.ansi[index]) else {
@@ -81,7 +81,17 @@ enum EditorPalette {
             values: ansi(14, tokens.accentSecondary),
             numbers: ansi(13, tokens.accentPrimary),
             strings: ansi(3, tokens.accentTertiary),
-            comments: fg.withAlphaComponent(0.4))
+            comments: fg.withAlphaComponent(0.4),
+            completionPanel: panel(tokens: tokens, skin: skin))
+    }
+
+    /// The completion panel in the kit's panel finish (`ainkradPanel`'s fill and corner) with a list row's
+    /// selected wash (the accent at o16) — not CodeEdit's grey (FD5).
+    static func panel(tokens: HostThemeTokens, skin: AinkradSkin) -> EditorPanelStyle {
+        EditorPanelStyle(
+            background: NSColor(tokens.background.opacity(skin.material.panelOpacity)),
+            selection: NSColor(tokens.accentPrimary.opacity(skin.opacity.o16)),
+            cornerRadius: AinkradRadius.panel)
     }
 
     /// `RRGGBB` (optionally `#`-prefixed) → sRGB colour.

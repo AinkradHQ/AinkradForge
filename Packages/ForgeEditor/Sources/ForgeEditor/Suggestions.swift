@@ -81,7 +81,8 @@ struct SuggestionEntry: CodeSuggestionEntry {
     var documentation: String? { suggestion.documentation }
     var pathComponents: [String]? { nil }
     var targetPosition: CursorPosition? { nil }
-    var sourcePreview: String? { suggestion.label }
+    /// Only with documentation to go with it: a footer repeating the label is noise (FD5).
+    var sourcePreview: String? { suggestion.documentation == nil ? nil : suggestion.label }
     var deprecated: Bool { suggestion.deprecated }
 
     /// A lettered badge per kind, as in the mockup: M method, F function, P property, V variable, T type…
