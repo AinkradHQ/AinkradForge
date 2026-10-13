@@ -43,6 +43,8 @@ final class AgentReview {
 
     /// The Ask Agent card, while open.
     var ask: AskRequest?
+    /// Which Grimoire turn (or outside window) wrote what, for the review by turn.
+    var turns = TurnLedger()
 
     /// Everything waiting for review.
     var count: Int { files.count + others.count }
@@ -59,6 +61,7 @@ final class AgentReview {
         reviewingAll = false
         seen = [:]
         ownWrites = [:]
+        turns.clear()
     }
 
     // MARK: - Closed files
@@ -89,6 +92,7 @@ final class AgentReview {
     func outside(_ path: String, baseline: String?, current: String?) {
         let since = others[path]?.since ?? Date()
         let base = others[path].map(\.baseline) ?? baseline
+        turns.observe(path, before: others[path].map(\.current) ?? base, after: current)
         if base == current || (base == nil && current == nil) {
             others[path] = nil
         } else {
@@ -100,6 +104,7 @@ final class AgentReview {
     func settled(_ path: String) {
         others[path] = nil
         unticked[path] = nil
+        turns.drop(path)
     }
 
     private func remember(_ path: String, _ text: String) {
@@ -112,7 +117,30 @@ final class AgentReview {
     func reloaded(_ path: String, before: String, after: String) {
         guard after.utf8.reduce(1, { $1 == 10 ? $0 + 1 : $0 }) <= Self.lineLimit else { return }
         let existing = files[path]
+        turns.observe(path, before: before, after: after)
         set(path, baseline: existing?.baseline ?? before, text: after, since: existing?.since ?? Date())
+    }
+
+    // MARK: - Turns
+
+    /// Our own undo of a turn is about to land in the editor: recompute, do not keep everything.
+    func expect(_ path: String) { expecting.insert(path) }
+
+    /// A kept turn folds into what Forge has seen: `baseline` becomes the base the file compares against.
+    func rebase(_ path: String, baseline: String?, text: String?) {
+        if let file = files[path] {
+            set(path, baseline: baseline ?? "", text: text ?? "", since: file.since)
+        } else if let other = others[path] {
+            others[path] = baseline == other.current ? nil : OtherFile(baseline: baseline, current: other.current, since: other.since)
+            if others[path] == nil { turns.drop(path) }
+        }
+    }
+
+    /// A closed file Forge itself rewrote while undoing a turn: still in review against `baseline`, without the
+    /// write counting as an outside change.
+    func restore(_ path: String, baseline: String?, current: String?, since: Date) {
+        others[path] = baseline == current ? nil : OtherFile(baseline: baseline, current: current, since: since)
+        if others[path] == nil { turns.drop(path) }
     }
 
     /// The buffer changed in Forge: our own undo just landed (recompute), or the user typed (keep it all).
@@ -200,6 +228,7 @@ final class AgentReview {
         files[path] = nil
         current[path] = nil
         expecting.remove(path)
+        turns.drop(path)
     }
 
     /// The new line just before a change's first old-or-new line (0 at the top).

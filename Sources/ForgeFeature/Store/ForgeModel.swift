@@ -98,17 +98,17 @@ final class ForgeModel {
         self.apps = apps
         languages.onApplyEdit = { [weak self] changes in self?.apply(changes) ?? false }
         tasks.follow(terminals, model: self)
+        observeTurns()
         // The host's quit prompt knows nothing of an app's unsaved files: keep them for the next launch instead.
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) {
             [weak self] _ in MainActor.assumeIsolated { self?.backupUnsaved() }
         }
     }
 
-    /// Opens what another app asked for (`launch`: a folder, or a file — its folder, with the file in a tab);
-    /// otherwise reopens the last workspace, if its folder still exists.
+    /// Opens a `ForgeLaunch` (folder, or file at a line; an open workspace stays — the host remounts to hand one in).
     func start(launch: String? = nil) async {
-        // Other apps send an `AinkradLaunchIntent` (openDocument / openDirectory); a bare path works too.
-        let launch = launch.flatMap { AinkradLaunchIntent.decode($0)?.path ?? $0 }
+        let request = ForgeLaunch.decode(launch)
+        let launch = request?.path
         var isFolder: ObjCBool = false
         if let launch, FileManager.default.fileExists(atPath: launch, isDirectory: &isFolder) {
             let url = URL(fileURLWithPath: launch)
@@ -116,11 +116,14 @@ final class ForgeModel {
             // A file opens its whole repo, when it is in one.
             let top = isFolder.boolValue ? nil : (try? await Git(directory: folder).run(["rev-parse", "--show-toplevel"]))?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            await open(folder: top.map { URL(fileURLWithPath: $0) } ?? folder)
+            let target = top.map { URL(fileURLWithPath: $0) } ?? folder
+            if workspace?.root.standardizedFileURL.path != target.standardizedFileURL.path { await open(folder: target) }
             if !isFolder.boolValue, let path = workspace?.relativePath(of: url) {
                 reveal(path)
                 open(file: path, pinned: true)
+                pendingLine = request?.line
             }
+            agent.reviewingAll = agent.reviewingAll || request?.review == true
             return
         }
         guard workspace == nil, let path = store.document.lastWorkspace,
@@ -215,8 +218,6 @@ final class ForgeModel {
     }
 
     // MARK: - Tabs
-
-    var activeDocument: EditorDocument? { tabs.active.flatMap { documents[$0] } }
 
     /// Single click = preview; double click (or `pinned`) keeps the tab.
     func open(file path: String, pinned: Bool) {

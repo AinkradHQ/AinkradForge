@@ -170,6 +170,61 @@ final class SnapshotTests: XCTestCase {
         model.agent.reviewingAll = true
         try Snapshot.assertMatches(model, named: "review-all")
     }
+
+    /// The review by Grimoire turn (E5, screen 18): turn 3 open with its request and first diff, an outside edit
+    /// grouped by time, turn 2 folded; the status bar names the newest turn. Times are masked (they read the clock).
+    func testTurnReview() throws {
+        let sort = "Sources/Ainkrad/Features/Sidebar/SidebarSort.swift"
+        let sortText = "enum SidebarSort {\n    static func order(_ a: Int, _ b: Int) -> Bool {\n        a < b\n    }\n}\n"
+        try sortText.write(to: repo.appendingPathComponent(sort), atomically: true, encoding: .utf8)
+        let model = try Snapshot.model(opening: repo)
+        for path in [sort, "project.yml", Self.sidebarRow] {
+            model.open(file: path, pinned: true)
+            try SweepSupport.waitUntilLoaded(model)
+            model.close(path)
+        }
+        func write(_ text: String, _ path: String) {
+            try? text.write(to: repo.appendingPathComponent(path), atomically: true, encoding: .utf8)
+            await_(model) { await $0.diskChanged(paths: [self.repo.appendingPathComponent(path).path]) }
+        }
+        func announce(_ turn: Int, _ files: [String], _ prompt: String) {
+            let notice = AgentTurn(
+                kind: AgentTurn.kind, root: repo.path, thread: "t1", turn: turn, agent: "Claude", prompt: prompt,
+                files: files.map { repo.appendingPathComponent($0).path }, startedAt: Date().timeIntervalSince1970 - 1,
+                endedAt: Date().timeIntervalSince1970)
+            model.receive(turn: String(decoding: (try? JSONEncoder().encode(notice)) ?? Data(), as: UTF8.self))
+        }
+        let row = try String(contentsOf: repo.appendingPathComponent(Self.sidebarRow), encoding: .utf8)
+        write(row.replacingOccurrences(of: "struct", with: "/// A row.\nstruct"), Self.sidebarRow)
+        announce(2, [Self.sidebarRow], "Drop the hairline under the selected row")
+        Thread.sleep(forTimeInterval: 3.5)  // past turn 2's grace: the next writes are not its
+        let yml = try String(contentsOf: repo.appendingPathComponent("project.yml"), encoding: .utf8)
+        write(yml + "# formatted\n", "project.yml")
+        write(sortText.replacingOccurrences(of: "        a < b\n", with: "        // Newest first.\n        a > b\n"), sort)
+        write("# Changelog\n\n- Sidebar: threads sort newest first.\n", "CHANGELOG.md")
+        announce(3, [sort, "CHANGELOG.md"], "Make the selection capsule animate in with the motion budget")
+        XCTAssertEqual(
+            model.turnGroups.map(\.title), ["Claude · turn 3 · 2 files", "Outside edits · 1 file", "Claude · turn 2 · 1 file"])
+        model.agent.reviewingAll = true
+        try Snapshot.assertMatches(model, named: "turn-review", masking: Self.turnReviewClock)
+
+        // "Ask about this turn…" open on turn 3; turn 2 kept (one dimmed row until Done).
+        model.keep(group: try XCTUnwrap(model.turnGroups.last))
+        try Snapshot.assertMatches(
+            TurnReviewPane(model: model, asking: model.turnGroups.first?.id), named: "turn-review-ask",
+            size: CGSize(width: 900, height: 560), masking: Self.turnReviewAskClock)
+    }
+
+    static let turnReviewAskClock = [
+        CGRect(x: 30, y: 44, width: 310, height: 20), CGRect(x: 300, y: 82, width: 170, height: 28),
+        CGRect(x: 470, y: 462, width: 210, height: 28), CGRect(x: 690, y: 514, width: 130, height: 28),
+    ]
+
+    /// The header's "since …", each turn's "… ago" and the outside group's time window.
+    static let turnReviewClock = [
+        CGRect(x: 330, y: 44, width: 380, height: 20), CGRect(x: 600, y: 84, width: 180, height: 24),
+        CGRect(x: 760, y: 364, width: 220, height: 26), CGRect(x: 600, y: 424, width: 180, height: 28),
+    ]
 }
 
 /// Off-screen drawing and golden comparison for `SnapshotTests`.

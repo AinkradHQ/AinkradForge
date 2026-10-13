@@ -107,6 +107,11 @@ struct ReviewAllPane: View {
     @Environment(\.ainkradStatusColors) private var status
 
     var body: some View {
+        // Once Grimoire has announced a turn, the review groups by turn (screen 18).
+        if model.reviewsByTurn { TurnReviewPane(model: model) } else { list }
+    }
+
+    @ViewBuilder private var list: some View {
         let entries = model.reviewEntries
         let changes = entries.reduce(0) { $0 + $1.diff.hunks.count }
         let unticked = model.agent.unticked.values.reduce(0) { $0 + $1.count }
@@ -161,15 +166,33 @@ struct OutsideChangesButton: View {
     let model: ForgeModel
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
+    @Environment(\.ainkradReduceMotion) private var reduceMotion
 
     var body: some View {
         let count = model.agent.count
         if count > 0 {
-            Label("\(count) changed outside", systemImage: "sparkle")
+            label(count)
                 .foregroundStyle(theme.accentSecondary)
                 .contentShape(Rectangle())
                 .onTapGesture { model.agent.reviewingAll = true }
                 .help("Review changes made outside Forge")
+        }
+    }
+
+    /// "✦ Claude turn 3 · 4 files + 2 more turns" once turns are announced (the ✦ pulses once per new turn).
+    @ViewBuilder
+    private func label(_ count: Int) -> some View {
+        let turns = model.reviewsByTurn ? model.turnGroups.filter { $0.turn != nil && !$0.kept } : []
+        if let newest = turns.first, let turn = newest.turn {
+            HStack(spacing: skin.size.s4) {
+                Image(systemName: "sparkle").symbolEffect(.pulse, options: .nonRepeating, value: turns.count).symbolEffectsRemoved(reduceMotion)
+                Text("\(turn.agent) turn \(turn.turn) · \(newest.files.count == 1 ? "1 file" : "\(newest.files.count) files")")
+                if turns.count > 1 {
+                    Text("+ \(turns.count - 1) more turn\(turns.count == 2 ? "" : "s")").foregroundStyle(skin.color(skin.text.faint))
+                }
+            }
+        } else {
+            Label("\(count) changed outside", systemImage: "sparkle")
         }
     }
 }
