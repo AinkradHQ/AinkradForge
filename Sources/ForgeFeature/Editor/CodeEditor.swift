@@ -40,10 +40,17 @@ struct CodeEditor: View {
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
 
+    /// The settings, in the theme's code face.
+    private var codeOptions: EditorOptions {
+        var options = options
+        options.fontFamily = skin.type.monoFamily
+        return options
+    }
+
     var body: some View {
         ForgeCodeEditor(
             storage: document.storage, language: document.language,
-            colors: EditorPalette.colors(tokens: theme, palette: palette, skin: skin), options: options,
+            colors: EditorPalette.colors(tokens: theme, palette: palette, skin: skin), options: codeOptions,
             insets: NSEdgeInsets(top: skin.size.s4, left: 0, bottom: skin.size.s12, right: 0),
             onEdit: onEdit,
             onCursor: { line, column in document.cursor = (line, column) },
@@ -57,11 +64,43 @@ struct CodeEditor: View {
     }
 }
 
-/// Syntax colours from the active theme's terminal palette — the same ANSI colours Rune uses, so code reads
-/// the same in the editor and the terminal. A host that publishes no palette falls back to the theme accents.
+/// Syntax colours. Neon and Liquid Glass take the mockups' palettes (forge.css `--syn-*`: Neon's bright kit hues,
+/// Glass's softer Xcode-dark set); any other theme its terminal palette — the same ANSI colours Rune uses, so code
+/// reads the same in the editor and the terminal. A host that publishes no palette falls back to the theme accents.
 enum EditorPalette {
+    /// keyword, type, string, number, call, attribute — and the comment's alpha.
+    struct Mockup {
+        let keyword, type, string, number, call, attribute: String
+        let commentAlpha: Double
+    }
+
+    static let neon = Mockup(
+        keyword: "c084fc", type: "22d3ee", string: "fbbf24", number: "f472b6", call: "60a5fa", attribute: "34d399",
+        commentAlpha: 0.38)
+    static let glass = Mockup(
+        keyword: "ff7ab2", type: "dabaff", string: "ff8170", number: "d9c97c", call: "6bdfff", attribute: "b281eb",
+        commentAlpha: 0.42)
+
+    /// The mockup palette for the theme, if it is one of the two the mockups draw.
+    static func mockup(themeID: String, glass: Bool) -> Mockup? {
+        glass ? Self.glass : themeID.lowercased().hasPrefix("neon") ? neon : nil
+    }
+
     static func colors(tokens: HostThemeTokens, palette: HostTerminalPalette?, skin: AinkradSkin) -> EditorColors {
         let fg = NSColor(tokens.foreground)
+        if let mockup = mockup(themeID: tokens.themeID, glass: skin.usesNativeGlass) {
+            let hue = { (hex: String) in color(hex: hex) ?? fg }
+            return EditorColors(
+                text: fg,
+                insertionPoint: NSColor(tokens.accentSecondary),
+                // `--sel` and `--line-hl`.
+                selection: skin.usesNativeGlass ? hue("648cff").withAlphaComponent(0.32) : NSColor(tokens.accentPrimary).withAlphaComponent(0.35),
+                lineHighlight: skin.usesNativeGlass ? fg.withAlphaComponent(0.05) : NSColor(tokens.accentSecondary).withAlphaComponent(0.06),
+                keywords: hue(mockup.keyword), commands: hue(mockup.call), types: hue(mockup.type),
+                attributes: hue(mockup.attribute), variables: fg, values: hue(mockup.type), numbers: hue(mockup.number),
+                strings: hue(mockup.string), comments: fg.withAlphaComponent(mockup.commentAlpha),
+                completionPanel: panel(tokens: tokens, skin: skin))
+        }
         func ansi(_ index: Int, _ fallback: Color) -> NSColor {
             guard let palette, palette.ansi.indices.contains(index), let color = color(hex: palette.ansi[index]) else {
                 return NSColor(fallback)

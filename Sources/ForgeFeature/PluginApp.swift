@@ -62,7 +62,7 @@ public struct ForgeApp: AinkradApp, AinkradAppTeardown {
                             kind: .slider(
                                 range: 9...28, step: 1,
                                 value: Binding(get: { model.editorSettings.fontSize }, set: { model.editorSettings.fontSize = $0 })),
-                            defaultDescription: "\(Int(defaults.fontSize)) pt",
+                            defaultDescription: "\(defaults.fontSize.formatted()) pt",
                             isModified: { model.editorSettings.fontSize != defaults.fontSize },
                             reset: { model.editorSettings.fontSize = defaults.fontSize }),
                         SettingsField(

@@ -206,6 +206,18 @@ actor LanguageSession {
         }
     }
 
+    /// The file's outline, nested where the server nests it (a flat list from an older server).
+    func documentSymbols(uri: String) async -> [DocumentSymbol] {
+        guard let server, documents[uri] != nil,
+            let reply = (try? await server.documentSymbol(DocumentSymbolParams(textDocument: TextDocumentIdentifier(uri: uri)))) ?? nil
+        else { return [] }
+        switch reply {
+        case .optionA(let symbols): return symbols
+        case .optionB(let flat):
+            return flat.map { DocumentSymbol(name: $0.name, kind: $0.kind, range: $0.location.range, selectionRange: $0.location.range) }
+        }
+    }
+
     func references(uri: String, line: Int, character: Int) async -> [Location] {
         guard let server, documents[uri] != nil else { return [] }
         let params = ReferenceParams(
@@ -363,6 +375,7 @@ actor LanguageSession {
                 contextSupport: false),
             definition: DynamicRegistrationLinkSupportClientCapabilities(dynamicRegistration: false, linkSupport: true),
             references: DynamicRegistrationClientCapabilities(dynamicRegistration: false),
+            documentSymbol: DocumentSymbolClientCapabilities(dynamicRegistration: false, hierarchicalDocumentSymbolSupport: true),
             codeAction: CodeActionClientCapabilities(
                 dynamicRegistration: false,
                 codeActionLiteralSupport: CodeActionClientCapabilities.CodeActionLiteralSupport(

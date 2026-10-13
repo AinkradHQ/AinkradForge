@@ -132,6 +132,31 @@ public final class LanguageHub {
         return locations(found)
     }
 
+    /// Which servers this Mac has (a settings override first, then the login PATH): their commands, found and
+    /// missing. Blocking (the first call reads the login shell's PATH) — call it off the main thread.
+    public nonisolated static func availability(overrides: [String: String]) -> (found: [String], missing: [String]) {
+        var found: [String] = [], missing: [String] = []
+        for spec in LanguageRegistry.servers where !(found + missing).contains(spec.command) {
+            if ShellEnvironment.locate(overrides[spec.id] ?? spec.command) != nil { found.append(spec.command) } else { missing.append(spec.command) }
+        }
+        return (found, missing)
+    }
+
+    /// The symbols enclosing a position, outermost first (`SidebarRow › body`) — the breadcrumb's tail.
+    public func enclosingSymbols(path: String, line: Int, character: Int) async -> [String] {
+        let outline = await request(path) { await $0.documentSymbols(uri: $1) } ?? []
+        return Self.enclosing(outline, line: line, character: character)
+    }
+
+    /// Pure, so the nesting is tested without a server.
+    nonisolated static func enclosing(_ symbols: [DocumentSymbol], line: Int, character: Int) -> [String] {
+        func contains(_ range: LSPRange) -> Bool {
+            (range.start.line, range.start.character) <= (line, character) && (line, character) <= (range.end.line, range.end.character)
+        }
+        guard let hit = symbols.first(where: { contains($0.range) }) else { return [] }
+        return [hit.name] + enclosing(hit.children ?? [], line: line, character: character)
+    }
+
     public func references(path: String, line: Int, character: Int) async -> [SymbolLocation] {
         let found = await request(path) { await $0.references(uri: $1, line: line, character: character) } ?? []
         return locations(found)

@@ -6,6 +6,18 @@ import Testing
 
 @Suite("Language core")
 struct LanguageCoreTests {
+    /// The breadcrumb's tail: the symbols around the caret, outermost first; none outside every symbol.
+    @Test func enclosingSymbolsNestOutermostFirst() {
+        func range(_ a: Int, _ b: Int) -> LSPRange {
+            LSPRange(start: Position(line: a, character: 0), end: Position(line: b, character: 1))
+        }
+        let body = DocumentSymbol(name: "body", kind: .property, range: range(9, 22), selectionRange: range(9, 9))
+        let row = DocumentSymbol(name: "SidebarRow", kind: .struct, range: range(4, 23), selectionRange: range(4, 4), children: [body])
+        #expect(LanguageHub.enclosing([row], line: 20, character: 4) == ["SidebarRow", "body"])
+        #expect(LanguageHub.enclosing([row], line: 6, character: 4) == ["SidebarRow"])
+        #expect(LanguageHub.enclosing([row], line: 1, character: 0) == [])
+    }
+
     @Test func filesMapToTheirServerAndLanguageID() {
         #expect(LanguageRegistry.server(for: "Sources/A.swift")?.spec.id == "sourcekit-lsp")
         #expect(LanguageRegistry.server(for: "web/App.tsx")?.languageID == "typescriptreact")
