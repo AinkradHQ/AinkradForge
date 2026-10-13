@@ -44,6 +44,7 @@ struct RenameField: View {
 struct EditPreview: View {
     let model: ForgeModel
     let pending: PendingEdit
+    @State private var diffWidth: CGFloat?
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
 
@@ -74,12 +75,13 @@ struct EditPreview: View {
                                         set: { model.pendingEdit?.rejected[plan.path] = $0 })
                                 )
                                 .hidesHeader()
-                                .bareHunks(untickable: true)
+                                .previewHunks(diff, width: diffWidth, skin: skin)
                                 .lineMetrics(fontSize: 12.5, rowHeight: 20)
                                 .editorLines()
                                 .syntaxColoured()
                                 .lineNumberGutter()
                                 .unchangedLineFolds()
+                                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { diffWidth = $0 }
                             } else {
                                 Text("\(plan.path) is too long to preview — it changes as a whole.")
                                     .font(skin.font(AinkradFontToken(sizeKey: "t11")))

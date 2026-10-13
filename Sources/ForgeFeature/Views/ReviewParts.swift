@@ -68,6 +68,25 @@ extension AinkradDiffReview {
     }
 }
 
+extension AinkradDiffReview {
+    /// The replace and rename previews' hunks (mockups 08, 11): bare, each with its ✓ Keep tick at the end of its
+    /// first row — unless a first row would run under its tick at `width` (FD51); then the ticks take a row of
+    /// their own above each hunk, and never sit on code.
+    func previewHunks(_ diff: AinkradFileDiff, width: CGFloat?, skin: AinkradSkin) -> Self {
+        Self.firstRowReachesTick(diff, width: width, skin: skin) ? keepUndoHunkControls() : bareHunks(untickable: true)
+    }
+
+    /// Whether a hunk's first row, at the previews' 12.5 pt mono, reaches the tick drawn at the row's end.
+    /// ponytail: the mono advance is estimated (0.62 em, the kit's mono measures ~0.61); measure it if a row still collides.
+    static func firstRowReachesTick(_ diff: AinkradFileDiff, width: CGFloat?, skin: AinkradSkin) -> Bool {
+        guard let width else { return false }
+        // The kit's gutter (number, gap, fold column, bar, gap), then room for "✓ Keep" and its padding.
+        let gutter = skin.size.s46 + skin.size.s10 + skin.size.s14 + skin.size.s3 + skin.size.s10
+        let room = width - gutter - skin.size.s64
+        return diff.hunks.contains { CGFloat($0.lines.first?.text.count ?? 0) * 12.5 * 0.62 > room }
+    }
+}
+
 extension View {
     /// The review's surface (mockup `.rv`): 16 pt in, 14 pt from the sides and 12 below the tab row; square under
     /// Neon, rounded under Glass.

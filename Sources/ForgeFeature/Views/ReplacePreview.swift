@@ -9,6 +9,7 @@ struct ReplacePreview: View {
     let model: ForgeModel
     let path: String
     @State private var plan: ReplacePlan?
+    @State private var diffWidth: CGFloat?
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
 
@@ -45,12 +46,13 @@ struct ReplacePreview: View {
                                 rejectedHunkIDs: Binding(get: { search.rejected[path] ?? [] }, set: { search.rejected[path] = $0 })
                             )
                             .hidesHeader()
-                            .bareHunks(untickable: true)
+                            .previewHunks(diff, width: diffWidth, skin: skin)
                             .lineMetrics(fontSize: 12.5, rowHeight: 20)
                             .editorLines()
                             .syntaxColoured()
                             .lineNumberGutter()
                             .unchangedLineFolds()
+                            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { diffWidth = $0 }
                             .padding(.vertical, skin.size.s4)
                             .padding(.trailing, skin.size.s14)
                         }
