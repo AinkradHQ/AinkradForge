@@ -30,11 +30,7 @@ struct ReplacePreview: View {
             VStack(alignment: .leading, spacing: 0) {
                 AinkradBreadcrumb(items: ["Replace preview", name, changes])
                     .preservesCase()
-                    .icon(at: 1) {
-                        Image(systemName: FileIcon.symbol(for: FileNode(path: path, name: name, isDirectory: false, children: [])))
-                            .font(skin.font(AinkradFontToken(sizeKey: "t10")))
-                            .foregroundStyle(FileIcon.tint(for: name, theme: theme) ?? skin.color(skin.text.faint))
-                    }
+                    .icon(at: 1) { FileGlyph(name: name) }
                     .lineLimit(1)
                     .padding(.horizontal, skin.size.s14)
                     .padding(.top, skin.size.s8)

@@ -52,7 +52,7 @@ struct FileTreeList: View {
     private func nodeRow(_ node: FileNode, depth: Int) -> some View {
         FileRow(
             node: node, depth: depth,
-            mark: node.isDirectory ? workspace.folderMarks[node.path] : workspace.marks[node.path],
+            mark: node.isDirectory ? folderMark(node) : workspace.marks[node.path],
             isExpanded: model.expanded.contains(node.path),
             isSelected: model.tabs.active == node.path
         ) {
@@ -68,6 +68,22 @@ struct FileTreeList: View {
         .draggable(workspace.url(for: node.path))
         .dropDestination(for: URL.self) { urls, _ in
             drop(urls, into: model.folder(for: node.path, isDirectory: node.isDirectory))
+        }
+    }
+
+    /// An open folder is marked only for the files right inside it (the mockup's `Sidebar M` under unmarked
+    /// `Sources › Ainkrad › Features`); a closed one for anything inside, so a change never hides.
+    private func folderMark(_ node: FileNode) -> GitMark? {
+        guard model.expanded.contains(node.path) else { return workspace.folderMarks[node.path] }
+        return node.children.filter { !$0.isDirectory }.compactMap { workspace.marks[$0.path] }.max { Self.rank($0) < Self.rank($1) }
+    }
+
+    private static func rank(_ mark: GitMark) -> Int {
+        switch mark {
+        case .modified: 3
+        case .added: 2
+        case .untracked: 1
+        case .deleted: 0
         }
     }
 
@@ -183,53 +199,45 @@ struct FileRow: View {
             .help(node.path)
     }
 
+    /// `.f`: `▾`/`▸` (faint), the type glyph, the name (12.5 pt), the git letter in mono at the end.
     private var label: some View {
         HStack(spacing: skin.size.s6) {
-            Group {
-                if node.isDirectory {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(skin.font(AinkradFontToken(sizeKey: "t9", weight: "semibold")))
-                        .foregroundStyle(skin.color(skin.text.faint))
-                }
-            }
-            .frame(width: skin.size.s10)
-            Image(systemName: FileIcon.symbol(for: node))
+            Text(node.isDirectory ? (isExpanded ? "▾" : "▸") : "")
                 .font(skin.font(AinkradFontToken(sizeKey: "t11")))
-                .foregroundStyle(
-                    onSelection ?? (node.isDirectory
-                        ? theme.accentSecondary : FileIcon.tint(for: node.name, theme: theme) ?? skin.color(skin.text.faint)))
-                .frame(width: skin.size.s14)
+                .foregroundStyle(skin.color(skin.text.faint))
+                .frame(width: skin.size.s10)
+            FileGlyph(name: node.name, isDirectory: node.isDirectory)
             Text(node.name)
-                .font(skin.font(AinkradFontToken(sizeKey: "t12")))
+                .font(skin.font(AinkradFontToken(sizeKey: "t12_5")))
                 .foregroundStyle(nameColor)
                 .lineLimit(1)
-                .truncationMode(.middle)
+                .truncationMode(.tail)
             Spacer(minLength: skin.size.s4)
             if let mark {
                 Text(mark.rawValue)
-                    .font(skin.font(AinkradFontToken(sizeKey: "t10", weight: "semibold", monospacedDigits: true)))
-                    .foregroundStyle(onSelection ?? color(for: mark))
+                    .font(skin.font(AinkradFontToken(sizeKey: "t10", weight: "semibold", mono: "family")))
+                    .foregroundStyle(color(for: mark))
             }
         }
         .padding(.vertical, skin.size.s3)
-        .padding(.leading, skin.size.s6 + CGFloat(depth) * skin.size.s14)
+        .padding(.leading, skin.size.s8 + CGFloat(depth) * skin.size.s14)
         .padding(.trailing, skin.size.s8)
-        .ainkradRowBackground(isSelected: isSelected, isHovered: isHovered)
+        // `.f.sel`: the accent wash, the same under Neon and Glass; git colours stay readable on it.
+        .ainkradRowBackground(isSelected: isSelected, isHovered: isHovered, style: .fill)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
     }
 
-    /// Under Glass a selected row is filled with the accent, which drowned the accent-blue of an untracked name
-    /// (E1D1 FD31) and dulled every other tint: there the row's text takes the colour readable on the accent, as
-    /// the kit's own row text does. Neon's selection is a faint wash, so the git colours stay.
-    private var onSelection: Color? {
-        isSelected && skin.usesNativeGlass ? skin.color(skin.palette.accentPrimary).contrastingText : nil
-    }
-
+    /// `.f.dir` foreground, `.f.file` muted; modified amber, added green (`.mod`, `.new`); the selected row's
+    /// name in the foreground. Untracked names stay muted — only their `U` is coloured.
     private var nameColor: Color {
-        if let onSelection { return onSelection }
-        if let mark { return color(for: mark) }
-        return node.isDirectory || isSelected ? theme.foreground.opacity(skin.opacity.o90) : skin.color(skin.text.muted)
+        if isSelected { return theme.foreground }
+        switch mark {
+        case .modified: return statusColors.warning
+        case .added: return statusColors.success
+        case .deleted: return statusColors.danger
+        case .untracked, nil: return node.isDirectory ? theme.foreground : skin.color(skin.text.muted)
+        }
     }
 
     private func color(for mark: GitMark) -> Color {
@@ -238,31 +246,6 @@ struct FileRow: View {
         case .added: statusColors.success
         case .untracked: theme.accentSecondary
         case .deleted: statusColors.danger
-        }
-    }
-}
-
-/// SF Symbol and tint per file kind. Deliberately small: the name carries the rest.
-enum FileIcon {
-    static func symbol(for node: FileNode) -> String {
-        if node.isDirectory { return "folder.fill" }
-        switch (node.name as NSString).pathExtension.lowercased() {
-        case "swift": return "swift"
-        case "md", "markdown", "txt": return "doc.text"
-        case "json", "yml", "yaml", "toml", "plist", "xml": return "curlybraces"
-        case "png", "jpg", "jpeg", "gif", "svg", "pdf", "icns": return "photo"
-        case "sh", "zsh", "bash": return "terminal"
-        default: return "doc"
-        }
-    }
-
-    /// `nil` = the plain faint text colour.
-    static func tint(for name: String, theme: HostThemeTokens) -> Color? {
-        switch (name as NSString).pathExtension.lowercased() {
-        case "swift": theme.accentTertiary
-        case "md", "markdown": theme.accentSecondary
-        case "json", "yml", "yaml", "toml": theme.accentPrimary
-        default: nil
         }
     }
 }

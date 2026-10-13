@@ -18,15 +18,12 @@ struct RootView: View {
             if let workspace = model.workspace {
                 GeometryReader { window in
                     HStack(spacing: 0) {
-                        // 300 pt, giving way in a narrow window down to 280 (the tab picker's width) so the editor
-                        // keeps its room (E1D1 FD28); below `narrowWidth` (apps tiled three up) it hides until ⌘0
-                        // brings it back (E1D2 FD41).
+                        // 280 pt (`.sidebar`); below `narrowWidth` (apps tiled three up) it hides until ⌘0 brings
+                        // it back (E1D2 FD41).
                         // From the window's own width (not the model's copy of it): a narrow window opens without
                         // the sidebar instead of sliding it away.
                         if model.sidebarShown ?? (window.size.width >= Self.narrowWidth) {
-                            Sidebar(
-                                model: model, workspace: workspace,
-                                width: min(skin.size.s300, max(skin.size.s280, window.size.width * 0.3)))
+                            Sidebar(model: model, workspace: workspace, width: skin.size.s280)
                             .transition(.move(edge: .leading).combined(with: .opacity))
                         }
                         EditorArea(model: model, workspace: workspace, palette: theme.terminalPalette)

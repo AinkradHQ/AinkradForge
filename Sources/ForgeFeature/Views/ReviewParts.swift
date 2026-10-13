@@ -21,10 +21,7 @@ struct ReviewFileRow: View {
         let folder = (path as NSString).deletingLastPathComponent
         Button(action: toggle) {  // design-lint: allow raw-control keyboard-reachable row (kit has no row button)
             HStack(spacing: skin.size.s8) {
-                Image(systemName: FileIcon.symbol(for: FileNode(path: path, name: name, isDirectory: false, children: [])))
-                    .font(skin.font(AinkradFontToken(sizeKey: "t11")))
-                    .foregroundStyle(FileIcon.tint(for: name, theme: theme) ?? skin.color(skin.text.faint))
-                    .frame(width: skin.size.s14)
+                FileGlyph(name: name)
                 Text(name)
                     .font(skin.font(AinkradFontToken(sizeKey: "t12")))
                     .foregroundStyle(theme.foreground)
