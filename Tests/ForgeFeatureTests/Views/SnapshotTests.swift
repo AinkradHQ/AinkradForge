@@ -47,6 +47,18 @@ final class SnapshotTests: XCTestCase {
         try Snapshot.assertMatches(model, named: "window")
     }
 
+    /// More tabs than fit: the active (last opened) one is scrolled into view (E1D1 FD29).
+    func testLongTabStripShowsTheActiveTab() throws {
+        let model = try Snapshot.model(opening: repo)
+        for path in (model.workspace?.files ?? []).sorted() where path != Self.sidebarRow {
+            model.open(file: path, pinned: true)
+        }
+        model.open(file: Self.sidebarRow, pinned: true)
+        try SweepSupport.waitUntilLoaded(model)
+        XCTAssertGreaterThan(model.tabs.paths.count, 9)
+        try Snapshot.assertMatches(model, named: "long-tabs")
+    }
+
     /// ⌘P over the window, filtered to "sbrow".
     func testQuickOpen() throws {
         let model = try Snapshot.model(opening: repo)

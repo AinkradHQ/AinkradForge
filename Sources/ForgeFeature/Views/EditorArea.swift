@@ -246,6 +246,18 @@ private struct TabStrip: View {
     private var tabs: Tabs { model.panes[pane] }
 
     var body: some View {
+        // The active tab is kept in view: opening a tenth file must not leave it past the edge (E1D1 FD29).
+        ScrollViewReader { proxy in
+            strip
+                .onAppear { if let active = tabs.active { proxy.scrollTo(active) } }
+                .onChange(of: tabs.active) { _, active in
+                    guard let active else { return }
+                    withAnimation(skin.animation(skin.motion.hover)) { proxy.scrollTo(active) }
+                }
+        }
+    }
+
+    private var strip: some View {
         ScrollView(.horizontal) {
             HStack(spacing: skin.size.s2) {
                 ForEach(tabs.paths, id: \.self) { path in
