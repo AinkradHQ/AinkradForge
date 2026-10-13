@@ -89,7 +89,8 @@ final class ForgeModel {
     }
 
     enum Leave: Equatable {
-        case open(URL)
+        /// `then`: a launch to show once the folder is open; dropped if the user stays.
+        case open(URL, then: ForgeLaunch? = nil)
         case close
     }
 
@@ -103,33 +104,6 @@ final class ForgeModel {
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) {
             [weak self] _ in MainActor.assumeIsolated { self?.backupUnsaved() }
         }
-    }
-
-    /// Opens a `ForgeLaunch` (folder, or file at a line; an open workspace stays — the host remounts to hand one in).
-    func start(launch: String? = nil) async {
-        let request = ForgeLaunch.decode(launch)
-        let launch = request?.path
-        var isFolder: ObjCBool = false
-        if let launch, FileManager.default.fileExists(atPath: launch, isDirectory: &isFolder) {
-            let url = URL(fileURLWithPath: launch)
-            let folder = isFolder.boolValue ? url : url.deletingLastPathComponent()
-            // A file opens its whole repo, when it is in one.
-            let top = isFolder.boolValue ? nil : (try? await Git(directory: folder).run(["rev-parse", "--show-toplevel"]))?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let target = top.map { URL(fileURLWithPath: $0) } ?? folder
-            if workspace?.root.standardizedFileURL.path != target.standardizedFileURL.path { await open(folder: target) }
-            if !isFolder.boolValue, let path = workspace?.relativePath(of: url) {
-                reveal(path)
-                open(file: path, pinned: true)
-                pendingLine = request?.line
-            }
-            agent.reviewingAll = agent.reviewingAll || request?.review == true
-            return
-        }
-        guard workspace == nil, let path = store.document.lastWorkspace,
-            FileManager.default.fileExists(atPath: path)
-        else { return }
-        await open(folder: URL(fileURLWithPath: path))
     }
 
     // MARK: - Workspace
@@ -164,13 +138,13 @@ final class ForgeModel {
     private func perform(_ leave: Leave) {
         terminals.confirmLeaving { [weak self] in
             switch leave {
-            case .open(let url): Task { await self?.open(folder: url) }
+            case .open(let url, let then): Task { await self?.open(folder: url); if let then { self?.land(then) } }
             case .close: self?.closeWorkspace()
             }
         }
     }
 
-    private func open(folder: URL) async {
+    func open(folder: URL) async {
         let workspace = Workspace(root: folder)
         let key = workspace.root.path(percentEncoded: false)
         terminals.begin(root: workspace.root)
