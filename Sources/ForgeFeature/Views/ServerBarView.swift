@@ -88,7 +88,7 @@ struct ServerBarView: View {
         case .stopped:
             if let spec = bar.spec {
                 if !compact {
-                    AinkradButton(title: "Show Log", style: .ghost) { model.showServerLog(spec.id) }.borderless().fixedSize()
+                    AinkradButton(title: "Show Log", style: .ghost) { model.showServerLog(spec.id) }.borderless().secondaryAccent().fixedSize()
                 }
                 AinkradButton(title: "Restart Server", style: .primary) { model.languages.restart(spec.id) }.fixedSize()
             }
@@ -137,31 +137,22 @@ struct ProgressMeter: View {
 
 /// The editor area with no file open in an empty folder (mockup 19 A): a faint ⚒ and the ways in, as keycaps.
 struct EmptyEditorHints: View {
-    @Environment(\.ainkradSkin) private var skin
+    let model: ForgeModel
     @Environment(\.ainkradTheme) private var theme
+    @Environment(\.ainkradSkin) private var skin
 
     var body: some View {
-        VStack(spacing: skin.size.s8) {
-            Image(systemName: "hammer")
-                .font(skin.font(AinkradFontToken(sizeKey: "t34")))
-                .foregroundStyle(theme.accentSecondary.opacity(skin.opacity.o50))
-            HStack(spacing: skin.size.s4) {
-                hint("⌘P", "open a file ·")
-                hint("⇧⌘P", "commands ·")
-                hint("⌘O", "switch workspace")
+        // The keys are the user's (⌘K rebinds them), so a hint never names a chord that no longer works.
+        let hints: [(ForgeCommand, String)] = [(.quickOpen, "open a file"), (.commandPalette, "commands"), (.openFolder, "switch workspace")]
+        AinkradEmptyState(
+            icon: "hammer",
+            keyHints: hints.compactMap { command, label in
+                model.shortcut(for: command).map { AinkradEmptyState.KeyHint(keys: $0.display, label: label) }
             }
-            .font(skin.font(AinkradFontToken(sizeKey: "t12")))
-            .foregroundStyle(skin.color(skin.text.muted))
-        }
-        .padding(.bottom, skin.size.s40)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func hint(_ keys: String, _ text: String) -> some View {
-        HStack(spacing: skin.size.s4) {
-            AinkradKbd(keys).outlined()
-            Text(text)
-        }
+        )
+        .glyph("⚒")
+        .glyphSize(34)
+        .iconTint(theme.accentSecondary.opacity(skin.opacity.o50))
     }
 }
 
@@ -169,14 +160,17 @@ struct EmptyEditorHints: View {
 /// side when they fit the sidebar, else stacked — both in the mockups' outlined style, not a primary.
 struct SidebarEmptyState<Actions: View>: View {
     let icon: String
+    /// The mockup's text glyph (`▤`, `⑂`) in place of the symbol: 26 pt, the cyan accent at 70 % (`.sempty .glyph`).
+    var glyph: String?
     let title: String
     let message: String
     @ViewBuilder let actions: Actions
     @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
 
     var body: some View {
         VStack(spacing: 0) {
-            AinkradEmptyState(icon: icon, title: title, message: message)
+            state
                 .fixedSize(horizontal: false, vertical: true)
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: skin.size.s8) { actions }
@@ -186,5 +180,11 @@ struct SidebarEmptyState<Actions: View>: View {
         }
         .padding(.bottom, skin.size.s40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var state: AinkradEmptyState {
+        let state = AinkradEmptyState(icon: icon, title: title, message: message)
+        guard let glyph else { return state }
+        return state.glyph(glyph).glyphSize(26).iconTint(theme.accentSecondary.opacity(skin.opacity.o70))
     }
 }

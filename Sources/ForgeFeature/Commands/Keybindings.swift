@@ -31,6 +31,16 @@ extension ForgeModel {
         store.document.shortcuts?[command.rawValue] ?? command.shortcut
     }
 
+    /// "New Terminal (⌃⇧`)": a tooltip naming the chord that runs `command` now — the user's, after a rebind.
+    func titled(_ title: String, _ command: ForgeCommand) -> String {
+        shortcut(for: command).map { "\(title) (\($0.display))" } ?? title
+    }
+
+    /// "✓ Keep ⌘↵": a label with the chord after it, the user's after a rebind.
+    func labelled(_ title: String, _ command: ForgeCommand) -> String {
+        shortcut(for: command).map { "\(title) \($0.display)" } ?? title
+    }
+
     /// Why `shortcut` cannot run `command` — the host's, macOS's, another command's, or no modifier — or nil.
     func rejection(of shortcut: Shortcut, for command: ForgeCommand) -> String? {
         if shortcut == command.shortcut { return nil }

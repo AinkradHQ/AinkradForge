@@ -97,7 +97,7 @@ struct EditPreview: View {
                                         set: { model.pendingEdit?.rejected[plan.path] = $0 })
                                 )
                                 .hidesHeader()
-                                .keepUndoHunkControls()
+                                .bareHunks()
                                 .editorLines()
                                 .syntaxColoured()
                                 .lineNumberGutter()

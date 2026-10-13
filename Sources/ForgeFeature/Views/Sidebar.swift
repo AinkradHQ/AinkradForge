@@ -47,23 +47,13 @@ struct Sidebar: View {
     }
 }
 
-/// `Files · Changes 2 · Search · Issues 5` (`.side-tabs`): plain text tabs, the selected one on the `--fill`
-/// wash; under Liquid Glass a glass capsule with the selected segment a light pill. Counts once there are any.
+/// `Files · Changes 2 · Search · Issues 5` (`.side-tabs`): the kit's text tabs. Counts once there are any.
 private struct SideTabs: View {
     @Bindable var model: ForgeModel
     let workspace: Workspace
-    @Environment(\.ainkradSkin) private var skin
-    @Environment(\.ainkradTheme) private var theme
 
     var body: some View {
-        let glass = skin.usesNativeGlass
-        HStack(spacing: glass ? skin.size.s2 : skin.size.s4) {
-            ForEach(ForgeModel.SideTab.allCases) { tab in
-                SideTabButton(title: title(tab), isOn: model.sideTab == tab, fillsWidth: glass) { model.sideTab = tab }
-            }
-        }
-        .padding(glass ? skin.size.s3 : 0)
-        .modifier(GlassCapsule(isOn: glass))
+        AinkradTabs(tabs: ForgeModel.SideTab.allCases, selection: $model.sideTab, label: title).textTabs()
     }
 
     private func title(_ tab: ForgeModel.SideTab) -> String {
@@ -74,58 +64,6 @@ private struct SideTabs: View {
             default: 0
             }
         return count > 0 ? "\(tab.rawValue) \(count)" : tab.rawValue
-    }
-}
-
-private struct SideTabButton: View {
-    let title: String
-    let isOn: Bool
-    let fillsWidth: Bool
-    let action: () -> Void
-    @State private var isHovered = false
-    @Environment(\.ainkradSkin) private var skin
-    @Environment(\.ainkradTheme) private var theme
-
-    var body: some View {
-        // A plain button: keyboard-reachable, styled as the mockup's text tab.
-        Button(action: action) {  // design-lint: allow raw-control text tab (kit segmented control is boxed)
-            Text(title)
-                .font(skin.font(AinkradFontToken(sizeKey: "t11")))
-                .foregroundStyle(isOn || isHovered ? theme.foreground : skin.color(skin.text.muted))
-                .lineLimit(1)
-                .fixedSize()
-                .padding(.vertical, skin.size.s4)
-                .padding(.horizontal, skin.size.s8)
-                .frame(maxWidth: fillsWidth ? .infinity : nil)
-                .background(pill)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-        .accessibilityAddTraits(isOn ? .isSelected : [])
-    }
-
-    @ViewBuilder private var pill: some View {
-        if isOn {
-            if skin.usesNativeGlass {
-                Capsule().fill(skin.color(skin.palette.white).opacity(skin.opacity.o20))
-            } else {
-                RoundedRectangle(cornerRadius: skin.size.s6, style: .continuous).fill(ForgeStyle.fill(skin, theme))
-            }
-        }
-    }
-}
-
-/// Liquid Glass's capsule behind the sidebar tabs (and nothing under Neon).
-private struct GlassCapsule: ViewModifier {
-    let isOn: Bool
-
-    func body(content: Content) -> some View {
-        if #available(macOS 26, *), isOn {
-            content.glassEffect(.regular, in: Capsule())
-        } else {
-            content
-        }
     }
 }
 
@@ -177,7 +115,7 @@ private struct WorkspaceCard: View {
         }
         // FD20: under Glass Apple's own pull-down is so see-through the tabs behind it read through.
         .kitMenuUnderGlass()
-        .help("Switch workspace ⌃⌘O · \(workspace.root.path(percentEncoded: false))")
+        .help("\(model.titled("Switch workspace", .openFolder)) · \(workspace.root.path(percentEncoded: false))")
     }
 
     private var items: [AinkradMenuItem] {

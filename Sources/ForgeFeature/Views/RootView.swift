@@ -159,7 +159,9 @@ private struct ShortcutLayer: View {
                 // (whose ⌘K rebinds) is closed. The next key press finishes it, or is dropped.
                 if model.palette == nil, available.contains(where: { model.shortcut(for: $0)?.afterCommandK == true }) {
                     Button("Chord") {  // design-lint: allow raw-control key-equivalent claim
+                        model.awaitingChord = true
                         chord.listen { event in
+                            model.awaitingChord = false
                             let second = Shortcut(event: event, afterCommandK: true)
                             if let command = model.availableCommands.first(where: { second != nil && model.shortcut(for: $0) == second }) {
                                 model.run(command)

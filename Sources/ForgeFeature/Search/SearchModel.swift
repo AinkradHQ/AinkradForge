@@ -33,8 +33,10 @@ final class SearchModel {
     private(set) var status: Status = .idle
     /// Files whose rows are folded.
     var collapsed: Set<String> = []
-    /// The file whose replace preview is open in the editor area.
+    /// The file whose replace preview is open in the editor area, and the result line clicked to open it —
+    /// the selected row, with its ⇄ showing (mockup 08).
     var previewPath: String?
+    var previewLine: Int?
     /// Per file, the preview hunks the user unticked: Replace leaves those lines as they are.
     var rejected: [String: Set<Int>] = [:]
     /// Replace All was asked for; the window confirms first.

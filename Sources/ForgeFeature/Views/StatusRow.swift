@@ -7,6 +7,7 @@ struct StatusRow: View {
     let model: ForgeModel
     let workspace: Workspace
     @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
 
     var body: some View {
         // Too narrow for everything: the file's line endings, encoding and language go first, so the counts,
@@ -33,6 +34,14 @@ struct StatusRow: View {
             IssueCounts(model: model).fixedSize()
             ServerChip(model: model)
             OutsideChangesButton(model: model)
+            if model.awaitingChord {
+                HStack(spacing: skin.size.s6) {
+                    AinkradKbd("⌘K").outlined()
+                    Text("waiting for the second key…")
+                }
+                .foregroundStyle(theme.accentSecondary)
+                .fixedSize()
+            }
             if workspace.isLoading { AinkradSpinner() }
             Spacer(minLength: skin.size.s8)
             if let document = model.activeDocument, document.state == .ready {
@@ -159,6 +168,8 @@ private struct ServerChip: View {
                                 .shadow(color: state == .ready ? color(state) : .clear, radius: skin.size.s4)
                         }
                         Text(label(spec, state, progress))
+                            // A stopped server reads in red (mockup 19 D).
+                            .foregroundStyle(Self.isStopped(state) ? status.danger : skin.color(skin.text.muted))
                         if let fraction = Self.fraction(progress), state == .starting || state == .ready {
                             ProgressMeter(fraction: fraction)
                         }
@@ -223,10 +234,12 @@ private struct ServerChip: View {
         let used = (LanguageRegistry.servers + model.languages.custom).filter { model.languages.statuses[$0.id] != nil }
         let items = used.map { spec in
             let state = model.languages.statuses[spec.id] ?? .notRunning
-            // `● sourcekit-lsp — ready · Swift`: the dot for a running server, the language it serves.
-            return AinkradMenuItem(
-                title: "\(spec.command) — \(Self.describe(state, spec: spec)) · \(spec.language)",
-                systemName: state == .ready ? "circle.fill" : nil) {}
+            // `● sourcekit-lsp — ready      Swift`: the dot for a running server, the language it serves at the
+            // trailing edge; a missing server in amber (mockup 11).
+            let item = AinkradMenuItem(
+                title: "\(spec.command) — \(Self.describe(state, spec: spec))",
+                systemName: state == .ready ? "circle.fill" : nil, shortcut: spec.language) {}
+            return state == .notInstalled ? item.tint(status.warning) : item
         }
         // The actions after a gap (never a line).
         var actions = used.filter { model.languages.statuses[$0.id] != .notInstalled }.map { spec in

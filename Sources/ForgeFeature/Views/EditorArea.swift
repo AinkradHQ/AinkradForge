@@ -96,7 +96,7 @@ private struct PaneView: View {
                     .animation(reduceMotion ? nil : skin.animation(skin.motion.present), value: model.serverBar(for: path))
                 } else if model.workspace?.files.isEmpty == true {
                     // Nothing to pick in an empty folder (E1D1 FD32): the ways in instead of a blank pane (E6).
-                    EmptyEditorHints()
+                    EmptyEditorHints(model: model)
                 } else {
                     AinkradEmptyState(
                         icon: "doc.text", title: "No file open",
@@ -146,7 +146,8 @@ extension PaneView {
     /// `Sources › Ainkrad › ◆ SidebarRow.swift › SidebarRow › body`, in the path's own case.
     @ViewBuilder func breadcrumb(_ path: String, document: EditorDocument) -> some View {
         let parts = path.split(separator: "/").map(String.init)
-        let folders = Array(parts.dropLast())
+        // A file at the root is shown under the workspace's name (mockup 19 B: `deploy-scripts › release.rb`).
+        let folders = parts.count > 1 ? Array(parts.dropLast()) : [model.workspace?.root.lastPathComponent].compactMap { $0 }
         let file = parts.last ?? path
         let symbols = trail.path == path ? trail.names : []
         ViewThatFits(in: .horizontal) {
@@ -157,8 +158,16 @@ extension PaneView {
         }
     }
 
+    /// Faint `›` between crumbs; the file name in the foreground and the type after it in the syntax type hue,
+    /// the rest muted (mockup 01 `.crumb`).
     private func crumbs(_ items: [String], file: String, at index: Int) -> some View {
-        AinkradBreadcrumb(items: items).preservesCase().icon(at: index) { FileGlyph(name: file) }
+        let typeHue = EditorPalette.mockup(themeID: theme.themeID, glass: skin.usesNativeGlass).map { ForgeStyle.hue($0.type) }
+        let colors: [Int: Color] = [index: theme.foreground, index + 1: typeHue ?? theme.accentSecondary]
+        return AinkradBreadcrumb(items: items)
+            .segmentColors { colors[$0] }
+            .textSeparators()
+            .preservesCase()
+            .icon(at: index) { FileGlyph(name: file) }
     }
 }
 

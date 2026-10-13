@@ -80,13 +80,12 @@ extension Palette {
                 .sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.2 < $1.2 }
                 .map(\.0)
         return ranked.prefix(limit).map { entry in
-            // ponytail: the kind is a word in the title (the mockup's `.ty`) — drawn in the title's colour, not the
-            // type colour, until the kit's palette row takes a leading kind.
+            // The kind (`struct`, the mockup's `.ty`) leads the row in the type hue.
             PaletteItem(
-                id: "symbol:\(entry.path):\(entry.line):\(entry.character):\(entry.name)", title: "\(entry.kind) \(entry.name)",
-                systemName: "", detail: "\((entry.path as NSString).lastPathComponent):\(entry.line + 1)",
+                id: "symbol:\(entry.path):\(entry.line):\(entry.character):\(entry.name)", title: entry.name,
+                glyph: "", kind: entry.kind, detail: "\((entry.path as NSString).lastPathComponent):\(entry.line + 1)",
                 payload: .symbol(path: entry.path, line: entry.line + 1), section: section,
-                matched: QuickOpen.matchedOffsets(query, in: entry.name).map { $0 + entry.kind.count + 1 })
+                matched: QuickOpen.matchedOffsets(query, in: entry.name))
         }
     }
 }

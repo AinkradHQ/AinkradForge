@@ -21,8 +21,7 @@ struct CloneDialog: View {
             Text("Clone Repository").font(skin.font(AinkradFontToken(sizeKey: "t15", weight: "semibold")))
             VStack(alignment: .leading, spacing: skin.size.s6) {
                 label("Repository URL")
-                AinkradTextField(text: $clone.url, placeholder: "https://github.com/owner/repo.git or git@host:owner/repo")
-                    .focused($urlFocused)
+                AinkradTextField(text: $clone.url, placeholder: "https://github.com/owner/repo.git or git@host:owner/repo", focus: $urlFocused)
                     .disabled(clone.isCloning)
                     .onSubmit(start)
             }

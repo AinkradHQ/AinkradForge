@@ -131,6 +131,7 @@ final class SweepTests: XCTestCase {
         replacing.rerunSearch()
         SweepSupport.spin(until: 5) { if case .done = replacing.search.status { true } else { false } }
         replacing.search.previewPath = "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift"
+        replacing.search.previewLine = 19
 
         // E5 screen 9: a real sourcekit-lsp's issues — the Issues tab, underlines, status-bar counts and chip.
         let diagnosed = try SweepSupport.model(opening: repo)

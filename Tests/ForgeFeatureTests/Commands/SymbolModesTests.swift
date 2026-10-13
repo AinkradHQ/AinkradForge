@@ -19,17 +19,19 @@ struct SymbolModesTests {
         #expect(Palette.split("#Row") == ("#", "Row"))
     }
 
-    /// `@`: the file's symbols ranked by the query, the kind leading the title and the matched letters after it.
+    /// `@`: the file's symbols ranked by the query, each with its kind (leading the row) and its matched letters.
     @Test func atRanksThisFilesSymbols() {
         let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
         model.paletteSymbols = PaletteSymbols(entries: Self.symbols)
-        #expect(Palette.items(for: "@", model: model).map(\.title) == ["struct SidebarRow", "property body", "property isSelected"])
+        let all = Palette.items(for: "@", model: model)
+        #expect(all.map(\.title) == ["SidebarRow", "body", "isSelected"])
+        #expect(all.map(\.kind) == ["struct", "property", "property"])
         let hits = Palette.items(for: "@sel", model: model)
-        #expect(hits.map(\.title) == ["property isSelected"])
+        #expect(hits.map(\.title) == ["isSelected"])
         #expect(hits.first?.detail == "SidebarRow.swift:7")
         #expect(hits.first?.payload == .symbol(path: "Sources/SidebarRow.swift", line: 7))
-        // "property " is 9 characters: `s`, `e`, `l` of isSelected sit at 2, 3, 4 of the name.
-        #expect(hits.first?.matched == [11, 12, 13])
+        // `s`, `e`, `l` of isSelected.
+        #expect(hits.first?.matched == [2, 3, 4])
     }
 
     /// `#`: the server already matched, so its rows are kept as they came.

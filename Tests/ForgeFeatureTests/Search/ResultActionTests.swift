@@ -42,6 +42,17 @@ struct ResultActionTests {
         #expect(out.text == "a isSelected\nb\r\nc X X\nd isSelected")
     }
 
+    @Test func replacingOneMatchLeavesTheRestOfItsLine() async throws {
+        let (model, root) = try await workspace(["A.swift": Data("isSelected = isSelected\n".utf8)])
+        defer { try? FileManager.default.removeItem(at: root) }
+        try await search(model, "isSelected")
+        #expect(model.replace(in: "A.swift", line: 1) == 1)
+        try await settle(model)
+        #expect(try String(contentsOf: root.appending(path: "A.swift"), encoding: .utf8) == "isActive = isSelected\n")
+        // The row is still listed for the match left on it.
+        #expect(model.search.lineCount == 1)
+    }
+
     @Test func dismissingDropsALineOrAFileFromTheListAndFromReplaceAll() async throws {
         let (model, root) = try await workspace([
             "A.swift": Data("let isSelected = 1\nisSelected()\n".utf8), "B.swift": Data("var isSelected = 2\n".utf8),

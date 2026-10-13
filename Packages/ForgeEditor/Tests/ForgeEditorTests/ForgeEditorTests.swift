@@ -6,6 +6,17 @@ import Testing
 
 @Suite("ForgeEditor")
 struct ForgeEditorTests {
+    /// Every member — call, declared function, property — draws in the call hue (mockup 01's `.fn`).
+    @Test func membersTakeTheCallHue() {
+        let gray = NSColor(srgbRed: 0.5, green: 0.5, blue: 0.5, alpha: 1)
+        let blue = NSColor(srgbRed: 0.38, green: 0.65, blue: 0.98, alpha: 1)
+        let theme = EditorColors(
+            text: gray, insertionPoint: gray, selection: gray, lineHighlight: gray, keywords: gray, commands: blue,
+            types: gray, attributes: gray, variables: gray, values: gray, numbers: gray, strings: gray, comments: gray
+        ).theme
+        #expect(theme.functionCalls?.color == blue && theme.functions?.color == blue && theme.properties?.color == blue)
+    }
+
     @Test func detectsLanguagesFromExtensionAndShebang() {
         #expect(EditorLanguage.detect(url: URL(fileURLWithPath: "/a/App.swift")).name == "Swift")
         #expect(EditorLanguage.detect(url: URL(fileURLWithPath: "/a/run"), prefix: "#!/bin/bash\n").name == "Bash")

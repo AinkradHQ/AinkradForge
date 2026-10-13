@@ -14,10 +14,10 @@ struct ReplacePlan: Equatable {
 
     static func make(
         path: String, text: String, regex: NSRegularExpression, replacement: String, isRegex: Bool, preserveCase: Bool,
-        lines: ((Int) -> Bool)? = nil
+        limit: Int? = nil, lines: ((Int) -> Bool)? = nil
     ) -> ReplacePlan {
         let result = TextSearch.replace(
-            in: text, regex: regex, with: replacement, isRegex: isRegex, preserveCase: preserveCase, lines: lines)
+            in: text, regex: regex, with: replacement, isRegex: isRegex, preserveCase: preserveCase, limit: limit, lines: lines)
         return make(path: path, original: text, updated: result.text, count: result.count)
     }
 

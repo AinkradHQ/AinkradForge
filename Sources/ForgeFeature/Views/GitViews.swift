@@ -49,9 +49,9 @@ struct GitPeekCard: View {
                     .padding(.horizontal, skin.size.s12)
                 }
                 HStack(spacing: skin.size.s8) {
-                    AinkradButton(title: "Revert Change", style: .secondary) { model.revertPeek() }.secondaryAccent().fixedSize()
-                    AinkradButton(title: "Stage Change", style: .secondary) { model.stagePeek() }.secondaryAccent().fixedSize()
-                    AinkradButton(title: "Open in Git Mage", style: .secondary) { model.openGitMage() }.secondaryAccent().fixedSize()
+                    AinkradButton(title: "Revert Change", style: .secondary) { model.revertPeek() }.compact().secondaryAccent().fixedSize()
+                    AinkradButton(title: "Stage Change", style: .secondary) { model.stagePeek() }.compact().secondaryAccent().fixedSize()
+                    AinkradButton(title: "Open in Git Mage", style: .secondary) { model.openGitMage() }.compact().secondaryAccent().fixedSize()
                 }
                 .padding(.top, skin.size.s6)
                 .padding(.horizontal, skin.size.s12)
@@ -131,12 +131,14 @@ struct BlameView: View {
                         AinkradButton(title: "Open in Git Mage", style: .secondary) {
                             model.openGitMage(sha: note.blame.hash, title: card.subject)
                         }
+                        .compact()
                         .secondaryAccent()
                         .fixedSize()
                         AinkradButton(title: "Copy Hash", style: .secondary) {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(note.blame.hash, forType: .string)
                         }
+                        .compact()
                         .secondaryAccent()
                         .fixedSize()
                     }

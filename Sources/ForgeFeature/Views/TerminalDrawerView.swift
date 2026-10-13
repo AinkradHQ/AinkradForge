@@ -32,14 +32,14 @@ struct TerminalDrawerView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("New Terminal (⌃⇧`)")
+                .help(model.titled("New Terminal", .newTerminal))
                 Spacer(minLength: skin.size.s8)
-                TasksPill(isActive: drawer.showsTasks) { drawer.showsTasks = true }
+                TasksPill(isActive: drawer.showsTasks, help: model.titled("Tasks — run one", .runTask)) { drawer.showsTasks = true }
                 AinkradIconButton(
                     systemName: drawer.isMaximised ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
-                    tooltip: drawer.isMaximised ? "Restore (⇧⌘M)" : "Maximise (⇧⌘M)"
+                    tooltip: model.titled(drawer.isMaximised ? "Restore" : "Maximise", .maximiseTerminal)
                 ) { drawer.isMaximised.toggle() }
-                AinkradIconButton(systemName: "xmark", tooltip: "Hide (⌃`)") { drawer.isOpen = false }
+                AinkradIconButton(systemName: "xmark", tooltip: model.titled("Hide", .toggleTerminal)) { drawer.isOpen = false }
             }
             .padding(.horizontal, skin.size.s10)
             .padding(.top, skin.size.s8)
@@ -75,10 +75,12 @@ struct TerminalDrawerView: View {
         .overlay(alignment: .top) { grab }
     }
 
-    /// The resize handle: a short bar that shows on hover; dragging moves the drawer's top edge.
+    /// The resize handle (`.drawer .grab`): a short faint bar, brighter on hover; dragging moves the drawer's top edge.
     private var grab: some View {
         Capsule()
-            .fill(theme.foreground.opacity(isGrabHovered || dragStart != nil ? skin.opacity.o45 : 0))
+            .fill(
+                isGrabHovered || dragStart != nil
+                    ? theme.foreground.opacity(skin.opacity.o45) : skin.color(skin.text.faint).opacity(skin.opacity.o50))
             .frame(width: skin.size.s36, height: skin.size.s4)
             .frame(maxWidth: .infinity, minHeight: skin.size.s10)
             .contentShape(Rectangle())
@@ -100,6 +102,7 @@ struct TerminalDrawerView: View {
 /// The Tasks tab, at the drawer's trailing end.
 private struct TasksPill: View {
     let isActive: Bool
+    let help: String
     let action: () -> Void
     @State private var isHovered = false
     @Environment(\.ainkradSkin) private var skin
@@ -109,7 +112,7 @@ private struct TasksPill: View {
         // A plain button, so Full Keyboard Access reaches it (E1D2 FD40).
         Button(action: action) { label }  // design-lint: allow raw-control keyboard-reachable tab (kit has no tab button)
             .buttonStyle(.plain)
-            .help("Tasks (⇧⌘B to run one)")
+            .help(help)
     }
 
     private var label: some View {
