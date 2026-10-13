@@ -35,7 +35,7 @@ final class StateSnapshotTests: XCTestCase {
         try SweepSupport.waitUntilLoaded(model)
         XCTAssertEqual(model.serverBar(for: "release.rb")?.language, "Ruby")
         // CESE's parked find panel over line 1 (see `SnapshotTests.testSearch`), below the hint bar here.
-        try Snapshot.assertMatches(model, named: "no-git-no-server", masking: [CGRect(x: 314, y: 114, width: 886, height: 34)])
+        try Snapshot.assertMatches(model, named: "no-git-no-server", masking: [CGRect(x: 294, y: 114, width: 906, height: 34)])
     }
 
     /// C: the server is up but has not answered `initialize`, and reports indexing: spinner, progress, "–" counts.
@@ -46,7 +46,7 @@ final class StateSnapshotTests: XCTestCase {
         SweepSupport.spin(until: 10) { model.languages.progress["sourcekit-lsp"] != nil }
         XCTAssertEqual(model.languages.statuses["sourcekit-lsp"], .starting)
         XCTAssertEqual(model.languages.progress["sourcekit-lsp"], "Indexing 412 / 1280")
-        try Snapshot.assertMatches(model, named: "server-starting", masking: [CGRect(x: 314, y: 70, width: 886, height: 28)])
+        try Snapshot.assertMatches(model, named: "server-starting", masking: [CGRect(x: 294, y: 70, width: 906, height: 28)])
     }
 
     /// D: the server died twice in a row: the red bar with Show Log and Restart Server, a red dot and Restart.
@@ -54,7 +54,7 @@ final class StateSnapshotTests: XCTestCase {
         let model = try model(server: "kill -SEGV $$")
         SweepSupport.spin(until: 10) { model.languages.statuses["sourcekit-lsp"] == .crashed("signal 11 (SEGV)") }
         XCTAssertEqual(model.serverBar(for: SnapshotTests.sidebarRow)?.kind, .stopped)
-        try Snapshot.assertMatches(model, named: "server-crashed", masking: [CGRect(x: 314, y: 114, width: 886, height: 34)])
+        try Snapshot.assertMatches(model, named: "server-crashed", masking: [CGRect(x: 294, y: 114, width: 906, height: 34)])
     }
 
     /// The sample repo with SidebarRow.swift open, its Swift server the script `body`.
