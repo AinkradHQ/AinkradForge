@@ -103,7 +103,7 @@ private struct TabRowActions: View {
             .maximiseTerminal,
         ]
         return commands.filter(model.availableCommands.contains).map { command in
-            AinkradMenuItem(title: command.title, systemName: nil, shortcut: command.shortcut?.display) { model.run(command) }
+            AinkradMenuItem(title: command.title, systemName: nil, shortcut: model.shortcut(for: command)?.display) { model.run(command) }
         }
     }
 }

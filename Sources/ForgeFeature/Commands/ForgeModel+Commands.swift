@@ -8,7 +8,8 @@ extension ForgeModel {
         ForgeCommand.available(
             hasWorkspace: workspace != nil, hasFile: tabs.active != nil, hasSplit: panes.count > 1,
             inAgentChange: agentChangeAtCaret != nil, agentFile: tabs.active.map { agent.files[$0] != nil } ?? false,
-            hintShown: hintShown)
+            hintShown: hintShown
+        ).filter(isAppAvailable(for:))
     }
 
     /// The palette's "Recently used", newest first.
@@ -96,6 +97,7 @@ extension ForgeModel {
         case .undoAllChanges: if let path = tabs.active { undoAllChanges(path) }
         case .joinSplits: joinSplits()
         case .splitTerminal: terminals.split()
+        case .openInGitMage: openGitMage()
         case .maximiseTerminal:
             if !terminals.isOpen { terminals.toggle() }
             terminals.isMaximised.toggle()

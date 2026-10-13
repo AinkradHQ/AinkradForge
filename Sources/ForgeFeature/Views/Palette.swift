@@ -37,6 +37,8 @@ struct Palette: View {
     @State private var query = ""
     @State private var highlight: Int?
     @FocusState private var focused: Bool
+    /// Takes the key press that becomes the new shortcut while `model.rebinding` is set.
+    @State private var recorder = NextKey()
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
 
@@ -54,6 +56,11 @@ struct Palette: View {
         .onChange(of: model.paletteSymbols) { _, _ in highlight = items.isEmpty ? nil : 0 }
         .task(id: symbolTask) { await model.loadPaletteSymbols(for: prefix + query) }
         .background { openKeys }
+        .background { rebindKey }
+        .onDisappear {
+            recorder.stop()
+            model.rebinding = nil
+        }
     }
 
     private var items: [PaletteItem] {
@@ -133,6 +140,44 @@ struct Palette: View {
     /// Symbols are fetched for this: the file's once per mode, the workspace's per query.
     private var symbolTask: String { prefix == "#" ? prefix + query : prefix + (model.tabs.active ?? "") }
 
+    /// ⌘K on a command's row records a new shortcut for it (mockup 03's footer).
+    @ViewBuilder private var rebindKey: some View {
+        if prefix == ">" {
+            Button("Rebind Shortcut") { rebindHighlighted() }  // design-lint: allow raw-control key-equivalent claim
+                .keyboardShortcut("k", modifiers: .command)
+                .opacity(0)
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// The next key press becomes the highlighted command's shortcut — unless Ainkrad, macOS or another command
+    /// has it (the toast says which, and recording goes on). Esc cancels; ⌫ puts the default back.
+    private func rebindHighlighted() {
+        guard let index = highlight, items.indices.contains(index), case .command(let command) = items[index].payload else { return }
+        model.rebinding = command
+        recorder.listen { event in
+            let bare = event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty
+            if bare, event.keyCode == 53 {
+                model.rebinding = nil
+                return true
+            }
+            if bare, event.keyCode == 51 {
+                model.rebind(command, to: nil)
+                model.rebinding = nil
+                return true
+            }
+            guard let shortcut = Shortcut(event: event) else { return false }
+            if let why = model.rejection(of: shortcut, for: command) {
+                model.notice = why
+                return false
+            }
+            model.rebind(command, to: shortcut)
+            model.rebinding = nil
+            return true
+        }
+    }
+
     /// ⌘↵ opens the highlighted file or symbol in the split, ⌥↵ in a new tab group — key-equivalent claims, so
     /// they reach the palette while its field has the keyboard.
     @ViewBuilder private var openKeys: some View {
@@ -152,10 +197,10 @@ struct Palette: View {
     /// The chord that opens this mode, as the query line's keycap.
     private var modeKeys: String? {
         switch prefix {
-        case ">": ForgeCommand.commandPalette.shortcut?.display
-        case ":": ForgeCommand.goToLine.shortcut?.display
+        case ">": model.shortcut(for: .commandPalette)?.display
+        case ":": model.shortcut(for: .goToLine)?.display
         case "!", "@", "#": nil
-        default: ForgeCommand.quickOpen.shortcut?.display
+        default: model.shortcut(for: .quickOpen)?.display
         }
     }
 
@@ -193,7 +238,9 @@ struct Palette: View {
     private var hints: (leading: [String], trailing: String) {
         switch prefix {
         case ":": (["↵ go to the line"], "⌫ files")
-        case ">": (["↵ run"], "⌫ files")
+        case ">" where model.rebinding != nil:
+            (["Press the new shortcut for “\(model.rebinding?.paletteTitle ?? "")”"], "Esc cancel · ⌫ default")
+        case ">": (["↵ run", "⌘K rebind shortcut"], "Commands come from Forge + installed Ainkrad apps")
         case "!": (["↵ run the task"], "⌫ files")
         case "@", "#": (["↵ go to the symbol", "⌘↵ open to the side"], "⌫ files")
         default: (["↵ open", "⌘↵ open to the side", "⌥↵ open in a new tab group"], ": line · @ symbol · > command")
@@ -246,8 +293,12 @@ struct Palette: View {
             let matches = ForgeCommand.matching(typed, in: available)
             func item(_ command: ForgeCommand, section: String?) -> PaletteItem {
                 PaletteItem(
-                    id: "command:\(command.rawValue)", title: command.paletteTitle, systemName: "", detail: nil,
-                    value: command.shortcut?.display, payload: .command(command), section: section,
+                    id: "command:\(command.rawValue)", title: command.paletteTitle, systemName: "",
+                    // Run Task… names what it would run (mockup 03), from the workspace's Makefile / package.json.
+                    detail: command == .runTask && !model.tasks.tasks.isEmpty
+                        ? model.tasks.tasks.prefix(3).map(\.shows).joined(separator: " · ") : nil,
+                    value: model.rebinding == command ? "…" : model.shortcut(for: command)?.display,
+                    payload: .command(command), section: section,
                     matched: QuickOpen.matchedOffsets(typed, in: command.paletteTitle))
             }
             if typed.trimmingCharacters(in: .whitespaces).isEmpty {

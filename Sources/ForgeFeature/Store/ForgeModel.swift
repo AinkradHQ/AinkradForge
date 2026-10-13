@@ -27,6 +27,8 @@ final class ForgeModel {
     var pendingFocus = false
     /// Quick open's symbol rows as last fetched, and where they come from (the language servers; tests stand in).
     var paletteSymbols = PaletteSymbols()
+    /// The command whose new shortcut the palette is recording (⌘K on its row).
+    var rebinding: ForgeCommand?
     @ObservationIgnored var symbolSource: (@MainActor (ForgeModel, _ prefix: String, _ query: String) async -> PaletteSymbols)?
     /// Newest first, for ⌘P.
     private(set) var recentFiles: [String] = []

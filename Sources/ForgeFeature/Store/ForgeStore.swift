@@ -33,6 +33,8 @@ struct ForgeDocument: Codable, Equatable, Sendable {
     var editor: EditorSettings?
     /// Languages whose "no language server" hint was turned off for good ("Not for Ruby", E6).
     var quietLanguages: [String]?
+    /// Shortcuts rebound from the palette (⌘K on a row): command → chord, over the defaults. Optional, as above.
+    var shortcuts: [String: Shortcut]?
 }
 
 /// The editor settings page. Decoded field by field, each falling back to its default, so a setting added

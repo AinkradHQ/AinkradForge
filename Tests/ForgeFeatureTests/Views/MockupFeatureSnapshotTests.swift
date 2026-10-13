@@ -52,6 +52,26 @@ final class MockupFeatureSnapshotTests: XCTestCase {
         try Snapshot.assertMatches(model, named: "quick-open-files-symbols")
     }
 
+    /// ⌘⇧P "split": the split commands with their keycaps (the chord as two caps), then "Recently used" with the
+    /// commands other apps contribute and Run Task's targets (mockup 03).
+    func testCommandPaletteSplit() throws {
+        let model = try window()
+        model.store.update { $0.recentCommands = ["openInGitMage", "askAgent", "runTask"] }
+        // Join All Splits is listed while there is a split to join.
+        model.splitEditor(stacked: false)
+        try SweepSupport.waitUntilLoaded(model)
+        model.palette = ">split"
+        try Snapshot.assertMatches(model, named: "command-palette-split", masking: [CGRect(x: 280, y: 70, width: 920, height: 28)])
+    }
+
+    /// ⌘K on the highlighted row: the row waits for the new keys and the footer says how to cancel.
+    func testCommandPaletteRebinding() throws {
+        let model = try window()
+        model.palette = ">split"
+        model.rebinding = .splitRight
+        try Snapshot.assertMatches(model, named: "command-palette-rebind")
+    }
+
     /// Split Editor Down (⌘K ⌘\): two panes stacked, the inactive one dimmed (mockup 04's stacked layout).
     func testSplitDown() throws {
         let model = try window()

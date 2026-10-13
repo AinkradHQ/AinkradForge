@@ -47,11 +47,21 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
     case toggleTerminal, newTerminal, maximiseTerminal, toggleBlame, runTask, rerunLastTask
     case keepChange, undoChange, keepAllChanges, undoAllChanges, askAgent, showHover, closeHints
     case reviewOutside, showIssues, nextProblem, previousProblem, toggleSidebar
-    case joinSplits, splitTerminal
+    case joinSplits, splitTerminal, openInGitMage
 
     var id: String { rawValue }
 
     enum Requirement { case none, workspace, file, split, agentChange, agentFile, hint }
+
+    /// The Ainkrad app that carries the command out (through its launch payload); the palette lists the command
+    /// only while that app is installed and enabled.
+    var app: String? {
+        switch self {
+        case .openTerminal: "rune"  // ForgeModel.terminalAppID
+        case .openInGitMage: "gitmage"  // ForgeModel.gitMageAppID
+        default: nil
+        }
+    }
 
     var title: String {
         switch self {
@@ -101,7 +111,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .undoChange: "Undo Outside Change"
         case .keepAllChanges: "Keep All Outside Changes in File"
         case .undoAllChanges: "Undo All Outside Changes in File"
-        case .askAgent: "Ask Agent…"
+        case .askAgent: "Ask Grimoire about Selection"
         case .showHover: "Show Hover"
         case .closeHints: "Close Hint"
         case .reviewOutside: "Review Changes Made Outside Forge"
@@ -111,6 +121,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .toggleSidebar: "Toggle Sidebar"
         case .joinSplits: "Join All Splits"
         case .splitTerminal: "Split Terminal"
+        case .openInGitMage: "Open in Git Mage"
         }
     }
 
@@ -128,7 +139,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .findInFiles, .replaceAll: "Search"
         case .renameSymbol, .codeActions, .formatDocument, .showHover, .closeHints: "Editor"
         case .openTerminal, .toggleTerminal, .newTerminal, .maximiseTerminal, .splitTerminal: "Terminal"
-        case .toggleBlame: "Git"
+        case .toggleBlame, .openInGitMage: "Git"
         case .runTask, .rerunLastTask: "Tasks"
         case .keepChange, .undoChange, .keepAllChanges, .undoAllChanges, .askAgent, .reviewOutside: "Agent"
         }
@@ -190,6 +201,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .toggleSidebar: "sidebar.left"
         case .joinSplits: "rectangle"
         case .splitTerminal: "rectangle.split.2x1"
+        case .openInGitMage: "arrow.up.forward.app"
         }
     }
 
@@ -213,6 +225,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         // The mockup's keys (VS Code's on Windows) — macOS's screenshot tool takes ⇧⌘5 first unless turned off;
         // rebind it from the palette (⌘K).
         case .splitTerminal: Shortcut(key: "5", modifiers: [.command, .shift])
+        case .openInGitMage: Shortcut(key: "g", modifiers: [.command, .shift])
         case .focusFirstPane: Shortcut(key: "1", modifiers: .command)
         case .focusSecondPane: Shortcut(key: "2", modifiers: .command)
         case .newFile: Shortcut(key: "n", modifiers: .command)
@@ -255,7 +268,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .quickOpen, .commandPalette, .openFolder: .none
         case .closeWorkspace, .saveAll, .showFiles, .showChanges, .refresh, .openTerminal, .newFile, .newFolder,
             .findInFiles, .replaceAll, .toggleTerminal, .newTerminal, .maximiseTerminal, .runTask, .rerunLastTask,
-            .reviewOutside, .showIssues, .nextProblem, .previousProblem, .toggleSidebar, .splitTerminal:
+            .reviewOutside, .showIssues, .nextProblem, .previousProblem, .toggleSidebar, .splitTerminal, .openInGitMage:
             .workspace
         case .goToLine, .save, .closeTab, .nextTab, .previousTab, .revealInTree, .copyPath, .splitRight, .splitDown,
             .renameActiveFile, .revealInFinder, .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8,

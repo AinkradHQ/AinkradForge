@@ -23,7 +23,7 @@ struct WelcomeView: View {
                 .font(skin.font(AinkradFontToken(size: skin.size.s22, weight: "semibold")))
                 .tracking(skin.usesNativeGlass ? 0 : skin.size.s22 * 0.08)
             HStack(spacing: skin.size.s10) {
-                AinkradButton(title: "Open Folder…  \(ForgeCommand.openFolder.shortcut?.display ?? "")", style: .primary) {
+                AinkradButton(title: "Open Folder…  \(model.shortcut(for: .openFolder)?.display ?? "")", style: .primary) {
                     if let url = FolderPicker.choose() { model.request(.open(url)) }
                 }
                 .fixedSize()
