@@ -25,10 +25,17 @@ struct AskAgentTests {
         #expect(request.code == "let b = 2\nlet c = 3")
         request.prompt = "Make them constants."
         #expect(request.message == "In x.swift, lines 2–3:\n\n```swift\nlet b = 2\nlet c = 3\n```\n\nMake them constants.")
-        // What Grimoire reads: its own payload kind, the folder and the request.
+        // What Grimoire reads: an openDocument (the host focuses an open Grimoire), the folder, the whole request,
+        // and its parts for the context chip.
         let payload = try #require(request.payload(root: root))
-        let decoded = try #require(try JSONSerialization.jsonObject(with: Data(payload.utf8)) as? [String: String])
-        #expect(decoded == ["kind": "askAgent", "path": root.path(percentEncoded: false), "prompt": request.message])
+        let decoded = try #require(try JSONSerialization.jsonObject(with: Data(payload.utf8)) as? [String: Any])
+        #expect(decoded["kind"] as? String == "openDocument")
+        #expect(decoded["path"] as? String == root.path(percentEncoded: false))
+        #expect(decoded["prompt"] as? String == request.message)
+        #expect(decoded["request"] as? String == "Make them constants.")
+        #expect(decoded["file"] as? String == "x.swift")
+        #expect(decoded["lines"] as? [Int] == [2, 3])
+        #expect(decoded["code"] as? String == "let b = 2\nlet c = 3")
 
         // Nothing selected: the caret's line.
         document.selection = NSRange(location: 31, length: 0)
