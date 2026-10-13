@@ -102,9 +102,10 @@ struct ChangeChip: View {
 /// untick to undo it. Done undoes the unticked ones and clears the review.
 struct ReviewAllPane: View {
     let model: ForgeModel
+    /// Files whose diff is showing; until the first click, only the first file's (mockup 16).
+    @State private var shown: Set<String>?
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
-    @Environment(\.ainkradStatusColors) private var status
 
     var body: some View {
         // Once Grimoire has announced a turn, the review groups by turn (screen 18).
@@ -113,51 +114,61 @@ struct ReviewAllPane: View {
 
     @ViewBuilder private var list: some View {
         let entries = model.reviewEntries
-        let changes = entries.reduce(0) { $0 + $1.diff.hunks.count }
-        let unticked = model.agent.unticked.values.reduce(0) { $0 + $1.count }
-        VStack(alignment: .leading, spacing: skin.size.s10) {
-            HStack(spacing: skin.size.s8) {
+        let open = shown ?? Set(entries.first.map { [$0.path] } ?? [])
+        VStack(alignment: .leading, spacing: skin.size.s12) {
+            HStack(spacing: skin.size.s10) {
                 VStack(alignment: .leading, spacing: skin.size.s2) {
                     Text("Changes outside Forge").font(skin.font(AinkradFontToken(sizeKey: "t14", weight: "semibold")))
-                    Text("\(entries.count) file\(entries.count == 1 ? "" : "s") · \(changes) change\(changes == 1 ? "" : "s")"
-                        + (unticked > 0 ? " · \(unticked) unticked — Done undoes \(unticked == 1 ? "it" : "them")" : ""))
+                    Text(subtitle(entries))
                         .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
                         .foregroundStyle(skin.color(skin.text.muted))
+                        .lineLimit(1)
                 }
                 Spacer(minLength: skin.size.s8)
-                AinkradButton(title: "Undo All", style: .secondary) { model.finishReview(undoAll: true) }.fixedSize()
-                AinkradButton(title: "Keep All", style: .secondary) { model.keepAllOutside() }.fixedSize()
+                AinkradButton(title: "Undo All", style: .secondary) { model.finishReview(undoAll: true) }.secondaryAccent().fixedSize()
+                AinkradButton(title: "Keep All", style: .secondary) { model.keepAllOutside() }.secondaryAccent().fixedSize()
                 AinkradButton(title: "Done", style: .primary) { model.finishReview() }.fixedSize()
             }
             if entries.isEmpty {
                 AinkradEmptyState(icon: "checkmark.circle", title: "Nothing to review", message: "No file has changed from outside Forge since the last review.")
             }
             ScrollView {
-                VStack(alignment: .leading, spacing: skin.size.s14) {
+                VStack(alignment: .leading, spacing: skin.size.s12) {
                     ForEach(entries, id: \.path) { entry in
-                        VStack(alignment: .leading, spacing: skin.size.s6) {
-                            // The diff's own header names the file; this only says what happened to it (E1D1 FD13).
-                            if entry.isNew || entry.isDeleted {
-                                Text(entry.isNew ? "New file" : "Deleted")
-                                    .font(skin.font(AinkradFontToken(sizeKey: "t12", weight: "medium")))
-                                    .foregroundStyle(entry.isNew ? status.success : status.danger)
-                            }
+                        let counts = ReviewFileRow.counts(entry.diff)
+                        ReviewFileRow(
+                            path: entry.path, note: entry.isNew ? "new file" : entry.isDeleted ? "deleted" : nil,
+                            added: counts.added, removed: counts.removed
+                        ) {
+                            var next = open
+                            if next.remove(entry.path) == nil { next.insert(entry.path) }
+                            shown = next
+                        }
+                        if open.contains(entry.path) {
                             AinkradDiffReview(
                                 fileDiff: entry.diff,
                                 rejectedHunkIDs: Binding(
                                     get: { model.agent.unticked[entry.path] ?? [] },
-                                    set: { model.agent.unticked[entry.path] = $0 }))
+                                    set: { model.agent.unticked[entry.path] = $0 })
+                            )
+                            .reviewStyle()
                         }
                     }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(skin.size.s16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(RoundedRectangle(cornerRadius: skin.size.s10).fill(theme.surface.opacity(skin.opacity.o45)))
-        .padding(.horizontal, skin.size.s14)
-        .padding(.top, skin.size.s12)
+        .reviewSurface(skin, theme)
+    }
+
+    /// "5 files · 9 changes · since 10:42 · 1 change unticked — Done undoes it".
+    private func subtitle(_ entries: [(path: String, diff: AinkradFileDiff, isNew: Bool, isDeleted: Bool)]) -> String {
+        let changes = entries.reduce(0) { $0 + $1.diff.hunks.count }
+        let unticked = model.agent.unticked.values.reduce(0) { $0 + $1.count }
+        let since = (model.agent.files.values.map(\.since) + model.agent.others.values.map(\.since)).min()
+        return "\(entries.count) file\(entries.count == 1 ? "" : "s") · \(changes) change\(changes == 1 ? "" : "s")"
+            + (since.map { " · since " + $0.formatted(date: .omitted, time: .shortened) } ?? "")
+            + (unticked > 0 ? " · \(unticked) change\(unticked == 1 ? "" : "s") unticked — Done undoes \(unticked == 1 ? "it" : "them")" : "")
     }
 }
 

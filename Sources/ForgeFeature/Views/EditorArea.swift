@@ -14,6 +14,11 @@ struct EditorArea: View {
     var body: some View {
         VStack(spacing: 0) {
             if model.agent.reviewingAll {
+                // The tab row stays above the review (mockups 16, 18); picking a tab leaves the review for later.
+                if !model.tabs.paths.isEmpty {
+                    TabStrip(model: model, pane: model.activePane)
+                        .simultaneousGesture(TapGesture().onEnded { model.agent.reviewingAll = false })
+                }
                 ReviewAllPane(model: model)
             } else if let pending = model.pendingEdit {
                 EditPreview(model: model, pending: pending)
