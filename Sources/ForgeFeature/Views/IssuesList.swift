@@ -8,12 +8,14 @@ struct IssuesList: View {
     @State private var filter: Filter = .all
     @State private var thisFileOnly = false
     @State private var folded: Set<String> = []
+    /// The issue last opened from the list (`.hit.sel`).
+    @State private var selected: String?
     @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
+    @Environment(\.ainkradStatusColors) private var status
 
     enum Filter: String, CaseIterable, Identifiable {
-        // No "Info" segment: under Glass the kit's segmented picker is fixed-size and a fourth segment is
-        // clipped in the sidebar. Information and hints still show under All.
-        case all = "All", errors = "Errors", warnings = "Warnings"
+        case all, errors, warnings, info
         var id: String { rawValue }
 
         func admits(_ severity: Issue.Severity) -> Bool {
@@ -21,17 +23,36 @@ struct IssuesList: View {
             case .all: true
             case .errors: severity == .error
             case .warnings: severity == .warning
+            case .info: severity == .information || severity == .hint
+            }
+        }
+
+        /// `All 5`, `⊗ 2`, `⚠ 2`, `ⓘ 1` — the glyph in its severity's colour.
+        func title(_ count: Int, status: AinkradStatusColors) -> Text {
+            switch self {
+            case .all: Text("All \(count)")
+            case .errors: Text("⊗").foregroundColor(status.danger) + Text(" \(count)")
+            case .warnings: Text("⚠").foregroundColor(status.warning) + Text(" \(count)")
+            case .info: Text("ⓘ \(count)")
             }
         }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: skin.size.s8) {
+            // `.ifilter`: a chip per severity with its count, then "This file only" as a text toggle.
             HStack(spacing: skin.size.s6) {
-                AinkradSegmentedPicker(items: Filter.allCases, selection: $filter) { $0.rawValue }
-                    .controlSize(.small)
+                ForEach(Filter.allCases) { kind in
+                    FilterChip(title: kind.title(count(kind), status: status), isOn: filter == kind) { filter = kind }
+                }
                 Spacer(minLength: 0)
-                AinkradToggleButton(isOn: $thisFileOnly, systemName: "doc.text").help("This file only")
+                Button { thisFileOnly.toggle() } label: {  // design-lint: allow raw-control the mockup's text toggle
+                    Text("This file only")
+                        .font(skin.font(AinkradFontToken(sizeKey: "t11")))
+                        .foregroundStyle(thisFileOnly ? theme.accentSecondary : skin.color(skin.text.faint))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(thisFileOnly ? .isSelected : [])
             }
             if groups.isEmpty {
                 Text(emptyText)
@@ -48,7 +69,8 @@ struct IssuesList: View {
                         }
                         if !isFolded {
                             ForEach(group.issues) { issue in
-                                IssueRow(issue: issue) {
+                                IssueRow(issue: issue, isSelected: selected == issue.id) {
+                                    selected = issue.id
                                     model.open(file: issue.path, pinned: false)
                                     model.pendingLine = issue.start.line + 1
                                 }
@@ -59,6 +81,10 @@ struct IssuesList: View {
             }
             .scrollIndicators(.never)
         }
+    }
+
+    private func count(_ kind: Filter) -> Int {
+        model.languages.allIssues.filter { kind.admits($0.severity) }.count
     }
 
     private var groups: [(path: String, issues: [Issue])] {
@@ -78,8 +104,10 @@ struct IssuesList: View {
     }
 }
 
+/// `.hit.issue`: the severity glyph, the message (11.5 pt, wrapping), `line:col` in faint mono.
 private struct IssueRow: View {
     let issue: Issue
+    let isSelected: Bool
     let open: () -> Void
     @State private var isHovered = false
     @Environment(\.ainkradSkin) private var skin
@@ -95,34 +123,61 @@ private struct IssueRow: View {
 
     private var label: some View {
         HStack(alignment: .firstTextBaseline, spacing: skin.size.s8) {
-            Image(systemName: IssueStyle.symbol(issue.severity))
-                .font(skin.font(AinkradFontToken(sizeKey: "t11")))
-                .foregroundStyle(IssueStyle.color(issue.severity, status: status, theme: theme))
+            Text(IssueStyle.glyph(issue.severity))
+                .font(skin.font(AinkradFontToken(size: 11.5)))
+                .foregroundStyle(issue.severity <= .warning ? IssueStyle.color(issue.severity, status: status, theme: theme) : skin.color(skin.text.faint))
             Text(issue.message)
-                .font(skin.font(AinkradFontToken(sizeKey: "t12")))
-                .foregroundStyle(theme.foreground.opacity(skin.opacity.o85))
+                .font(skin.font(AinkradFontToken(size: 11.5)))
+                .foregroundStyle(isSelected ? theme.foreground : skin.color(skin.text.muted))
+                .lineSpacing(skin.size.s2)
                 .lineLimit(3)
-            Spacer(minLength: skin.size.s4)
+                .frame(maxWidth: .infinity, alignment: .leading)
             Text("\(issue.start.line + 1):\(issue.start.character + 1)")
-                .font(skin.font(AinkradFontToken(sizeKey: "t10", monospacedDigits: true)))
+                .font(skin.font(AinkradFontToken(sizeKey: "t10", mono: "family")))
                 .foregroundStyle(skin.color(skin.text.faint))
         }
-        .padding(.vertical, skin.size.s4)
-        .padding(.leading, skin.size.s20)
-        .padding(.trailing, skin.size.s6)
-        .ainkradRowBackground(isSelected: false, isHovered: isHovered)
+        .padding(.vertical, skin.size.s3)
+        .padding(.leading, skin.size.s22)
+        .padding(.trailing, skin.size.s8)
+        .ainkradRowBackground(isSelected: isSelected, isHovered: isHovered, style: .fill)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
     }
 }
 
+/// `.ifilter .chip`: a small chamfered chip (Neon) or capsule (Glass), filled with the accent when on.
+private struct FilterChip: View {
+    let title: Text
+    let isOn: Bool
+    let action: () -> Void
+    @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
+
+    var body: some View {
+        let shape = skin.shape(cut: skin.usesNativeGlass ? skin.size.s10 : skin.cut.c4)
+        Button(action: action) {  // design-lint: allow raw-control the mockup's severity chip
+            title
+                .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
+                .foregroundStyle(isOn ? theme.foreground : skin.color(skin.text.muted))
+                .padding(.vertical, skin.size.s2)
+                .padding(.horizontal, skin.size.s8)
+                .background(shape.fill(isOn ? theme.accentPrimary.opacity(skin.opacity.o35) : ForgeStyle.fillStrong(skin, theme)))
+                .overlay(shape.strokeBorder(ForgeStyle.stroke(skin, theme), lineWidth: skin.size.s1))
+                .fixedSize()
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+}
+
 /// Severity glyphs and colours, shared by the Issues tab, the editor's underlines and the status bar.
 enum IssueStyle {
-    static func symbol(_ severity: Issue.Severity) -> String {
+    /// The mockups' text glyphs: `⊗` `⚠` `ⓘ`.
+    static func glyph(_ severity: Issue.Severity) -> String {
         switch severity {
-        case .error: "xmark.octagon.fill"
-        case .warning: "exclamationmark.triangle.fill"
-        case .information, .hint: "info.circle"
+        case .error: "⊗"
+        case .warning: "⚠"
+        case .information, .hint: "ⓘ"
         }
     }
 

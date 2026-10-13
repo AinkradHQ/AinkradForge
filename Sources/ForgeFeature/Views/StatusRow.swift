@@ -19,13 +19,14 @@ struct StatusRow: View {
         .foregroundStyle(skin.color(skin.text.muted))
         .lineLimit(1)
         .padding(.horizontal, skin.size.s18)
-        .padding(.vertical, skin.size.s8)
+        .padding(.top, skin.size.s7)
+        .padding(.bottom, skin.size.s9)
     }
 
     private func row(showsFormat: Bool) -> some View {
         HStack(spacing: skin.size.s14) {
             if let branch = workspace.branch {
-                Label(branch, systemImage: "arrow.triangle.branch")
+                Text("⑂ \(branch)")
             } else if !workspace.isLoading {
                 Text("no git").foregroundStyle(skin.color(skin.text.faint)).help("Not a git repository")
             }
@@ -38,14 +39,15 @@ struct StatusRow: View {
                 Text("Ln \(document.cursor.line), Col \(document.cursor.column)")
             }
             if showsFormat, let document = model.activeDocument, document.state == .ready {
-                StatusMenu(title: document.format.lineEnding.rawValue, items: TextFormat.LineEnding.allCases.map { ending in
-                    AinkradMenuItem(title: "Convert to \(ending.rawValue)", systemName: ending == document.format.lineEnding ? "checkmark" : nil) {
-                        document.convertLineEndings(to: ending)
-                    }
-                })
+                IndentationMenu(model: model)
                 StatusMenu(title: document.format.encoding.rawValue, items: TextFormat.Encoding.allCases.map { encoding in
                     AinkradMenuItem(title: "Save as \(encoding.rawValue)", systemName: encoding == document.format.encoding ? "checkmark" : nil) {
                         document.setEncoding(encoding)
+                    }
+                })
+                StatusMenu(title: document.format.lineEnding.rawValue, items: TextFormat.LineEnding.allCases.map { ending in
+                    AinkradMenuItem(title: "Convert to \(ending.rawValue)", systemName: ending == document.format.lineEnding ? "checkmark" : nil) {
+                        document.convertLineEndings(to: ending)
                     }
                 })
                 Text(document.language.name)
@@ -55,6 +57,27 @@ struct StatusRow: View {
                 Text(TextFormat().lineEnding.rawValue)
             }
         }
+    }
+}
+
+/// `Spaces: 4` / `Tab Size: 4` — the editor's indentation settings, changed from its menu.
+private struct IndentationMenu: View {
+    let model: ForgeModel
+
+    var body: some View {
+        let settings = model.editorSettings
+        StatusMenu(
+            title: settings.insertSpaces ? "Spaces: \(settings.tabWidth)" : "Tab Size: \(settings.tabWidth)",
+            items: [true, false].map { spaces in
+                AinkradMenuItem(title: spaces ? "Indent Using Spaces" : "Indent Using Tabs", systemName: settings.insertSpaces == spaces ? "checkmark" : nil) {
+                    model.editorSettings.insertSpaces = spaces
+                }
+            } + [2, 4, 8].enumerated().map { index, width in
+                let item = AinkradMenuItem(title: "Width \(width)", systemName: settings.tabWidth == width ? "checkmark" : nil) {
+                    model.editorSettings.tabWidth = width
+                }
+                return index == 0 ? item.startingGroup() : item
+            })
     }
 }
 
@@ -88,10 +111,10 @@ private struct IssueCounts: View {
             // A plain button, so Full Keyboard Access reaches it (E1D2 FD40).
             Button { model.sideTab = .problems } label: {  // design-lint: allow raw-control keyboard-reachable status item
                 HStack(spacing: skin.size.s6) {
-                    Label(known ? "\(model.languages.errorCount)" : "–", systemImage: "xmark.octagon")
-                        .foregroundStyle(model.languages.errorCount > 0 ? status.danger : skin.color(skin.text.muted))
-                    Label(known ? "\(model.languages.warningCount)" : "–", systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(model.languages.warningCount > 0 ? status.warning : skin.color(skin.text.muted))
+                    Text("⊗ \(known ? "\(model.languages.errorCount)" : "–")")
+                        .foregroundStyle(known ? status.danger : skin.color(skin.text.muted))
+                    Text("⚠ \(known ? "\(model.languages.warningCount)" : "–")")
+                        .foregroundStyle(known ? status.warning : skin.color(skin.text.muted))
                 }
                 .contentShape(Rectangle())
             }
@@ -131,7 +154,9 @@ private struct ServerChip: View {
                         } else if state == .notInstalled {
                             hollowDot
                         } else {
-                            Circle().fill(color(state)).frame(width: skin.size.s6, height: skin.size.s6)
+                            // The mockup's dot: 7 pt with a soft glow of its own colour.
+                            Circle().fill(color(state)).frame(width: skin.size.s7, height: skin.size.s7)
+                                .shadow(color: state == .ready ? color(state) : .clear, radius: skin.size.s4)
                         }
                         Text(label(spec, state, progress))
                         if let fraction = Self.fraction(progress), state == .starting || state == .ready {
@@ -196,26 +221,28 @@ private struct ServerChip: View {
 
     private func items(_ active: ServerSpec) -> [AinkradMenuItem] {
         let used = LanguageRegistry.servers.filter { model.languages.statuses[$0.id] != nil }
-        var items = used.map { spec in
+        let items = used.map { spec in
             let state = model.languages.statuses[spec.id] ?? .notRunning
-            return AinkradMenuItem(title: "\(spec.command) — \(Self.describe(state, spec: spec))", systemName: nil) {}
+            // `● sourcekit-lsp — ready · Swift`: the dot for a running server, the language it serves.
+            return AinkradMenuItem(
+                title: "\(spec.command) — \(Self.describe(state, spec: spec)) · \(spec.language)",
+                systemName: state == .ready ? "circle.fill" : nil) {}
         }
-        for spec in used where model.languages.statuses[spec.id] != .notInstalled {
-            items.append(AinkradMenuItem(title: "Restart \(spec.command)", systemName: "arrow.clockwise") {
-                model.languages.restart(spec.id)
-            })
+        // The actions after a gap (never a line).
+        var actions = used.filter { model.languages.statuses[$0.id] != .notInstalled }.map { spec in
+            AinkradMenuItem(title: "Restart \(spec.command)", systemName: nil) { model.languages.restart(spec.id) }
         }
-        items.append(AinkradMenuItem(title: "Set \(active.command) Path…", systemName: "folder") {
+        actions.append(AinkradMenuItem(title: "Set \(active.command) Path…", systemName: nil) {
             if let path = ServerPathPicker.choose(active) { model.setServerPath(active.id, path) }
         })
-        items.append(AinkradMenuItem(title: "Show \(active.command) Log", systemName: "doc.text") { model.showServerLog(active.id) })
-        return items
+        actions.append(AinkradMenuItem(title: "Show \(active.command) Log", systemName: nil) { model.showServerLog(active.id) })
+        actions[0] = actions[0].startingGroup()
+        return items + actions
     }
 
     private func color(_ state: ServerStatus) -> Color {
         switch state {
-        case .ready: status.success
-        case .starting: theme.accentSecondary
+        case .ready, .starting: theme.accentSecondary
         case .failed, .crashed: status.danger
         case .notInstalled: status.warning
         case .notRunning: skin.color(skin.text.faint)

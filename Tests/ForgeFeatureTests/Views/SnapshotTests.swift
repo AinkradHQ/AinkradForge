@@ -67,7 +67,7 @@ final class SnapshotTests: XCTestCase {
         model.request(.open(empty))
         SweepSupport.spin(until: 10) { model.workspace?.isLoading == false }
         XCTAssertEqual(model.workspace?.files, [])
-        try Snapshot.assertMatches(model, named: "empty-folder")
+        try Snapshot.assertMatches(model, named: "empty-folder", masking: [Snapshot.workspacePath])
     }
 
     /// A narrow window (760 pt): the sidebar gives way and the status bar degrades, nothing clips (E1D1 FD28).
@@ -104,17 +104,21 @@ final class SnapshotTests: XCTestCase {
         try SweepSupport.waitUntilLoaded(model)
         try Snapshot.assertMatches(
             model, named: "split-narrow", size: CGSize(width: 900, height: 560),
-            masking: [CGRect(x: 300, y: 70, width: 600, height: 28)])
+            masking: [CGRect(x: 280, y: 70, width: 620, height: 28)])
     }
 
     /// Welcome at 520 pt (three apps tiled): the recents card narrows with the window (E1D1 FD35).
     func testWelcomeNarrow() throws {
         let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
         model.store.update { $0.recents = [.init(path: repo.path, opened: .distantPast)] }
+        // The language-server line reads this Mac's PATH: point every server at nothing, so it is the same anywhere.
+        var settings = EditorSettings()
+        settings.serverPaths = Dictionary(uniqueKeysWithValues: LanguageRegistry.servers.map { ($0.id, "/nonexistent/forge-snapshot") })
+        model.editorSettings = settings
         // The repo's folder name is random per run: mask the path line.
         try Snapshot.assertMatches(
             model, named: "welcome-narrow", size: CGSize(width: 520, height: 560),
-            masking: [CGRect(x: 30, y: 360, width: 370, height: 20)])
+            masking: [CGRect(x: 40, y: 346, width: 440, height: 20)])
     }
 
     /// The blame card near the editor's right edge slides left to stay inside it; the note stays put (E1D1 FD17).
@@ -159,7 +163,7 @@ final class SnapshotTests: XCTestCase {
         // ponytail: masked; un-mask if the panel ever shows there live.
         try Snapshot.assertMatches(
             model, named: "search",
-            masking: [CGRect(x: 90, y: 214, width: 210, height: 20), CGRect(x: 314, y: 70, width: 886, height: 28)])
+            masking: [CGRect(x: 90, y: 214, width: 190, height: 20), CGRect(x: 294, y: 70, width: 906, height: 28)])
     }
 
     /// Review All: a file Forge had read, changed while closed, and a new one.
@@ -188,6 +192,13 @@ final class SnapshotTests: XCTestCase {
     /// The review by Grimoire turn (E5, screen 18): turn 3 open with its request and first diff, an outside edit
     /// grouped by time, turn 2 folded; the status bar names the newest turn. Times are masked (they read the clock).
     func testTurnReview() throws {
+        // A frozen clock: the header's layout follows the time's width ("1:38 PM" vs "12:35 PM").
+        TurnReviewClock.time = { _ in "12:35 PM" }
+        TurnReviewClock.ago = { _ in "5 s ago" }
+        defer {
+            TurnReviewClock.time = { $0.formatted(date: .omitted, time: .shortened) }
+            TurnReviewClock.ago = { ShortAgo.text($0) }
+        }
         let sort = "Sources/Ainkrad/Features/Sidebar/SidebarSort.swift"
         let sortText = "enum SidebarSort {\n    static func order(_ a: Int, _ b: Int) -> Bool {\n        a < b\n    }\n}\n"
         try sortText.write(to: repo.appendingPathComponent(sort), atomically: true, encoding: .utf8)
@@ -247,7 +258,7 @@ final class SnapshotTests: XCTestCase {
     static let turnReviewNarrowClock: [(CGFloat, [CGRect])] = [
         (900, [44, 146, 408, 460]), (760, [44, 146, 432]), (640, [44, 110, 372, 426]), (520, [44, 146, 432]),
     ].map { width, rows in
-        let x: CGFloat = width < RootView.narrowWidth ? 0 : 300
+        let x: CGFloat = width < RootView.narrowWidth ? 0 : 280
         return (width, rows.map { CGRect(x: x, y: CGFloat($0), width: width - x, height: 20) })
     }
 
@@ -263,6 +274,8 @@ final class SnapshotTests: XCTestCase {
 @MainActor
 enum Snapshot {
     static let size = CGSize(width: 1200, height: 760)
+    /// The workspace card's second line when it shows the folder (no git): a random temporary path per run.
+    static let workspacePath = CGRect(x: 10, y: 32, width: 262, height: 20)
     /// A channel may drift this far (of 255) before its pixel counts as changed: antialiasing, not content.
     static let channelTolerance = 24
     /// This share of changed pixels (~90 at 1200×760) fails the shot. Renaming one sidebar tab ("Search" →

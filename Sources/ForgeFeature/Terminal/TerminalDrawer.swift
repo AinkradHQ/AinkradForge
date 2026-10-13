@@ -217,11 +217,23 @@ final class TerminalDrawer {
         return bytes > 0
     }
 
+    /// JetBrains Mono with MesloLGS NF cascaded behind it; whichever of them is installed; else the system mono.
+    static func terminalFont(size: CGFloat) -> NSFont {
+        let meslo = NSFont(name: "MesloLGS NF", size: size)
+        guard let jetbrains = NSFont(name: "JetBrains Mono", size: size) else {
+            return meslo ?? .monospacedSystemFont(ofSize: size, weight: .regular)
+        }
+        guard let meslo else { return jetbrains }
+        let descriptor = jetbrains.fontDescriptor.addingAttributes([.cascadeList: [meslo.fontDescriptor]])
+        return NSFont(descriptor: descriptor, size: size) ?? jetbrains
+    }
+
     /// The theme's terminal colours (the ones Rune uses), on a clear background so the drawer's surface shows.
     static func apply(_ palette: HostTerminalPalette?, foreground: NSColor?, to view: ForgeTerminalView) {
-        // Rune's default font, when installed: a Nerd Font, so powerline / p10k prompt glyphs draw instead of "?" (E0 FD11).
-        // ponytail: fixed family, follow Rune's font setting if Forge grows terminal settings of its own.
-        view.font = NSFont(name: "MesloLGS NF", size: 12) ?? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        // The mockups' code face (JetBrains Mono), falling back glyph by glyph to Rune's Nerd Font so powerline / p10k
+        // prompt glyphs still draw instead of "?" (E0 FD11).
+        // ponytail: fixed families, follow Rune's font setting if Forge grows terminal settings of its own.
+        view.font = terminalFont(size: 12)
         // Layer-backed with a clear layer, as Rune does: otherwise the view paints an opaque backdrop.
         view.wantsLayer = true
         view.layer?.isOpaque = false

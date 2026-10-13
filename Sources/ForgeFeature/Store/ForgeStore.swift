@@ -24,6 +24,8 @@ struct ForgeDocument: Codable, Equatable, Sendable {
 
     /// Newest first.
     var recents: [Recent] = []
+    /// Commands run from the palette, newest first (its "Recently used"). Optional so older state decodes.
+    var recentCommands: [String]?
     var workspaces: [String: WorkspaceState] = [:]
     /// Reopened at launch, when it still exists.
     var lastWorkspace: String?
@@ -36,7 +38,8 @@ struct ForgeDocument: Codable, Equatable, Sendable {
 /// The editor settings page. Decoded field by field, each falling back to its default, so a setting added
 /// later never makes the saved ones unreadable.
 struct EditorSettings: Codable, Equatable, Sendable {
-    var fontSize: Double = 13
+    /// The mockups' 12.5 pt code face.
+    var fontSize: Double = 12.5
     var tabWidth: Int = 4
     var insertSpaces = true
     var wrapLines = false

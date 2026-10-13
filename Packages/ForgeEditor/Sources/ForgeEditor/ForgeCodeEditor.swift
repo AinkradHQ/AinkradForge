@@ -84,46 +84,6 @@ public struct EditorPanelStyle: Equatable, Sendable {
     }
 }
 
-/// The user's editor settings.
-public struct EditorOptions: Equatable, Sendable {
-    public var fontSize: Double
-    public var tabWidth: Int
-    /// Tab inserts spaces (`tabWidth` of them) rather than a tab character.
-    public var insertSpaces: Bool
-    public var wrapLines: Bool
-    public var showMinimap: Bool
-    public var showInvisibles: Bool
-
-    public init(
-        fontSize: Double = 13, tabWidth: Int = 4, insertSpaces: Bool = true, wrapLines: Bool = false,
-        showMinimap: Bool = false, showInvisibles: Bool = false
-    ) {
-        self.fontSize = fontSize
-        self.tabWidth = tabWidth
-        self.insertSpaces = insertSpaces
-        self.wrapLines = wrapLines
-        self.showMinimap = showMinimap
-        self.showInvisibles = showInvisibles
-    }
-}
-
-/// A range of the buffer to mark: underlined (a diagnostic, in its severity's colour), washed (a search match —
-/// a soft fill behind its text), or line-washed (a change made outside Forge — its lines filled edge to edge).
-public struct EditorMark: Equatable, Sendable {
-    public let range: NSRange
-    public let color: NSColor
-    public let isWash: Bool
-    /// Wash every line the range touches across the editor's full width, not just the text.
-    public let isLineWash: Bool
-
-    public init(range: NSRange, color: NSColor, isWash: Bool = false, isLineWash: Bool = false) {
-        self.range = range
-        self.color = color
-        self.isWash = isWash
-        self.isLineWash = isLineWash
-    }
-}
-
 /// A definition to jump to. The caller opens it (another file, a preview tab).
 public struct EditorLink: Sendable {
     /// Absolute.
@@ -302,8 +262,7 @@ struct EditorHost: View {
             language: language.code,
             configuration: SourceEditorConfiguration(
                 appearance: .init(
-                    theme: colors.theme, font: .monospacedSystemFont(ofSize: options.fontSize, weight: .regular),
-                    lineHeightMultiple: 1.45, wrapLines: options.wrapLines, tabWidth: options.tabWidth,
+                    theme: colors.theme, font: options.font, lineHeightMultiple: EditorOptions.lineHeightMultiple(for: options.font), wrapLines: options.wrapLines, tabWidth: options.tabWidth,
                     suggestionPanelStyle: colors.completionPanel?.suggestionPanelStyle),
                 behavior: .init(indentOption: options.insertSpaces ? .spaces(count: options.tabWidth) : .tab),
                 layout: .init(contentInsets: insets),
@@ -417,6 +376,7 @@ struct EditorHost: View {
         let lineMarkView = LineMarkView()
         let lineWashView = LineWashView()
         var washObserver: (any NSObjectProtocol)?
+        let wavyView = WavyUnderlineView()
         var gutterObserver: (any NSObjectProtocol)?
         var anchorLine: Int?
         var onAnchor: (CGRect?) -> Void = { _ in }
@@ -445,18 +405,21 @@ struct EditorHost: View {
             hover.dismiss()
             lineMarkView.needsDisplay = true
             lineWashView.needsDisplay = true
+            wavyView.needsDisplay = true
             DispatchQueue.main.async { [weak self] in self?.reportAnchor() }
             onEdit()
         }
 
-        /// Underlines through CodeEditTextView's emphasis manager, replacing the previous set.
+        /// Washes through CodeEditTextView's emphasis manager, diagnostics as wavy underlines over the text.
         func apply(_ marks: [EditorMark]) {
             guard let textView = controller?.textView, let manager = textView.emphasisManager else { return }
+            if wavyView.superview !== textView { wavyView.install(in: textView) }
+            wavyView.marks = marks.filter { !$0.isWash && !$0.isLineWash }
             manager.removeEmphases(for: "forge.marks")
             let length = textView.textStorage.length
             lineWashView.washes = marks.filter(\.isLineWash)
-            let emphases = marks.compactMap { mark -> Emphasis? in
-                guard !mark.isLineWash, mark.range.location < length else { return nil }
+            let emphases = marks.filter { $0.isWash && !$0.isLineWash }.compactMap { mark -> Emphasis? in
+                guard mark.range.location < length else { return nil }
                 let range = NSRange(location: mark.range.location, length: max(1, min(mark.range.length, length - mark.range.location)))
                 return Emphasis(range: range, style: mark.isWash ? .outline(color: mark.color, fill: true) : .underline(color: mark.color))
             }

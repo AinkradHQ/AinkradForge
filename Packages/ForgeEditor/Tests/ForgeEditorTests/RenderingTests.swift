@@ -187,7 +187,7 @@ final class RenderingTests: XCTestCase {
     }
 
     /// Diagnostics reach CodeEdit as underline emphases, replaced (not piled up) when they change.
-    func testMarksBecomeUnderlines() throws {
+    func testMarksBecomeWavyUnderlines() throws {
         let gray = NSColor.gray
         let colors = EditorColors(
             text: gray, insertionPoint: gray, selection: gray, lineHighlight: gray, keywords: gray, commands: gray,
@@ -207,8 +207,12 @@ final class RenderingTests: XCTestCase {
         host.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.5))
         func textView(in view: NSView) -> TextView? { (view as? TextView) ?? view.subviews.lazy.compactMap(textView(in:)).first }
-        let emphases = try XCTUnwrap(textView(in: host)?.emphasisManager).getEmphases(for: "forge.marks")
-        XCTAssertEqual(emphases.map(\.range), [NSRange(location: 13, length: 6)])
+        // A diagnostic is a wavy underline drawn over the text, not a straight emphasis.
+        let text = try XCTUnwrap(textView(in: host))
+        let wavy = try XCTUnwrap(text.subviews.lazy.compactMap { $0 as? WavyUnderlineView }.first)
+        XCTAssertEqual(wavy.marks.map(\.range), [NSRange(location: 13, length: 6)])
+        XCTAssertEqual(wavy.frame, text.bounds)
+        XCTAssertEqual(try XCTUnwrap(text.emphasisManager).getEmphases(for: "forge.marks").count, 0)
     }
 
     /// A rename's edits go through the editor: the buffer changes, they apply once, the editor says so.
