@@ -11,6 +11,20 @@ extension ForgeModel {
             hintShown: hintShown)
     }
 
+    /// The palette's "Recently used", newest first.
+    var recentCommands: [ForgeCommand] {
+        (store.document.recentCommands ?? []).compactMap(ForgeCommand.init(rawValue:))
+    }
+
+    /// Run from the palette: it floats up under "Recently used".
+    func noteCommandUsed(_ command: ForgeCommand) {
+        store.update { document in
+            var recent = (document.recentCommands ?? []).filter { $0 != command.rawValue }
+            recent.insert(command.rawValue, at: 0)
+            document.recentCommands = Array(recent.prefix(8))
+        }
+    }
+
     func run(_ command: ForgeCommand) {
         guard availableCommands.contains(command) else { return }
         palette = nil
@@ -136,9 +150,9 @@ extension ForgeModel {
     static let terminalAppID = "rune"
     static let openDirectoryKind = "openDirectory"
 
-    /// Opens Rune with a shell in the workspace folder.
-    private func openTerminal() {
-        guard let apps, let root = workspace?.root,
+    /// Opens Rune with a shell in `folder` — the workspace folder by default.
+    func openTerminal(in folder: URL? = nil) {
+        guard let apps, let root = folder ?? workspace?.root,
             let payload = AinkradLaunchIntent(kind: Self.openDirectoryKind, path: root.path(percentEncoded: false)).json
         else { return }
         guard let reporting = apps as? PluginAppLauncherResult else {

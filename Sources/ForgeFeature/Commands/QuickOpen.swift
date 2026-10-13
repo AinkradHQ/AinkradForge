@@ -42,7 +42,20 @@ enum QuickOpen {
 
     /// Greedy left-to-right match with bonuses for word starts, camel humps and consecutive letters.
     static func subsequenceScore(_ needle: [Character], in haystack: String) -> Int? {
+        subsequence(needle, in: haystack)?.score
+    }
+
+    /// The offsets (in `Character`s) of the letters `query` matches in `text`, for drawing them bold; empty when
+    /// it does not match.
+    static func matchedOffsets(_ query: String, in text: String) -> [Int] {
+        let needle = Array(query.lowercased().filter { !$0.isWhitespace })
+        guard !needle.isEmpty else { return [] }
+        return subsequence(needle, in: text)?.offsets ?? []
+    }
+
+    private static func subsequence(_ needle: [Character], in haystack: String) -> (score: Int, offsets: [Int])? {
         let chars = Array(haystack)
+        var offsets: [Int] = []
         var score = 0
         var position = 0
         var previousMatch = -2
@@ -64,8 +77,9 @@ enum QuickOpen {
             if at == 0 { score += 20 }
             previousMatch = at
             position = at + 1
+            offsets.append(at)
         }
-        return score
+        return (score, offsets)
     }
 
     private static func isWordStart(_ chars: [Character], _ index: Int) -> Bool {

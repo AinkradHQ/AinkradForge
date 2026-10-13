@@ -103,6 +103,29 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         }
     }
 
+    /// The palette's group word (`View: Split Editor Right`).
+    var category: String {
+        switch self {
+        case .openFolder, .closeWorkspace, .save, .saveAll, .newFile, .newFolder, .renameActiveFile, .revealInFinder,
+            .trashActiveFile, .copyPath, .revealInTree, .refresh, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8:
+            "File"
+        case .quickOpen, .goToLine, .goToDefinition, .findReferences, .nextProblem, .previousProblem, .nextTab, .previousTab:
+            "Go"
+        case .commandPalette, .closeTab, .showFiles, .showChanges, .showIssues, .toggleSidebar, .splitRight, .splitDown,
+            .focusFirstPane, .focusSecondPane, .closePane:
+            "View"
+        case .findInFiles, .replaceAll: "Search"
+        case .renameSymbol, .codeActions, .formatDocument, .showHover, .closeHints: "Editor"
+        case .openTerminal, .toggleTerminal, .newTerminal, .maximiseTerminal: "Terminal"
+        case .toggleBlame: "Git"
+        case .runTask, .rerunLastTask: "Tasks"
+        case .keepChange, .undoChange, .keepAllChanges, .undoAllChanges, .askAgent, .reviewOutside: "Agent"
+        }
+    }
+
+    /// How the palette lists it: `Category: Title`.
+    var paletteTitle: String { "\(category): \(title)" }
+
     var systemName: String {
         switch self {
         case .quickOpen: "doc.text.magnifyingglass"
@@ -246,12 +269,12 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The palette's `>` mode: title words in order, best first.
+    /// The palette's `>` mode: category and title words in order, best first.
     static func matching(_ query: String, in commands: [ForgeCommand]) -> [ForgeCommand] {
         let needle = Array(query.lowercased().filter { !$0.isWhitespace })
         guard !needle.isEmpty else { return commands }
         return commands
-            .compactMap { command in QuickOpen.subsequenceScore(needle, in: command.title).map { (command, $0) } }
+            .compactMap { command in QuickOpen.subsequenceScore(needle, in: command.paletteTitle).map { (command, $0) } }
             .sorted { $0.1 > $1.1 }
             .map(\.0)
     }
