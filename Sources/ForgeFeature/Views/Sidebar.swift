@@ -6,12 +6,15 @@ import SwiftUI
 struct Sidebar: View {
     @Bindable var model: ForgeModel
     let workspace: Workspace
+    /// 300 pt; less in a narrow window (`RootView`).
+    let width: CGFloat
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: skin.size.s8) {
-            WorkspaceCard(model: model, workspace: workspace)
+            // The card's content: the sidebar less its padding and the card's (2×10 each).
+            WorkspaceCard(model: model, workspace: workspace, width: width - skin.size.s40)
             // The kit's segmented control: Apple's glass segmented picker under Liquid Glass.
             // Labels stay short so all four fit; the change count is on the workspace card.
             AinkradSegmentedPicker(items: ForgeModel.SideTab.allCases, selection: $model.sideTab) { $0.rawValue }
@@ -37,7 +40,7 @@ struct Sidebar: View {
         .padding(.top, skin.size.s12)
         .padding(.horizontal, skin.size.s10)
         .padding(.bottom, skin.size.s10)
-        .frame(width: skin.size.s300)
+        .frame(width: width)
         .frame(maxHeight: .infinity, alignment: .top)
         // Fill, not a rule.
         .background(theme.surface.opacity(skin.opacity.o35))
@@ -48,6 +51,7 @@ struct Sidebar: View {
 private struct WorkspaceCard: View {
     let model: ForgeModel
     let workspace: Workspace
+    let width: CGFloat
     @State private var isHovered = false
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
@@ -80,8 +84,8 @@ private struct WorkspaceCard: View {
                 .lineLimit(1)
             }
             // An explicit width: under Glass the kit's menu button is `.fixedSize()`, so `maxWidth: .infinity`
-            // would collapse to the text. 300 (sidebar) − 2×10 (sidebar padding) − 2×10 (card padding).
-            .frame(width: skin.size.s260, alignment: .leading)
+            // would collapse to the text.
+            .frame(width: width, alignment: .leading)
             .padding(.vertical, skin.size.s8)
             .padding(.horizontal, skin.size.s10)
             .modifier(CardSurface(isHovered: isHovered))

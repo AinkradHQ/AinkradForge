@@ -30,10 +30,12 @@ struct WelcomeView: View {
                     }
                 }
                 .padding(skin.size.s8)
-                .frame(width: skin.size.s560)
+                // Up to 560, narrower with the window (E1D1 FD35).
+                .frame(maxWidth: skin.size.s560)
                 .background(RoundedRectangle(cornerRadius: skin.size.s12).fill(theme.surface.opacity(skin.opacity.o45)))
             }
         }
+        .padding(.horizontal, skin.size.s20)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 

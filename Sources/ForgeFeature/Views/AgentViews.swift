@@ -131,8 +131,9 @@ struct ReviewAllPane: View {
                 VStack(alignment: .leading, spacing: skin.size.s14) {
                     ForEach(entries, id: \.path) { entry in
                         VStack(alignment: .leading, spacing: skin.size.s6) {
+                            // The diff's own header names the file; this only says what happened to it (E1D1 FD13).
                             if entry.isNew || entry.isDeleted {
-                                Text(entry.isNew ? "\(entry.path) — new file" : "\(entry.path) — deleted")
+                                Text(entry.isNew ? "New file" : "Deleted")
                                     .font(skin.font(AinkradFontToken(sizeKey: "t12", weight: "medium")))
                                     .foregroundStyle(entry.isNew ? status.success : status.danger)
                             }

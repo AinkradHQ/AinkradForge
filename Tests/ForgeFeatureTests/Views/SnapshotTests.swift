@@ -70,6 +70,55 @@ final class SnapshotTests: XCTestCase {
         try Snapshot.assertMatches(model, named: "empty-folder")
     }
 
+    /// A narrow window (760 pt): the sidebar gives way and the status bar degrades, nothing clips (E1D1 FD28).
+    func testNarrowWindow() throws {
+        let model = try Snapshot.model(opening: repo)
+        Snapshot.expandSidebar(model)
+        model.open(file: Self.sidebarRow, pinned: true)
+        try SweepSupport.waitUntilLoaded(model)
+        // CESE's parked find panel, as in `testSearch`.
+        try Snapshot.assertMatches(
+            model, named: "narrow", size: CGSize(width: 760, height: 560),
+            masking: [CGRect(x: 280, y: 70, width: 480, height: 28)])
+    }
+
+    /// Split editor at 900 pt: each breadcrumb stays on one line (E1D1 FD27); the right pane's tabs overflow.
+    func testSplitNarrow() throws {
+        let model = try Snapshot.model(opening: repo)
+        model.open(file: Self.sidebarRow, pinned: true)
+        model.splitEditor(stacked: false)
+        for path in ["AGENTS.md", "Makefile", "project.yml"] { model.open(file: path, pinned: true) }
+        try SweepSupport.waitUntilLoaded(model)
+        try Snapshot.assertMatches(
+            model, named: "split-narrow", size: CGSize(width: 900, height: 560),
+            masking: [CGRect(x: 300, y: 70, width: 600, height: 28)])
+    }
+
+    /// Welcome at 520 pt (three apps tiled): the recents card narrows with the window (E1D1 FD35).
+    func testWelcomeNarrow() throws {
+        let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
+        model.store.update { $0.recents = [.init(path: repo.path, opened: .distantPast)] }
+        // The repo's folder name is random per run: mask the path line.
+        try Snapshot.assertMatches(
+            model, named: "welcome-narrow", size: CGSize(width: 520, height: 560),
+            masking: [CGRect(x: 30, y: 360, width: 370, height: 20)])
+    }
+
+    /// The blame card near the editor's right edge slides left to stay inside it; the note stays put (E1D1 FD17).
+    func testBlameCardStaysInTheEditor() throws {
+        // An uncommitted line: its note does not read the clock.
+        let note = BlameNote(
+            path: Self.sidebarRow, line: 4,
+            blame: BlameLine(hash: String(repeating: "0", count: 40), author: "You", time: .distantPast, summary: ""),
+            card: CommitCard(
+                hash: "e26d646", author: "Ahmed M. Elhalaby", when: "11 hours ago", subject: "agent edits",
+                stat: "1 file changed, 4 insertions(+), 2 deletions(-)"))
+        let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
+        try Snapshot.assertMatches(
+            BlameView(model: model, note: note, leading: 400, isHovered: true).padding(.top, 20),
+            named: "blame-card", size: CGSize(width: 640, height: 200))
+    }
+
     /// ⌘P over the window, filtered to "sbrow".
     func testQuickOpen() throws {
         let model = try Snapshot.model(opening: repo)
@@ -156,10 +205,18 @@ enum Snapshot {
     /// Draws `model`'s window and compares it with `Goldens/<name>.png` (or records it).
     /// `masking` blanks rects (top-left origin, points) in both images first — for text that reads the clock.
     static func assertMatches(
-        _ model: ForgeModel, named name: String, masking masks: [CGRect] = [], file: StaticString = #filePath,
-        line: UInt = #line
+        _ model: ForgeModel, named name: String, size: CGSize = size, masking masks: [CGRect] = [],
+        file: StaticString = #filePath, line: UInt = #line
     ) throws {
-        let image = try XCTUnwrap(render(model), "the window did not draw", file: file, line: line)
+        try assertMatches(RootView(model: model, theme: hostTheme()), named: name, size: size, masking: masks, file: file, line: line)
+    }
+
+    /// `assertMatches` for any view, drawn alone on the window's background.
+    static func assertMatches(
+        _ view: some View, named name: String, size: CGSize = size, masking masks: [CGRect] = [],
+        file: StaticString = #filePath, line: UInt = #line
+    ) throws {
+        let image = try XCTUnwrap(render(view, size: size), "the window did not draw", file: file, line: line)
         let golden = goldens.appendingPathComponent("\(name).png")
         if isRecording {
             try FileManager.default.createDirectory(at: goldens, withIntermediateDirectories: true)
@@ -184,16 +241,10 @@ enum Snapshot {
 
     /// The window, once four draws a quarter second apart agree: some layers land late (the fold ribbon after
     /// its ranges are computed, highlights after a parse), and two quick draws can both precede them.
-    static func render(_ model: ForgeModel) -> CGImage? {
+    static func render(_ view: some View, size: CGSize = size) -> CGImage? {
         let skin = AinkradSkin.standard
-        let theme = HostTheme(HostThemeTokens(skin: skin))
-        theme.updateStatusColors(
-            HostStatusColors(
-                success: skin.color(skin.palette.success), warning: skin.color(skin.palette.warning),
-                danger: skin.color(skin.palette.danger)))
-        theme.updateTerminalPalette(HostTerminalPalette(skin.terminal))
         let host = NSHostingView(
-            rootView: RootView(model: model, theme: theme)
+            rootView: view
                 .frame(width: size.width, height: size.height)
                 .background(skin.color(skin.palette.background))
                 .ainkradSkin(skin)
@@ -211,7 +262,7 @@ enum Snapshot {
         SweepSupport.spin(until: 0.5) { false }
         while Date() < deadline {
             host.layoutSubtreeIfNeeded()
-            guard let shot = draw(host) else { return nil }
+            guard let shot = draw(host, size: size) else { return nil }
             unchanged = previous.map { difference(shot, $0) == 0 } == true ? unchanged + 1 : 0
             if unchanged == 3 { return shot }
             previous = shot
@@ -220,7 +271,19 @@ enum Snapshot {
         return previous
     }
 
-    private static func draw(_ view: NSView) -> CGImage? {
+    /// The Neon host theme `RootView` takes.
+    static func hostTheme() -> HostTheme {
+        let skin = AinkradSkin.standard
+        let theme = HostTheme(HostThemeTokens(skin: skin))
+        theme.updateStatusColors(
+            HostStatusColors(
+                success: skin.color(skin.palette.success), warning: skin.color(skin.palette.warning),
+                danger: skin.color(skin.palette.danger)))
+        theme.updateTerminalPalette(HostTerminalPalette(skin.terminal))
+        return theme
+    }
+
+    private static func draw(_ view: NSView, size: CGSize) -> CGImage? {
         guard
             let rep = NSBitmapImageRep(
                 bitmapDataPlanes: nil, pixelsWide: Int(size.width), pixelsHigh: Int(size.height), bitsPerSample: 8,
@@ -237,10 +300,8 @@ enum Snapshot {
         guard a.width == b.width, a.height == b.height else { return 1 }
         let lhs = pixels(a)
         let rhs = pixels(b)
-        let scale = Double(a.width) / size.width
-        let masked = masks.map {
-            CGRect(x: $0.minX * scale, y: $0.minY * scale, width: $0.width * scale, height: $0.height * scale)
-        }
+        // Shots are drawn at 1×: a point is a pixel.
+        let masked = masks
         var changed = 0
         for index in stride(from: 0, to: lhs.count, by: 4) {
             let pixel = index / 4

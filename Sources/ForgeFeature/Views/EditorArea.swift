@@ -59,8 +59,14 @@ private struct PaneView: View {
             Group {
                 if let path = tabs.active, let document = model.documents[path] {
                     VStack(alignment: .leading, spacing: 0) {
-                        AinkradBreadcrumb(items: path.split(separator: "/").map(String.init))
-                            .padding(.horizontal, skin.size.s14)
+                        // One line, never wrapped letter by letter: the whole path when it fits, else the file name,
+                        // truncated if even that is too long (E1D1 FD27).
+                        ViewThatFits(in: .horizontal) {
+                            AinkradBreadcrumb(items: path.split(separator: "/").map(String.init))
+                            AinkradBreadcrumb(items: [(path as NSString).lastPathComponent])
+                        }
+                        .lineLimit(1)
+                        .padding(.horizontal, skin.size.s14)
                             .padding(.top, skin.size.s8)
                             .padding(.bottom, skin.size.s4)
                         if let conflict = document.conflict {
@@ -143,9 +149,14 @@ private struct DocumentView: View {
 
     var body: some View {
         switch document.state {
-        case .loading: AinkradLoadingState(label: "Opening \(document.url.lastPathComponent)…")
+        // Filling the pane: under Glass the kit's states are Apple's content-unavailable view, only as wide as its
+        // text, and the breadcrumb above them followed it to the middle (E1D1 FD30).
+        case .loading:
+            AinkradLoadingState(label: "Opening \(document.url.lastPathComponent)…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .unreadable(let why):
             AinkradEmptyState(icon: "doc.questionmark", title: "Can't show this file", message: why)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .ready:
             let review = model.agent.files[path]
             let agentMarks = model.agentMarks(path, color: NSColor(theme.accentSecondary))
@@ -208,8 +219,7 @@ private struct DocumentView: View {
             }
             .overlay(alignment: .topLeading) {
                 if let note = model.git.blame, note.path == path, pane == model.activePane {
-                    BlameView(model: model, note: note)
-                        .padding(.leading, document.caretLineEnd + skin.size.s28)
+                    BlameView(model: model, note: note, leading: document.caretLineEnd + skin.size.s28)
                         .padding(.top, document.caretRect.minY)
                 }
             }
@@ -285,8 +295,42 @@ private struct TabStrip: View {
             .padding(.horizontal, skin.size.s14)
         }
         .scrollIndicators(.never)
+        // No scroll bar: an edge with tabs past it fades out instead, so more tabs read as there (E1D1 FD29).
+        .modifier(OverflowFade())
         .padding(.top, skin.size.s12)
         .frame(height: skin.size.s44, alignment: .bottom)
+    }
+}
+
+/// Fades a horizontal scroll view's edge while content is scrolled out past it. macOS 15+ (scroll geometry);
+/// earlier, no fade.
+private struct OverflowFade: ViewModifier {
+    /// Leading, trailing.
+    @State private var hidden = [false, false]
+    @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
+
+    func body(content: Content) -> some View {
+        if #available(macOS 15, *) {
+            content
+                .onScrollGeometryChange(for: [Bool].self) { geometry in
+                    let offset = geometry.contentOffset.x
+                    return [offset > 1, offset + geometry.containerSize.width < geometry.contentSize.width - 1]
+                } action: { _, edges in
+                    hidden = edges
+                }
+                .mask {
+                    HStack(spacing: 0) {
+                        LinearGradient(colors: [.clear, theme.foreground], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: hidden[0] ? skin.size.s28 : 0)
+                        Rectangle()
+                        LinearGradient(colors: [theme.foreground, .clear], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: hidden[1] ? skin.size.s28 : 0)
+                    }
+                }
+        } else {
+            content
+        }
     }
 }
 

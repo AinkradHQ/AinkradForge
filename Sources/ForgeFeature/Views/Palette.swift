@@ -112,6 +112,15 @@ struct Palette: View {
             emptyState: { AnyView(empty) },
             highlight: $highlight,
             handlesKeyPresses: true)
+            .ainkradSkin(rowSkin)
+    }
+
+    /// The kit sets a row's detail (a file's folder) in the code face at the 13 pt mono role, under an 11 pt
+    /// title: the folder read louder than the file (E1D1 FD6). The same face at the title's size.
+    private var rowSkin: AinkradSkin {
+        var rows = skin
+        rows.type.roles.mono = rows.type.roles.caption
+        return rows
     }
 
     private var placeholder: String {
