@@ -130,13 +130,18 @@ private struct NoticeToaster: View {
 /// it would do nothing, and would take the key from the editor.
 private struct ShortcutLayer: View {
     let model: ForgeModel
+    @Environment(\.ainkradPaneIsFocused) private var isFocused
 
     var body: some View {
         ZStack {
-            ForEach(model.availableCommands.filter { $0.shortcut != nil }) { command in
-                if let shortcut = command.shortcut {
-                    Button(command.title) { model.run(command) }  // design-lint: allow raw-control key-equivalent claim
-                        .keyboardShortcut(KeyEquivalent(shortcut.key), modifiers: shortcut.modifiers)
+            // Only the focused pane claims keys: an unfocused one would take the
+            // chord from the pane you are working in, or from the host (FD36).
+            if isFocused {
+                ForEach(model.availableCommands.filter { $0.shortcut != nil }) { command in
+                    if let shortcut = command.shortcut {
+                        Button(command.title) { model.run(command) }  // design-lint: allow raw-control key-equivalent claim
+                            .keyboardShortcut(KeyEquivalent(shortcut.key), modifiers: shortcut.modifiers)
+                    }
                 }
             }
         }
