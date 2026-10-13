@@ -30,6 +30,18 @@ struct AgentReviewTests {
         #expect(review.hunk("a.swift", containing: 3) == nil)
     }
 
+    /// Mockup 15: the chip sits after its line's text; a line too long for it flips the chip above the line, at
+    /// the editor's right edge (below, on the first line), so it never covers the changed text.
+    @Test func theChipSitsAfterTheLineOrFlipsClearOfIt() {
+        let chip = CGSize(width: 200, height: 22)
+        let short = CGRect(x: 60, y: 100, width: 300, height: 20)
+        #expect(ChangeChip.origin(anchor: short, chip: chip, width: 1000, gap: 28, margin: 16) == CGPoint(x: 388, y: 98))
+        let long = CGRect(x: 60, y: 100, width: 800, height: 20)
+        #expect(ChangeChip.origin(anchor: long, chip: chip, width: 1000, gap: 28, margin: 16) == CGPoint(x: 784, y: 76))
+        let top = CGRect(x: 60, y: 4, width: 800, height: 20)
+        #expect(ChangeChip.origin(anchor: top, chip: chip, width: 1000, gap: 28, margin: 16) == CGPoint(x: 784, y: 26))
+    }
+
     @Test func undoingEachChangeRestoresItsOldLines() throws {
         for index in 0..<3 {
             let review = AgentReview()
