@@ -24,6 +24,18 @@ struct SignatureInfo: Equatable {
 
 /// Language-server requests from the editor: hover, go to definition, find references.
 extension ForgeModel {
+    /// Why the active file gets no issues from a server: none covers it, or its server is missing or failed.
+    /// Nil while one is running or starting (E1D1 FD33).
+    var activeServerGap: String? {
+        guard let path = tabs.active else { return nil }
+        guard let (spec, _) = LanguageRegistry.server(for: path) else { return "No language server covers this file." }
+        switch languages.statuses[spec.id] {
+        case .notInstalled: return "\(spec.command) is not installed — \(spec.installHint)"
+        case .failed(let why): return "\(spec.command) failed: \(why)"
+        default: return nil
+        }
+    }
+
     /// Starts the window's language servers for a workspace, with the paths set in settings.
     func beginLanguages(root: URL) {
         languages.overrides = editorSettings.serverPaths

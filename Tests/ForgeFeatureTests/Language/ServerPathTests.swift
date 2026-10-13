@@ -16,6 +16,23 @@ struct ServerPathTests {
         #expect(model.editorSettings.serverPaths["gopls"] == nil)
         #expect(model.languages.overrides["gopls"] == nil)
     }
+
+    /// With no server for the file, or its server missing, the window says so instead of "0 issues" (E1D1 FD33).
+    @Test func aFileWithoutARunningServerSaysWhy() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("forge-gap-\(UUID().uuidString.prefix(8))")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        for name in ["a.swift", "b.yml"] { try "x\n".write(to: root.appending(path: name), atomically: true, encoding: .utf8) }
+        let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
+        #expect(model.activeServerGap == nil)
+        model.setServerPath("sourcekit-lsp", "/nonexistent/forge-gap")
+        await model.start(launch: root.path)
+        model.open(file: "b.yml", pinned: true)
+        #expect(model.activeServerGap == "No language server covers this file.")
+        model.open(file: "a.swift", pinned: true)
+        for _ in 0..<100 where model.activeServerGap == nil { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(model.activeServerGap?.hasPrefix("sourcekit-lsp is not installed") == true)
+    }
 }
 
 @MainActor

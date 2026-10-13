@@ -71,6 +71,8 @@ struct IssuesList: View {
     }
 
     private var emptyText: String {
+        // Not "No issues" when nothing could report one (E1D1 FD33).
+        if let gap = model.activeServerGap, thisFileOnly || !model.languages.statuses.values.contains(.ready) { return gap }
         if model.languages.statuses.isEmpty { return "Open a file — its language server reports issues here." }
         return thisFileOnly ? "No issues in this file." : "No issues."
     }
