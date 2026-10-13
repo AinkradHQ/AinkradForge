@@ -69,3 +69,11 @@ struct ForgeEditorTests {
         #expect(panel == SuggestionPanelStyle(background: .black, selectedRowBackground: .blue, cornerRadius: 14))
     }
 }
+
+/// Mockup 09: ⌥-hover shows the card at once; otherwise the pointer rests half a second first.
+@MainActor
+@Test func optionHoverShowsAtOnce() {
+    #expect(HoverTracker.delay(for: [.option]) == .zero)
+    #expect(HoverTracker.delay(for: [.option, .shift]) == .zero)
+    #expect(HoverTracker.delay(for: []) == .milliseconds(500))
+}

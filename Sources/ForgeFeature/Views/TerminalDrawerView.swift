@@ -16,7 +16,9 @@ struct TerminalDrawerView: View {
         VStack(spacing: 0) {
             HStack(spacing: skin.size.s4) {
                 ForEach(drawer.tabs) { tab in
-                    DrawerTab(tab: tab, isActive: !drawer.showsTasks && drawer.active == tab.id) { drawer.select(tab.id) } onClose: {
+                    DrawerTab(tab: tab, isActive: !drawer.showsTasks && (drawer.active == tab.id || drawer.shownPair?.contains(tab.id) == true)) {
+                        drawer.select(tab.id)
+                    } onClose: {
                         drawer.requestClose(tab.id)
                     }
                 }
@@ -47,6 +49,18 @@ struct TerminalDrawerView: View {
                     .padding(.horizontal, skin.size.s10)
                     .padding(.bottom, skin.size.s8)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let pair = drawer.shownPair {
+                // Split Terminal: side by side on the drawer's surface, no rule between them; only the active one
+                // takes the keyboard when asked.
+                HStack(spacing: skin.size.s10) {
+                    ForEach(pair, id: \.self) { id in
+                        if let view = drawer.view(id) {
+                            TerminalHost(view: view, focusRequest: drawer.active == id ? drawer.focusRequest : -1).id(id)
+                        }
+                    }
+                }
+                .padding(.horizontal, skin.size.s10)
+                .padding(.bottom, skin.size.s8)
             } else if let id = drawer.active, let view = drawer.view(id) {
                 TerminalHost(view: view, focusRequest: drawer.focusRequest)
                     .id(id)

@@ -58,7 +58,7 @@ public final class LanguageHub {
     public private(set) var custom: [ServerSpec] = []
 
     @ObservationIgnored private var root: URL?
-    @ObservationIgnored private var sessions: [String: LanguageSession] = [:]
+    @ObservationIgnored var sessions: [String: LanguageSession] = [:]
     @ObservationIgnored private var chains: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private var pendingChanges: [String: Task<Void, Never>] = [:]
     /// The text reader of each pending change, so a request can send it at once instead of after the pause.
@@ -287,7 +287,7 @@ public final class LanguageHub {
     }
 
     /// Runs a request after everything queued for the file's server, the latest edit included.
-    private func request<T: Sendable>(
+    func request<T: Sendable>(
         _ path: String, _ operation: @escaping @Sendable (LanguageSession, String) async -> T
     ) async -> T? {
         guard let (spec, _) = server(for: path), let uri = uri(for: path), let session = sessions[spec.id]
@@ -423,7 +423,7 @@ public final class LanguageHub {
 
     private func uri(for path: String) -> String? { root?.appending(path: path).absoluteString }
 
-    private func path(for uri: String) -> String? {
+    func path(for uri: String) -> String? {
         guard let root, let url = URL(string: uri) else { return nil }
         let base = root.standardizedFileURL.resolvingSymlinksInPath().path + "/"
         let full = url.standardizedFileURL.resolvingSymlinksInPath().path

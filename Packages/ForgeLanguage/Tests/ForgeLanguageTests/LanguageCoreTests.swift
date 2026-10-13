@@ -18,6 +18,20 @@ struct LanguageCoreTests {
         #expect(LanguageHub.enclosing([row], line: 1, character: 0) == [])
     }
 
+    /// Quick open's `@`: the outline flattened in order, each child after its parent and naming it.
+    @Test func documentSymbolsFlattenParentFirst() {
+        func range(_ a: Int, _ b: Int) -> LSPRange {
+            LSPRange(start: Position(line: a, character: 4), end: Position(line: b, character: 1))
+        }
+        let body = DocumentSymbol(name: "body", kind: .property, range: range(9, 22), selectionRange: range(9, 9))
+        let row = DocumentSymbol(name: "SidebarRow", kind: .struct, range: range(4, 23), selectionRange: range(4, 4), children: [body])
+        let style = DocumentSymbol(name: "plain", kind: .enumMember, range: range(25, 25), selectionRange: range(25, 25))
+        let flat = LanguageHub.flatten([row, style], path: "A.swift", container: nil)
+        #expect(flat.map(\.name) == ["SidebarRow", "body", "plain"])
+        #expect(flat.map(\.kind) == ["struct", "property", "case"])
+        #expect(flat[1].container == "SidebarRow" && flat[1].line == 9 && flat[1].character == 4)
+    }
+
     @Test func filesMapToTheirServerAndLanguageID() {
         #expect(LanguageRegistry.server(for: "Sources/A.swift")?.spec.id == "sourcekit-lsp")
         #expect(LanguageRegistry.server(for: "web/App.tsx")?.languageID == "typescriptreact")

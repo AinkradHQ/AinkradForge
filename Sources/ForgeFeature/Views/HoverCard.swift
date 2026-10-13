@@ -41,7 +41,7 @@ struct HoverCard: View {
                         .padding(.bottom, skin.size.s10)
                 }
             }
-            Text("\(info.server) · ⌘-click to jump")
+            Text("\(info.server) · ⌘-click to jump · ⌥-hover for the quick help only")
                 .font(skin.font(AinkradFontToken(sizeKey: "t10_5")))
                 .foregroundStyle(skin.color(skin.text.faint))
                 .padding(.bottom, skin.size.s10)

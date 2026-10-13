@@ -25,6 +25,11 @@ final class ForgeModel {
     var pendingLine: Int?
     /// The active editor takes keyboard focus (a file opened from the palette), consumed by the editor.
     var pendingFocus = false
+    /// Quick open's symbol rows as last fetched, and where they come from (the language servers; tests stand in).
+    var paletteSymbols = PaletteSymbols()
+    /// The command whose new shortcut the palette is recording (⌘K on its row).
+    var rebinding: ForgeCommand?
+    @ObservationIgnored var symbolSource: (@MainActor (ForgeModel, _ prefix: String, _ query: String) async -> PaletteSymbols)?
     /// Newest first, for ⌘P.
     private(set) var recentFiles: [String] = []
     /// Shown as a toast: a failed save, or an app that would not open.
@@ -317,12 +322,12 @@ final class ForgeModel {
 
 /// The split editor: at most two panes, each with its own tabs, sharing one buffer per file.
 extension ForgeModel {
-    /// ⌘\ — a second pane showing the active file (one buffer, two views), or focus it if it exists.
-    func splitEditor(stacked: Bool) {
+    /// ⌘\ — a second pane showing the active file (one buffer, two views), or `path`; focus it if it exists.
+    func splitEditor(stacked: Bool, showing path: String? = nil) {
         self.stacked = stacked
         if panes.count == 1 {
             var second = Tabs()
-            if let path = tabs.active { second.open(path, pinned: true) }
+            if let path = path ?? tabs.active { second.open(path, pinned: true) }
             panes.append(second)
         }
         activePane = 1
