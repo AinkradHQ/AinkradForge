@@ -170,30 +170,3 @@ struct ResultLineRow: View {
         return part
     }
 }
-
-/// A labelled text field. Under Liquid Glass it is a glass capsule like the kit's search field (whose glass
-/// path it mirrors); elsewhere the kit's text field. Local only because `AinkradTextField` draws Apple's flat
-/// rounded field under Glass — a glass-capsule text field in the kit is the proposal.
-struct GlassField: View {
-    let label: String
-    @Binding var text: String
-    let placeholder: String
-    @Environment(\.ainkradSkin) private var skin
-
-    var body: some View {
-        if #available(macOS 26, *), skin.usesNativeGlass {
-            HStack(spacing: AinkradSpacing.sm) {
-                Text(label)
-                    .font(skin.font(AinkradFontToken(sizeKey: "t11")))
-                    .foregroundStyle(.secondary)
-                TextField(placeholder, text: $text)  // design-lint: allow raw-control kit gap: glass capsule text field
-                    .textFieldStyle(.plain)
-            }
-            .padding(.horizontal, AinkradSpacing.md)
-            .padding(.vertical, AinkradSpacing.sm)
-            .glassEffect(.regular, in: .capsule)
-        } else {
-            AinkradTextField(text: $text, placeholder: "\(label.capitalized): \(placeholder)")
-        }
-    }
-}
