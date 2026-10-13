@@ -99,9 +99,8 @@ struct SearchPanel: View {
                     let folded = search.collapsed.contains(file.path)
                     ResultFileRow(
                         path: file.path, count: file.matches.count, isFolded: folded,
-                        // While previewing a replace, the file is what is selected — not each of its lines,
-                        // whose strike-through would vanish under a solid selection fill.
-                        isSelected: search.isReplaceOpen && search.previewPath == file.path,
+                        // While previewing a replace, the clicked line is what is selected (mockup 08), else its file.
+                        isSelected: search.isReplaceOpen && search.previewPath == file.path && search.previewLine == nil,
                         onReplace: search.isReplaceOpen ? { model.replace(in: file.path) } : nil,
                         onDismiss: { search.dismiss(file.path) }
                     ) {
@@ -111,8 +110,9 @@ struct SearchPanel: View {
                         ForEach(file.matches) { match in
                             ResultLineRow(
                                 match: match,
-                                isSelected: !search.isReplaceOpen
-                                    && model.tabs.active == file.path && model.activeDocument?.cursor.line == match.line,
+                                isSelected: search.isReplaceOpen
+                                    ? search.previewPath == file.path && search.previewLine == match.line
+                                    : model.tabs.active == file.path && model.activeDocument?.cursor.line == match.line,
                                 replacement: replacementText,
                                 action: search.isReplaceOpen
                                     ? RowAction(glyph: "⇄", help: "Replace this one") { model.replace(in: file.path, line: match.line) }
@@ -120,6 +120,7 @@ struct SearchPanel: View {
                             ) {
                                 if search.isReplaceOpen {
                                     search.previewPath = file.path
+                                    search.previewLine = match.line
                                 } else {
                                     open(file.path, line: match.line, pinned: false)
                                 }

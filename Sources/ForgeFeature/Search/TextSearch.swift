@@ -56,7 +56,7 @@ enum TextSearch {
     /// `lines`, when given, picks the matches to replace by the (1-based) line they start on.
     static func replace(
         in text: String, regex: NSRegularExpression, with replacement: String, isRegex: Bool, preserveCase: Bool,
-        lines: ((Int) -> Bool)? = nil
+        limit: Int? = nil, lines: ((Int) -> Bool)? = nil
     ) -> (text: String, count: Int) {
         let ns = text as NSString
         var found = regex.matches(in: text, range: NSRange(location: 0, length: ns.length))
@@ -72,6 +72,7 @@ enum TextSearch {
                 return lines(line + 1)
             }
         }
+        if let limit { found = Array(found.prefix(limit)) }
         guard !found.isEmpty else { return (text, 0) }
         let template = isRegex ? replacement : NSRegularExpression.escapedTemplate(for: replacement)
         let out = NSMutableString(string: text)

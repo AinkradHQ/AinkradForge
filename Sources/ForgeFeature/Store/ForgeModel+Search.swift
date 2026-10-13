@@ -63,7 +63,7 @@ extension ForgeModel {
 /// their own encoding and line endings. Nothing with unsaved edits is ever overwritten on disk.
 extension ForgeModel {
     /// What replacing in `path` would do, from its open buffer or its file — only the matches still listed
-    /// (none dismissed with ✕), or with `line`, only that line's.
+    /// (none dismissed with ✕), or with `line`, only that line's first — the one its row starts at.
     func replacePlan(for path: String, line: Int? = nil) -> ReplacePlan? {
         guard let workspace, let regex = try? search.query.compile() else { return nil }
         let text: String? = documents[path].flatMap { $0.state == .ready ? $0.storage.string : nil }
@@ -72,11 +72,11 @@ extension ForgeModel {
         let dismissed = search.dismissedFiles.contains(path) ? nil : search.dismissedLines[path] ?? []
         return ReplacePlan.make(
             path: path, text: text, regex: regex, replacement: search.replacement, isRegex: search.query.regex,
-            preserveCase: search.preserveCase
+            preserveCase: search.preserveCase, limit: line == nil ? nil : 1
         ) { (line == nil || $0 == line) && dismissed?.contains($0) == false }
     }
 
-    /// ⇄ on a result line: replaces that line's match (an unsaved edit in an open buffer; otherwise written in
+    /// ⇄ on a result line: replaces that one match, the line's first (an unsaved edit in an open buffer; otherwise written in
     /// the file's own encoding), then searches again so the counts follow.
     @discardableResult
     func replace(in path: String, line: Int) -> Int {
