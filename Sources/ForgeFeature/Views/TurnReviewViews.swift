@@ -301,7 +301,7 @@ private struct TurnGroupView: View {
             },
             chips: { EmptyView() },
             leading: {
-                Text("turn \(turn.turn) · \(group.files.count == 1 ? "1 file" : "\(group.files.count) files") attached · Send to Grimoire ⌘↵")
+                Text("turn \(turn.turn) · \(group.files.count == 1 ? "1 file" : "\(group.files.count) files") attached · Send to Grimoire ⌘↵ · Esc")
                     .font(skin.font(AinkradFontToken(sizeKey: "t11")))
                     .foregroundStyle(skin.color(skin.text.faint))
                     .lineLimit(1)
