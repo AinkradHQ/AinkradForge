@@ -33,6 +33,7 @@ extension ForgeModel {
         case .quickOpen: palette = ""
         case .commandPalette: palette = ">"
         case .goToLine: palette = ":"
+        case .switchWorkspace: palette = "~"
         case .openFolder: if let url = FolderPicker.choose() { request(.open(url)) }
         case .closeWorkspace: request(.close)
         case .save: saveActive()

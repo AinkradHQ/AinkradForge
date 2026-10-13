@@ -10,6 +10,8 @@ struct PaletteItem: Hashable, Identifiable {
         case task(WorkspaceTask)
         /// A symbol's file and 1-based line.
         case symbol(path: String, line: Int)
+        /// A workspace folder's absolute path.
+        case workspace(String)
     }
 
     let id: String
@@ -31,7 +33,8 @@ struct PaletteItem: Hashable, Identifiable {
 }
 
 /// ⌘P / ⌘⇧P / ⌃G — one panel; the first character picks the mode, as in VS Code:
-/// nothing = files, `>` = commands, `:` = go to line, `@` = this file's symbols, `#` = the workspace's, `!` = tasks.
+/// nothing = files, `>` = commands, `:` = go to line, `@` = this file's symbols, `#` = the workspace's, `!` = tasks,
+/// `~` = the recent workspaces (⌃⌘O).
 struct Palette: View {
     let model: ForgeModel
     let start: String
@@ -203,6 +206,7 @@ struct Palette: View {
         switch prefix {
         case ">": model.shortcut(for: .commandPalette)?.display
         case ":": model.shortcut(for: .goToLine)?.display
+        case "~": model.shortcut(for: .switchWorkspace)?.display
         case "!", "@", "#": nil
         default: model.shortcut(for: .quickOpen)?.display
         }
@@ -236,6 +240,7 @@ struct Palette: View {
         case "!": "Run a task…"
         case "@": "Go to a symbol in this file…"
         case "#": "Go to a symbol in the workspace…"
+        case "~": "Switch to a workspace…"
         default: "Go to file…"
         }
     }
@@ -248,13 +253,14 @@ struct Palette: View {
             (["Press the new shortcut for “\(model.rebinding?.paletteTitle ?? "")”"], "Esc cancel · ⌫ default")
         case ">": (["↵ run", "⌘K rebind shortcut"], "Commands come from Forge + installed Ainkrad apps")
         case "!": (["↵ run the task"], "⌫ files")
+        case "~": (["↵ open the workspace"], "⌫ files")
         case "@", "#": (["↵ go to the symbol", "⌘↵ open to the side"], "⌫ files")
         default: (["↵ open", "⌘↵ open to the side", "⌥↵ open in a new tab group"], ": line · @ symbol · > command")
         }
     }
 
     /// The characters that pick a mode when typed first.
-    static let modes: Set<Character> = [">", ":", "!", "@", "#"]
+    static let modes: Set<Character> = [">", ":", "!", "@", "#", "~"]
 
     /// ">open" → (">", "open"); "side" → ("", "side").
     static func split(_ text: String) -> (prefix: String, query: String) {
@@ -265,7 +271,8 @@ struct Palette: View {
     private var empty: some View {
         AinkradEmptyState(
             icon: "magnifyingglass", title: "No matches",
-            message: (prefix == "@" || prefix == "#") && model.paletteSymbols.note != nil ? model.paletteSymbols.note ?? ""
+            message: prefix == "~" ? "No other workspaces yet — \(model.shortcut(for: .openFolder)?.display ?? "Open Folder…") opens a folder."
+                : (prefix == "@" || prefix == "#") && model.paletteSymbols.note != nil ? model.paletteSymbols.note ?? ""
                 : model.workspace == nil && prefix != ">"
                 ? "Open a folder first, or type > for commands."
                 : prefix.isEmpty && query.isEmpty ? "This folder has no files yet — type > for commands."
@@ -286,6 +293,9 @@ struct Palette: View {
             model.run(command)
         case .line(let line): model.goTo(line: line)
         case .task(let task): model.runTask(task)
+        case .workspace(let path):
+            model.palette = nil
+            model.request(.open(URL(fileURLWithPath: path)))
         }
     }
 
@@ -327,6 +337,7 @@ struct Palette: View {
                         payload: .task(task))
                 }
         }
+        if query.hasPrefix("~") { return workspaceItems(String(query.dropFirst()), model: model) }
         if query.hasPrefix("@") { return symbolItems(String(query.dropFirst()), model: model) }
         if query.hasPrefix("#") { return symbolItems(String(query.dropFirst()), model: model, filter: false) }
         if query.hasPrefix(":") {
@@ -353,5 +364,29 @@ struct Palette: View {
                 section: recent.contains(match.path) ? "Recently opened" : "Files",
                 matched: QuickOpen.matchedOffsets(query, in: name))
         } + symbols
+    }
+
+    /// `~`: the workspace's other worktrees, then the recent workspaces (the welcome list, mockup 05) — the current
+    /// one left out — ranked by what is typed.
+    @MainActor static func workspaceItems(_ query: String, model: ForgeModel) -> [PaletteItem] {
+        let here = model.workspace.map { $0.root.resolvingSymlinksInPath().path }
+        let trees = (model.workspace?.worktrees ?? []).map { ($0.path, $0.branch, "⑂") }
+        let recents = model.store.document.recents.map { ($0.path, ($0.path as NSString).lastPathComponent, "") }
+        var seen = Set<String>()
+        let all = (trees + recents).filter { path, _, _ in
+            let resolved = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+            return resolved != here && seen.insert(resolved).inserted
+        }
+        let needle = Array(query.lowercased().filter { !$0.isWhitespace })
+        return all
+            .compactMap { entry in needle.isEmpty ? (entry, 0) : QuickOpen.subsequenceScore(needle, in: entry.1).map { (entry, $0) } }
+            .enumerated().sorted { ($0.element.1, -$0.offset) > ($1.element.1, -$1.offset) }
+            .map { _, ranked in
+                let (path, title, glyph) = ranked.0
+                return PaletteItem(
+                    id: "workspace:\(path)", title: title, glyph: glyph,
+                    detail: (path as NSString).abbreviatingWithTildeInPath, payload: .workspace(path),
+                    matched: QuickOpen.matchedOffsets(query, in: title))
+            }
     }
 }

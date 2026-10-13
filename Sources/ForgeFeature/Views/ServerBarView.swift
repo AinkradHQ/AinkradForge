@@ -143,7 +143,7 @@ struct EmptyEditorHints: View {
 
     var body: some View {
         // The keys are the user's (⌘K rebinds them), so a hint never names a chord that no longer works.
-        let hints: [(ForgeCommand, String)] = [(.quickOpen, "open a file"), (.commandPalette, "commands"), (.openFolder, "switch workspace")]
+        let hints: [(ForgeCommand, String)] = [(.quickOpen, "open a file"), (.commandPalette, "commands"), (.switchWorkspace, "switch workspace")]
         AinkradEmptyState(
             icon: "hammer",
             keyHints: hints.compactMap { command, label in
