@@ -32,8 +32,10 @@ extension ForgeModel {
     func beginAsk() {
         guard let path = tabs.active, let document = documents[path], document.state == .ready else { return }
         let text = document.storage.string as NSString
-        // The selection's whole lines; with nothing selected, the caret's line.
-        let range = text.lineRange(for: NSIntersectionRange(document.selection, NSRange(location: 0, length: text.length)))
+        // The selection's whole lines; with nothing selected, the caret's line. Clamped by hand: NSIntersectionRange
+        // answers {0, 0} for a caret at the very end, which asked about line 1 from the last line (E0 FD9).
+        let location = min(document.selection.location, text.length)
+        let range = text.lineRange(for: NSRange(location: location, length: min(document.selection.length, text.length - location)))
         let index = LineIndex(document.storage.string)
         let first = index.position(of: range.location).line + 1
         let last = max(first, index.position(of: max(range.location, NSMaxRange(range) - 1)).line + 1)

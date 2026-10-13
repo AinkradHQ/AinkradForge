@@ -75,6 +75,59 @@ final class RenderingTests: XCTestCase {
         XCTAssertEqual(caretLine, 250)
     }
 
+    /// Asked to, the editor takes keyboard focus a turn after it appears, and says so (E1D1 FD8).
+    func testFocusPutsTheTextViewFirst() throws {
+        let gray = NSColor.gray
+        let colors = EditorColors(
+            text: gray, insertionPoint: gray, selection: gray, lineHighlight: gray, keywords: gray, commands: gray,
+            types: gray, attributes: gray, variables: gray, values: gray, numbers: gray, strings: gray, comments: gray)
+        var handled = false
+        let host = NSHostingView(
+            rootView: ForgeCodeEditor(
+                storage: NSTextStorage(string: "x\n"), language: .detect(url: URL(fileURLWithPath: "/a.swift")),
+                colors: colors, insets: NSEdgeInsets(), onEdit: {}, onCursor: { _, _ in }, focus: true,
+                onFocusHandled: { handled = true }))
+        let window = NSWindow(
+            contentRect: NSRect(x: -3000, y: -3000, width: 400, height: 200), styleMask: .borderless,
+            backing: .buffered, defer: false)
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        XCTAssertTrue(handled)
+        XCTAssertTrue(window.firstResponder is TextView)
+    }
+
+    /// A selection set past the end through Accessibility is pulled back into the text, so Return after it
+    /// edits instead of asserting in CodeEdit's undo bookkeeping (E0 FD14).
+    func testAnOutOfRangeSelectionIsClampedBeforeTheNextEdit() throws {
+        let storage = NSTextStorage(string: "let a = 1\nlet b = 2\n")
+        let gray = NSColor.gray
+        let colors = EditorColors(
+            text: gray, insertionPoint: gray, selection: gray, lineHighlight: gray, keywords: gray, commands: gray,
+            types: gray, attributes: gray, variables: gray, values: gray, numbers: gray, strings: gray, comments: gray)
+        let host = NSHostingView(
+            rootView: ForgeCodeEditor(
+                storage: storage, language: .detect(url: URL(fileURLWithPath: "/a.swift")), colors: colors,
+                insets: NSEdgeInsets(), onEdit: {}, onCursor: { _, _ in }))
+        let window = NSWindow(
+            contentRect: NSRect(x: -3000, y: -3000, width: 500, height: 300), styleMask: .borderless,
+            backing: .buffered, defer: false)
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(1))
+        func textView(in view: NSView) -> TextView? { (view as? TextView) ?? view.subviews.lazy.compactMap(textView(in:)).first }
+        let editor = try XCTUnwrap(textView(in: host))
+        editor.setAccessibilitySelectedTextRange(NSRange(location: 999, length: 0))
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        XCTAssertEqual(editor.selectionManager.textSelections.map(\.range), [NSRange(location: storage.length, length: 0)])
+        editor.insertNewline(nil)
+        XCTAssertEqual(storage.string, "let a = 1\nlet b = 2\n\n")
+    }
+
     /// The split editor shows one file in two panes: two editors on ONE storage. An edit made through the
     /// storage reaches both text views (CodeEdit's MultiStorageDelegate), and nothing crashes.
     func testTwoEditorsShareOneStorage() throws {

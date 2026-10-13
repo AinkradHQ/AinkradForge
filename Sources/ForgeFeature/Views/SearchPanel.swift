@@ -148,8 +148,15 @@ struct ResultFileRow: View {
     @Environment(\.ainkradTheme) private var theme
 
     var body: some View {
+        // A plain button, so Full Keyboard Access can reach it and Space folds it (E1D1 FD34).
+        Button(action: toggle) { label }  // design-lint: allow raw-control keyboard-reachable row (kit has no row button)
+            .buttonStyle(.plain)
+            .help(path)
+    }
+
+    private var label: some View {
         let name = (path as NSString).lastPathComponent
-        HStack(spacing: skin.size.s6) {
+        return HStack(spacing: skin.size.s6) {
             Image(systemName: isFolded ? "chevron.right" : "chevron.down")
                 .font(skin.font(AinkradFontToken(sizeKey: "t9", weight: "semibold")))
                 .foregroundStyle(skin.color(skin.text.faint))
@@ -177,8 +184,6 @@ struct ResultFileRow: View {
         .ainkradRowBackground(isSelected: isSelected, isHovered: isHovered)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
-        .onTapGesture(perform: toggle)
-        .help(path)
     }
 }
 
@@ -195,6 +200,13 @@ private struct ResultLineRow: View {
     @Environment(\.ainkradStatusColors) private var status
 
     var body: some View {
+        // A plain button, so Full Keyboard Access can reach the match and Space opens it (E1D1 FD34).
+        Button(action: onClick) { label }  // design-lint: allow raw-control keyboard-reachable row (kit has no row button)
+            .buttonStyle(.plain)
+            .simultaneousGesture(TapGesture(count: 2).onEnded(onDoubleClick))
+    }
+
+    private var label: some View {
         HStack(alignment: .firstTextBaseline, spacing: skin.size.s8) {
             Text("\(match.line)")
                 .font(skin.font(AinkradFontToken(sizeKey: "t10", monospacedDigits: true)))
@@ -210,8 +222,6 @@ private struct ResultLineRow: View {
         .ainkradRowBackground(isSelected: isSelected, isHovered: isHovered)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
-        .onTapGesture(count: 2, perform: onDoubleClick)
-        .simultaneousGesture(TapGesture().onEnded(onClick))
     }
 
     /// The line from its first match onwards (leading indentation dropped), matches on a warm wash.

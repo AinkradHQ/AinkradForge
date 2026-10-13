@@ -12,6 +12,9 @@ struct CodeEditor: View {
     /// A line to jump to, and how to say it was done.
     var goToLine: Int?
     var onGoToLineHandled: () -> Void = {}
+    /// Take keyboard focus, and how to say it was done.
+    var focus = false
+    var onFocusHandled: () -> Void = {}
     /// The caret moved while this editor has focus (a click or a key here — not a load).
     var onCaret: () -> Void = {}
     /// Diagnostics to underline.
@@ -44,7 +47,8 @@ struct CodeEditor: View {
             insets: NSEdgeInsets(top: skin.size.s4, left: 0, bottom: skin.size.s12, right: 0),
             onEdit: onEdit,
             onCursor: { line, column in document.cursor = (line, column) },
-            goToLine: goToLine, onGoToLineHandled: onGoToLineHandled, onFocusedCaret: onCaret, marks: marks,
+            goToLine: goToLine, onGoToLineHandled: onGoToLineHandled, focus: focus, onFocusHandled: onFocusHandled,
+            onFocusedCaret: onCaret, marks: marks,
             definitions: definitions, onOpenLink: onOpenLink, onHover: onHover, suggest: suggest,
             suggestionTriggers: suggestionTriggers, signatureTriggers: signatureTriggers, signatureShown: signatureShown,
             onSignature: onSignature, edits: edits, onEditsApplied: onEditsApplied, menu: menu, onMenuPick: onMenuPick,

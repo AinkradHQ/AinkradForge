@@ -55,6 +55,25 @@ struct DiskTests {
         #expect(document.conflict == nil && document.revision == 0)
     }
 
+    /// Undoing back to the saved text clears the unsaved dot; a format change keeps it (E0 FD12).
+    @Test func editingBackToTheSavedTextIsClean() async throws {
+        let url = try file(Data("a\n".utf8))
+        defer { try? FileManager.default.removeItem(at: url) }
+        let document = EditorDocument(url: url)
+        await document.load()
+        document.storage.replaceCharacters(in: NSRange(location: 0, length: 0), with: "b")
+        document.didEdit()
+        #expect(document.isDirty)
+        document.storage.replaceCharacters(in: NSRange(location: 0, length: 1), with: "")
+        document.didEdit()
+        #expect(!document.isDirty)
+        document.convertLineEndings(to: .crlf)
+        document.didEdit()
+        #expect(document.isDirty)
+        try document.save()
+        #expect(!document.isDirty)
+    }
+
     @Test func anOutsideChangeReloadsACleanBuffer() async throws {
         let url = try file(Data("old\n".utf8))
         defer { try? FileManager.default.removeItem(at: url) }

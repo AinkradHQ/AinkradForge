@@ -47,6 +47,29 @@ final class SnapshotTests: XCTestCase {
         try Snapshot.assertMatches(model, named: "window")
     }
 
+    /// More tabs than fit: the active (last opened) one is scrolled into view (E1D1 FD29).
+    func testLongTabStripShowsTheActiveTab() throws {
+        let model = try Snapshot.model(opening: repo)
+        for path in (model.workspace?.files ?? []).sorted() where path != Self.sidebarRow {
+            model.open(file: path, pinned: true)
+        }
+        model.open(file: Self.sidebarRow, pinned: true)
+        try SweepSupport.waitUntilLoaded(model)
+        XCTAssertGreaterThan(model.tabs.paths.count, 9)
+        try Snapshot.assertMatches(model, named: "long-tabs")
+    }
+
+    /// An empty folder: the tree and the editor say so, and the tree offers New File (E1D1 FD32).
+    func testEmptyFolder() throws {
+        let empty = repo.deletingLastPathComponent().appendingPathComponent("Empty")
+        try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+        let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
+        model.request(.open(empty))
+        SweepSupport.spin(until: 10) { model.workspace?.isLoading == false }
+        XCTAssertEqual(model.workspace?.files, [])
+        try Snapshot.assertMatches(model, named: "empty-folder")
+    }
+
     /// ⌘P over the window, filtered to "sbrow".
     func testQuickOpen() throws {
         let model = try Snapshot.model(opening: repo)
@@ -69,8 +92,12 @@ final class SnapshotTests: XCTestCase {
         model.open(file: Self.sidebarRow, pinned: false)
         model.pendingLine = 19
         try SweepSupport.waitUntilLoaded(model)
-        // The summary ends in the search's own duration ("· 3 ms"): the clock, not the UI.
-        try Snapshot.assertMatches(model, named: "search", masking: [CGRect(x: 100, y: 260, width: 100, height: 22)])
+        // The summary ends in the search's own duration ("· 3 ms"): the clock, not the UI. Off-screen drawing also
+        // shows CESE's parked find panel half-drawn over line 1, its placeholder text varying run to run.
+        // ponytail: masked; un-mask if the panel ever shows there live.
+        try Snapshot.assertMatches(
+            model, named: "search",
+            masking: [CGRect(x: 100, y: 260, width: 100, height: 22), CGRect(x: 314, y: 70, width: 886, height: 28)])
     }
 
     /// Review All: a file Forge had read, changed while closed, and a new one.

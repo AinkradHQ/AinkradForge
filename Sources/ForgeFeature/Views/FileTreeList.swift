@@ -32,7 +32,14 @@ struct FileTreeList: View {
         .dropDestination(for: URL.self) { urls, _ in drop(urls, into: "") }
         .ainkradContextMenu(TreeMenu.rootItems(model: model))
         .overlay {
-            if workspace.tree.isEmpty, workspace.isLoading { AinkradSpinner() }
+            if workspace.tree.isEmpty, workspace.isLoading {
+                AinkradSpinner()
+            } else if workspace.tree.isEmpty, model.treeEdit == nil {
+                // An empty folder: say so, and offer the first file (E1D1 FD32).
+                AinkradEmptyState(
+                    icon: "folder", title: "This folder is empty", message: "Create its first file.", actionTitle: "New File"
+                ) { model.beginNew(folder: false, in: "") }
+            }
         }
     }
 
@@ -151,6 +158,15 @@ struct FileRow: View {
     @Environment(\.ainkradStatusColors) private var statusColors
 
     var body: some View {
+        // A plain button, so Full Keyboard Access can focus it and Space opens it (E1D1 FD34). The single click
+        // fires at once (no wait for a possible second click); the double click then pins.
+        Button(action: onClick) { label }  // design-lint: allow raw-control keyboard-reachable row (kit has no row button)
+            .buttonStyle(.plain)
+            .simultaneousGesture(TapGesture(count: 2).onEnded(onDoubleClick))
+            .help(node.path)
+    }
+
+    private var label: some View {
         HStack(spacing: skin.size.s6) {
             Group {
                 if node.isDirectory {
@@ -184,10 +200,6 @@ struct FileRow: View {
         .ainkradRowBackground(isSelected: isSelected, isHovered: isHovered)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
-        // The single click fires at once (no wait for a possible second click); the double click then pins.
-        .onTapGesture(count: 2, perform: onDoubleClick)
-        .simultaneousGesture(TapGesture().onEnded(onClick))
-        .help(node.path)
     }
 
     private var nameColor: Color {

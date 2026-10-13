@@ -134,7 +134,9 @@ struct Palette: View {
         AinkradEmptyState(
             icon: "magnifyingglass", title: "No matches",
             message: model.workspace == nil && prefix != ">"
-                ? "Open a folder first, or type > for commands." : "Nothing matches “\(prefix + query)”.")
+                ? "Open a folder first, or type > for commands."
+                : prefix.isEmpty && query.isEmpty ? "This folder has no files yet — type > for commands."
+                : "Nothing matches “\(prefix + query)”.")
     }
 
     private func activateHighlighted() {
@@ -147,6 +149,8 @@ struct Palette: View {
         case .file(let path):
             model.palette = nil
             model.open(file: path, pinned: true)
+            // The field that had focus leaves with the palette: hand it to the editor (E1D1 FD8).
+            model.pendingFocus = true
         case .command(let command): model.run(command)
         case .line(let line): model.goTo(line: line)
         case .task(let task): model.runTask(task)

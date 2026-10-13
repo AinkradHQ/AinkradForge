@@ -46,6 +46,9 @@ final class EditorDocument {
     @ObservationIgnored var onSaved: (EditorDocument) -> Void = { _ in }
     /// What the file looked like when last read or written by Forge, to tell outside changes from our own saves.
     @ObservationIgnored private var diskStamp: DiskStamp?
+    /// The buffer and format as last read or written, so editing back to them is clean again (an undo); nil when
+    /// the disk holds something else whatever the buffer says (a kept conflict).
+    @ObservationIgnored private var saved: (text: NSString, format: TextFormat)?
 
     struct DiskStamp: Equatable, Sendable {
         let modified: Date
@@ -74,6 +77,7 @@ final class EditorDocument {
             storage.setAttributedString(NSAttributedString(string: buffer))
             self.format = format
             diskStamp = stamp
+            saved = (NSString(string: storage.string), format)
             isDirty = false
             conflict = nil
             state = .ready
@@ -90,11 +94,14 @@ final class EditorDocument {
         guard state == .ready, text != storage.string else { return }
         storage.setAttributedString(NSAttributedString(string: text))
         revision += 1
-        isDirty = true
+        didEdit()
     }
 
-    /// Called by the editor on every change.
-    func didEdit() { isDirty = true }
+    /// Called by the editor on every change: dirty unless the buffer is back to what is on disk.
+    func didEdit() {
+        // `mutableString`, not `string`: no copy of the buffer per keystroke; the lengths are compared first.
+        isDirty = saved.map { $0.format != format || !storage.mutableString.isEqual($0.text) } ?? true
+    }
 
     /// Writes the buffer back in its own encoding and line endings, atomically.
     func save() throws {
@@ -102,6 +109,7 @@ final class EditorDocument {
         let text = format.lineEnding == .lf ? storage.string : TextFile.convert(storage.string, to: format.lineEnding)
         try TextFile.encode(text, as: format).write(to: url, options: .atomic)
         diskStamp = Self.stamp(url)
+        saved = (NSString(string: storage.string), format)
         isDirty = false
         conflict = nil
         onSaved(self)
@@ -130,6 +138,7 @@ final class EditorDocument {
         } else {
             conflict = nil
             diskStamp = Self.stamp(url)
+            saved = nil
             isDirty = true
         }
     }
@@ -138,14 +147,14 @@ final class EditorDocument {
     func convertLineEndings(to ending: TextFormat.LineEnding) {
         guard ending != format.lineEnding else { return }
         format.lineEnding = ending
-        isDirty = true
+        didEdit()
     }
 
     /// Changes the encoding the next save uses (e.g. a Windows 1252 file to UTF-8).
     func setEncoding(_ encoding: TextFormat.Encoding) {
         guard encoding != format.encoding else { return }
         format.encoding = encoding
-        isDirty = true
+        didEdit()
     }
 
     nonisolated static func stamp(_ url: URL) -> DiskStamp? {

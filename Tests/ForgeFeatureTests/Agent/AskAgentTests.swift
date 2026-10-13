@@ -35,5 +35,12 @@ struct AskAgentTests {
         model.beginAsk()
         #expect(model.agent.ask?.lines == 4...4)
         #expect(model.agent.ask?.code == "let d = 4")
+
+        // The caret at the very end of a last line with no newline after it: that line, not line 1 (E0 FD9).
+        document.storage.replaceCharacters(in: NSRange(location: 39, length: 1), with: "")
+        document.selection = NSRange(location: 39, length: 0)
+        model.beginAsk()
+        #expect(model.agent.ask?.lines == 4...4)
+        #expect(model.agent.ask?.code == "let d = 4")
     }
 }

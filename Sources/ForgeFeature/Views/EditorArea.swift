@@ -74,6 +74,9 @@ private struct PaneView: View {
                         // A wholesale buffer change (reload, line endings) rebuilds the editor so it re-parses.
                         .id("\(path)#\(document.revision)")
                     }
+                } else if model.workspace?.files.isEmpty == true {
+                    // Nothing to pick in an empty folder (E1D1 FD32).
+                    AinkradEmptyState(icon: "doc.text", title: "No file open", message: "This folder has no files yet. New File (⌘N) creates one.")
                 } else {
                     AinkradEmptyState(
                         icon: "doc.text", title: "No file open",
@@ -156,6 +159,7 @@ private struct DocumentView: View {
             CodeEditor(
                 document: document, palette: palette, options: model.editorOptions, goToLine: goToLine,
                 onGoToLineHandled: { model.pendingLine = nil },
+                focus: model.activePane == pane && model.pendingFocus, onFocusHandled: { model.pendingFocus = false },
                 // The caret moved here — this pane is the one being worked in.
                 onCaret: { model.focus(pane: pane) }, marks: marks + agentMarks.wash,
                 definitions: { [model, path] offset in await model.definitions(path: path, offset: offset) },
@@ -246,6 +250,18 @@ private struct TabStrip: View {
     private var tabs: Tabs { model.panes[pane] }
 
     var body: some View {
+        // The active tab is kept in view: opening a tenth file must not leave it past the edge (E1D1 FD29).
+        ScrollViewReader { proxy in
+            strip
+                .onAppear { if let active = tabs.active { proxy.scrollTo(active) } }
+                .onChange(of: tabs.active) { _, active in
+                    guard let active else { return }
+                    withAnimation(skin.animation(skin.motion.hover)) { proxy.scrollTo(active) }
+                }
+        }
+    }
+
+    private var strip: some View {
         ScrollView(.horizontal) {
             HStack(spacing: skin.size.s2) {
                 ForEach(tabs.paths, id: \.self) { path in
@@ -348,135 +364,3 @@ private struct ConflictBar: View {
         }
     }
 }
-
-/// Branch, cursor, line endings, encoding and language. Language-server state joins with E5.
-private struct StatusRow: View {
-    let model: ForgeModel
-    let workspace: Workspace
-    @Environment(\.ainkradSkin) private var skin
-
-    var body: some View {
-        HStack(spacing: skin.size.s14) {
-            if let branch = workspace.branch {
-                Label(branch, systemImage: "arrow.triangle.branch")
-            }
-            IssueCounts(model: model)
-            ServerChip(model: model)
-            OutsideChangesButton(model: model)
-            if workspace.isLoading { AinkradSpinner() }
-            Spacer(minLength: skin.size.s8)
-            if let document = model.activeDocument, document.state == .ready {
-                Text("Ln \(document.cursor.line), Col \(document.cursor.column)")
-                StatusMenu(title: document.format.lineEnding.rawValue, items: TextFormat.LineEnding.allCases.map { ending in
-                    AinkradMenuItem(title: "Convert to \(ending.rawValue)", systemName: ending == document.format.lineEnding ? "checkmark" : nil) {
-                        document.convertLineEndings(to: ending)
-                    }
-                })
-                StatusMenu(title: document.format.encoding.rawValue, items: TextFormat.Encoding.allCases.map { encoding in
-                    AinkradMenuItem(title: "Save as \(encoding.rawValue)", systemName: encoding == document.format.encoding ? "checkmark" : nil) {
-                        document.setEncoding(encoding)
-                    }
-                })
-                Text(document.language.name)
-            }
-        }
-        .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
-        .foregroundStyle(skin.color(skin.text.muted))
-        .lineLimit(1)
-        .padding(.horizontal, skin.size.s18)
-        .padding(.vertical, skin.size.s8)
-    }
-}
-
-/// A status-bar item that opens a pull-down menu — plain text until hovered, like the rest of the bar.
-private struct StatusMenu: View {
-    let title: String
-    let items: [AinkradMenuItem]
-    @State private var isHovered = false
-    @Environment(\.ainkradTheme) private var theme
-    @Environment(\.ainkradSkin) private var skin
-
-    var body: some View {
-        AinkradMenuButton(items: items) {
-            Text(title)
-                .foregroundStyle(isHovered ? theme.foreground : skin.color(skin.text.muted))
-                .onHover { isHovered = $0 }
-        }
-    }
-}
-
-/// ⊗ errors ⚠ warnings — opens the Issues tab.
-private struct IssueCounts: View {
-    let model: ForgeModel
-    @Environment(\.ainkradStatusColors) private var status
-    @Environment(\.ainkradSkin) private var skin
-
-    var body: some View {
-        if !model.languages.statuses.isEmpty {
-            HStack(spacing: skin.size.s6) {
-                Label("\(model.languages.errorCount)", systemImage: "xmark.octagon")
-                    .foregroundStyle(model.languages.errorCount > 0 ? status.danger : skin.color(skin.text.muted))
-                Label("\(model.languages.warningCount)", systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(model.languages.warningCount > 0 ? status.warning : skin.color(skin.text.muted))
-            }
-            .contentShape(Rectangle())
-            .onTapGesture { model.sideTab = .problems }
-            .help("Show issues")
-        }
-    }
-}
-
-/// The active file's language server and its state; the menu lists every server the workspace uses.
-private struct ServerChip: View {
-    let model: ForgeModel
-    @Environment(\.ainkradSkin) private var skin
-    @Environment(\.ainkradTheme) private var theme
-    @Environment(\.ainkradStatusColors) private var status
-
-    var body: some View {
-        if let path = model.tabs.active, let (spec, _) = LanguageRegistry.server(for: path) {
-            let state = model.languages.statuses[spec.id] ?? .notRunning
-            AinkradMenuButton(items: items) {
-                HStack(spacing: skin.size.s4) {
-                    Circle().fill(color(state)).frame(width: skin.size.s6, height: skin.size.s6)
-                    Text(spec.command)
-                }
-            }
-            .help(Self.describe(state, spec: spec))
-        }
-    }
-
-    private var items: [AinkradMenuItem] {
-        let used = LanguageRegistry.servers.filter { model.languages.statuses[$0.id] != nil }
-        var items = used.map { spec in
-            let state = model.languages.statuses[spec.id] ?? .notRunning
-            return AinkradMenuItem(title: "\(spec.command) — \(Self.describe(state, spec: spec))", systemName: nil) {}
-        }
-        for spec in used where model.languages.statuses[spec.id] != .notInstalled {
-            items.append(AinkradMenuItem(title: "Restart \(spec.command)", systemName: "arrow.clockwise") {
-                model.languages.restart(spec.id)
-            })
-        }
-        return items
-    }
-
-    private func color(_ state: ServerStatus) -> Color {
-        switch state {
-        case .ready: status.success
-        case .starting: theme.accentSecondary
-        case .failed, .notInstalled: status.warning
-        case .notRunning: skin.color(skin.text.faint)
-        }
-    }
-
-    static func describe(_ state: ServerStatus, spec: ServerSpec) -> String {
-        switch state {
-        case .ready: "ready"
-        case .starting: "starting…"
-        case .notRunning: "not running"
-        case .notInstalled: "not installed — \(spec.installHint)"
-        case .failed(let why): "failed: \(why)"
-        }
-    }
-}
-

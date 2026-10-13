@@ -133,6 +133,9 @@ public struct ForgeCodeEditor: View {
     /// A 1-based line to put the caret on and scroll to; `onGoToLineHandled` is called once it is done.
     let goToLine: Int?
     let onGoToLineHandled: () -> Void
+    /// Take keyboard focus (a file opened from the palette); `onFocusHandled` is called once it is done.
+    let focus: Bool
+    let onFocusHandled: () -> Void
     /// The caret moved while this editor has keyboard focus — the user is working here (not a load).
     let onFocusedCaret: () -> Void
     /// Ranges to underline (diagnostics).
@@ -174,6 +177,7 @@ public struct ForgeCodeEditor: View {
         storage: NSTextStorage, language: EditorLanguage, colors: EditorColors, options: EditorOptions = EditorOptions(),
         insets: NSEdgeInsets, onEdit: @escaping () -> Void, onCursor: @escaping (Int, Int) -> Void,
         goToLine: Int? = nil, onGoToLineHandled: @escaping () -> Void = {},
+        focus: Bool = false, onFocusHandled: @escaping () -> Void = {},
         onFocusedCaret: @escaping () -> Void = {}, marks: [EditorMark] = [],
         definitions: ((Int) async -> [EditorLink])? = nil, onOpenLink: @escaping (EditorLink) -> Void = { _ in },
         onHover: @escaping ((Int, CGRect)?) -> Void = { _ in },
@@ -196,6 +200,8 @@ public struct ForgeCodeEditor: View {
         self.onCursor = onCursor
         self.goToLine = goToLine
         self.onGoToLineHandled = onGoToLineHandled
+        self.focus = focus
+        self.onFocusHandled = onFocusHandled
         self.onFocusedCaret = onFocusedCaret
         self.marks = marks
         self.definitions = definitions
@@ -223,7 +229,7 @@ public struct ForgeCodeEditor: View {
             EditorHost(
                 storage: storage, language: language, colors: colors, options: options, insets: insets,
                 onEdit: onEdit, onCursor: onCursor, goToLine: goToLine, onGoToLineHandled: onGoToLineHandled,
-                onFocusedCaret: onFocusedCaret, marks: marks, definitions: definitions, onOpenLink: onOpenLink,
+                focus: focus, onFocusHandled: onFocusHandled, onFocusedCaret: onFocusedCaret, marks: marks, definitions: definitions, onOpenLink: onOpenLink,
                 onHover: onHover, suggest: suggest, suggestionTriggers: suggestionTriggers,
                 signatureTriggers: signatureTriggers, signatureShown: signatureShown, onSignature: onSignature,
                 edits: edits, onEditsApplied: onEditsApplied, menu: menu, onMenuPick: onMenuPick, onCaretRect: onCaretRect,
@@ -243,6 +249,8 @@ struct EditorHost: View {
     let onCursor: (Int, Int) -> Void
     let goToLine: Int?
     let onGoToLineHandled: () -> Void
+    let focus: Bool
+    let onFocusHandled: () -> Void
     let onFocusedCaret: () -> Void
     let marks: [EditorMark]
     let definitions: ((Int) async -> [EditorLink])?
@@ -308,6 +316,7 @@ struct EditorHost: View {
             coordinator.onCursor = onCursor
             coordinator.onFocusedCaret = onFocusedCaret
             go(to: goToLine)
+            take(focus)
             // One turn later, as `go(to:)`: the controller has not loaded its view on first appearance.
             DispatchQueue.main.async {
                 coordinator.apply(marks)
@@ -318,6 +327,7 @@ struct EditorHost: View {
             }
         }
         .onChange(of: goToLine) { _, line in go(to: line) }
+        .onChange(of: focus) { _, focus in take(focus) }
         .onChange(of: marks) { _, marks in coordinator.apply(marks) }
         .onChange(of: suggestionTriggers) { _, triggers in coordinator.suggestionTriggers = triggers }
         .onChange(of: signatureTriggers) { _, triggers in coordinator.signatureTriggers = triggers }
@@ -339,6 +349,16 @@ struct EditorHost: View {
         DispatchQueue.main.async {
             coordinator.controller?.setCursorPositions([CursorPosition(line: line, column: 1)], scrollToVisible: true)
             onGoToLineHandled()
+        }
+    }
+
+    /// One turn later, as `go(to:)`: the text view is not in the window yet, and the palette that asked is
+    /// still leaving (E1D1 FD8 — the same family as the palette's own focus, E0 FD2).
+    private func take(_ focus: Bool) {
+        guard focus else { return }
+        DispatchQueue.main.async {
+            if let textView = coordinator.controller?.textView { textView.window?.makeFirstResponder(textView) }
+            onFocusHandled()
         }
     }
 
@@ -413,6 +433,7 @@ struct EditorHost: View {
         }
 
         func textViewDidChangeSelection(controller: TextViewController, newPositions: [CursorPosition]) {
+            clampSelection(controller)
             if let first = newPositions.first {
                 onCursor(first.start.line, first.start.column)
                 onSelection(first.range)
@@ -440,36 +461,6 @@ extension EditorHost.Coordinator: @preconcurrency JumpToDefinitionDelegate {
         guard let url = link.url else { return }
         onOpenLink(
             EditorLink(path: url.path, line: link.targetRange.start.line, label: link.label, preview: link.sourcePreview ?? ""))
-    }
-}
-
-extension EditorHost.Coordinator {
-    /// After a signature trigger was typed, or whenever the caret moves while the hint shows (the server then
-    /// moves the active parameter along, or answers that the caret has left the call).
-    func trackSignature(_ controller: TextViewController, _ positions: [CursorPosition]) {
-        guard !signatureTriggers.isEmpty || signatureShown else { return }
-        guard positions.count == 1, let caret = positions.first?.range, caret.length == 0 else {
-            if signatureShown { onSignature(nil) }
-            return
-        }
-        let text = controller.textView.textStorage.string as NSString
-        let typed = caret.location > 0 && caret.location <= text.length
-            ? text.substring(with: NSRange(location: caret.location - 1, length: 1)) : ""
-        guard signatureShown || signatureTriggers.contains(typed) else { return }
-        guard let frame = caretFrame(controller, caret.location) else { return }
-        onSignature((caret.location, frame))
-    }
-}
-
-extension EditorHost.Coordinator {
-    /// Where the text of the caret's line ends (x, this view's coordinates).
-    func lineEnd(_ controller: TextViewController, _ offset: Int) -> CGFloat? {
-        let text = controller.textView.textStorage.string as NSString
-        guard offset <= text.length else { return nil }
-        let line = text.lineRange(for: NSRange(location: offset, length: 0))
-        var end = NSMaxRange(line)
-        while end > line.location, [10, 13].contains(text.character(at: end - 1)) { end -= 1 }
-        return caretFrame(controller, end)?.maxX
     }
 }
 

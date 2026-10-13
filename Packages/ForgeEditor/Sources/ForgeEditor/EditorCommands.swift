@@ -84,3 +84,33 @@ extension EditorHost.Coordinator {
         }
     }
 }
+
+extension EditorHost.Coordinator {
+    /// Where the text of the caret's line ends (x, this view's coordinates).
+    func lineEnd(_ controller: TextViewController, _ offset: Int) -> CGFloat? {
+        let text = controller.textView.textStorage.string as NSString
+        guard offset <= text.length else { return nil }
+        let line = text.lineRange(for: NSRange(location: offset, length: 0))
+        var end = NSMaxRange(line)
+        while end > line.location, [10, 13].contains(text.character(at: end - 1)) { end -= 1 }
+        return caretFrame(controller, end)?.maxX
+    }
+}
+
+extension EditorHost.Coordinator {
+    /// Pulls a selection that runs past the text back into it. CodeEditTextView takes an accessibility-set range
+    /// unclamped, and the next edit (Return) then asserts in its undo bookkeeping (E0 FD14). A turn later: not
+    /// while CodeEdit is still reporting this selection.
+    func clampSelection(_ controller: TextViewController) {
+        let length = controller.textView.textStorage.length
+        guard controller.textView.selectionManager.textSelections.contains(where: { NSMaxRange($0.range) > length }) else { return }
+        DispatchQueue.main.async { [weak controller] in
+            guard let textView = controller?.textView else { return }
+            let length = textView.textStorage.length
+            textView.selectionManager.setSelectedRanges(textView.selectionManager.textSelections.map {
+                let location = min($0.range.location, length)
+                return NSRange(location: location, length: min($0.range.length, length - location))
+            })
+        }
+    }
+}
