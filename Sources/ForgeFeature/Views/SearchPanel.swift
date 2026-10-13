@@ -38,7 +38,7 @@ struct SearchPanel: View {
                         .compact()
                         .fixedSize()
                         .disabled(search.results.isEmpty)
-                        .help("Replace every match below (⌥⌘↵)")
+                        .help(model.titled("Replace every match below", .replaceAll))
                 }
             }
             VStack(spacing: skin.size.s6) {

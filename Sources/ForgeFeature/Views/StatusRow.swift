@@ -7,6 +7,7 @@ struct StatusRow: View {
     let model: ForgeModel
     let workspace: Workspace
     @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
 
     var body: some View {
         // Too narrow for everything: the file's line endings, encoding and language go first, so the counts,
@@ -33,6 +34,14 @@ struct StatusRow: View {
             IssueCounts(model: model).fixedSize()
             ServerChip(model: model)
             OutsideChangesButton(model: model)
+            if model.awaitingChord {
+                HStack(spacing: skin.size.s6) {
+                    AinkradKbd("⌘K").outlined()
+                    Text("waiting for the second key…")
+                }
+                .foregroundStyle(theme.accentSecondary)
+                .fixedSize()
+            }
             if workspace.isLoading { AinkradSpinner() }
             Spacer(minLength: skin.size.s8)
             if let document = model.activeDocument, document.state == .ready {

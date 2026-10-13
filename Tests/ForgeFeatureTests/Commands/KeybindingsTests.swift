@@ -33,6 +33,15 @@ struct KeybindingsTests {
         #expect(model.store.document.shortcuts == nil)
     }
 
+    @Test func tooltipsAndLabelsFollowARebind() {
+        let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
+        #expect(model.titled("New Terminal", .newTerminal) == "New Terminal (⌃⇧`)")
+        #expect(model.labelled("✓ Keep", .keepChange) == "✓ Keep ⌘↵")
+        model.rebind(.newTerminal, to: Shortcut(key: "t", modifiers: [.control, .option]))
+        #expect(model.titled("New Terminal", .newTerminal) == "New Terminal (⌃⌥T)")
+        #expect(model.titled("Close Workspace", .closeWorkspace) == "Close Workspace")
+    }
+
     @Test func chordsTheHostMacOSOrAnotherCommandOwnAreRefused() {
         let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
         func why(_ key: Character, _ modifiers: EventModifiers) -> String? {

@@ -115,7 +115,7 @@ private struct WorkspaceCard: View {
         }
         // FD20: under Glass Apple's own pull-down is so see-through the tabs behind it read through.
         .kitMenuUnderGlass()
-        .help("Switch workspace ⌃⌘O · \(workspace.root.path(percentEncoded: false))")
+        .help("\(model.titled("Switch workspace", .openFolder)) · \(workspace.root.path(percentEncoded: false))")
     }
 
     private var items: [AinkradMenuItem] {

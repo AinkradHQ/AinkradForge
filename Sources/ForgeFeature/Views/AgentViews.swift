@@ -55,8 +55,8 @@ struct ChangeChip: View {
     var body: some View {
         VStack(alignment: .leading, spacing: skin.size.s6) {
             HStack(spacing: skin.size.s2) {
-                chipButton("✓ Keep ⌘↵", status.success, "Keep (⌘↵)") { model.keepChange(path, hunk: hunk) }
-                chipButton("↶ Undo ⌘⌫", status.danger, "Undo (⌘⌫)") { model.undoChange(path, hunk: hunk) }
+                chipButton(model.labelled("✓ Keep", .keepChange), status.success, model.titled("Keep", .keepChange)) { model.keepChange(path, hunk: hunk) }
+                chipButton(model.labelled("↶ Undo", .undoChange), status.danger, model.titled("Undo", .undoChange)) { model.undoChange(path, hunk: hunk) }
                 chipButton(model.agent.showingWas ? "▴ Was" : "▾ Was", skin.color(skin.text.muted), "What these lines were") {
                     model.agent.showingWas.toggle()
                 }

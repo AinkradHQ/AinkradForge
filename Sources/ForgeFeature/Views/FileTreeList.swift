@@ -39,7 +39,7 @@ struct FileTreeList: View {
                 SidebarEmptyState(
                     icon: "doc.plaintext", title: "This folder is empty", message: "Create a file, or drop files here to copy them in."
                 ) {
-                    AinkradButton(title: "New File ⌘N", style: .secondary) { model.beginNew(folder: false, in: "") }
+                    AinkradButton(title: model.labelled("New File", .newFile), style: .secondary) { model.beginNew(folder: false, in: "") }
                         .secondaryAccent().fixedSize()
                     AinkradButton(title: "New Folder", style: .secondary) { model.beginNew(folder: true, in: "") }
                         .secondaryAccent().fixedSize()

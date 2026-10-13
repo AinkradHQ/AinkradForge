@@ -88,9 +88,9 @@ private struct TabRowActions: View {
     var body: some View {
         HStack(spacing: skin.size.s6) {
             if model.availableCommands.contains(.splitRight) {
-                AinkradIconButton(systemName: "rectangle.split.2x1", tooltip: "Split right ⌘\\") { model.run(.splitRight) }
+                AinkradIconButton(systemName: "rectangle.split.2x1", tooltip: model.titled("Split right", .splitRight)) { model.run(.splitRight) }
             }
-            AinkradIconButton(systemName: "keyboard", tooltip: "Terminal ⌃`") { model.run(.toggleTerminal) }
+            AinkradIconButton(systemName: "keyboard", tooltip: model.titled("Terminal", .toggleTerminal)) { model.run(.toggleTerminal) }
             AinkradMenuButton(items: moreItems) { IconMenuLabel(systemName: "ellipsis") }
                 .help("More")
         }

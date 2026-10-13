@@ -29,6 +29,8 @@ final class ForgeModel {
     var paletteSymbols = PaletteSymbols()
     /// The command whose new shortcut the palette is recording (⌘K on its row).
     var rebinding: ForgeCommand?
+    /// ⌘K was pressed and its chord waits for the second key — the status bar says so.
+    var awaitingChord = false
     @ObservationIgnored var symbolSource: (@MainActor (ForgeModel, _ prefix: String, _ query: String) async -> PaletteSymbols)?
     /// Newest first, for ⌘P.
     private(set) var recentFiles: [String] = []
