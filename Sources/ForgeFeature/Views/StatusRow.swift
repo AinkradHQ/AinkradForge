@@ -223,10 +223,12 @@ private struct ServerChip: View {
         let used = (LanguageRegistry.servers + model.languages.custom).filter { model.languages.statuses[$0.id] != nil }
         let items = used.map { spec in
             let state = model.languages.statuses[spec.id] ?? .notRunning
-            // `● sourcekit-lsp — ready · Swift`: the dot for a running server, the language it serves.
-            return AinkradMenuItem(
-                title: "\(spec.command) — \(Self.describe(state, spec: spec)) · \(spec.language)",
-                systemName: state == .ready ? "circle.fill" : nil) {}
+            // `● sourcekit-lsp — ready      Swift`: the dot for a running server, the language it serves at the
+            // trailing edge; a missing server in amber (mockup 11).
+            let item = AinkradMenuItem(
+                title: "\(spec.command) — \(Self.describe(state, spec: spec))",
+                systemName: state == .ready ? "circle.fill" : nil, shortcut: spec.language) {}
+            return state == .notInstalled ? item.tint(status.warning) : item
         }
         // The actions after a gap (never a line).
         var actions = used.filter { model.languages.statuses[$0.id] != .notInstalled }.map { spec in

@@ -3,8 +3,8 @@ import SwiftUI
 
 /// The editor area while a replace is being previewed (mockup 08): a tab "SidebarRow.swift ↔ Replace preview" and
 /// a pane with the breadcrumb "Replace preview › SidebarRow.swift › 2 changes" over that file's changes, drawn like
-/// the editor — line numbers, syntax colours, full-row washes, unchanged lines folded. Each hunk can be unticked;
-/// nothing is written until ⇄ on the file row or Replace All. The tab's ✕ closes the preview.
+/// the editor — line numbers, syntax colours, full-row washes, unchanged lines folded, hunks running on without
+/// their box (read-only, as the mockup). Nothing is written until ⇄ or Replace All. The tab's ✕ closes the preview.
 struct ReplacePreview: View {
     let model: ForgeModel
     let path: String
@@ -29,6 +29,8 @@ struct ReplacePreview: View {
             .frame(height: skin.size.s44, alignment: .bottom)
             VStack(alignment: .leading, spacing: 0) {
                 AinkradBreadcrumb(items: ["Replace preview", name, changes])
+                    .segmentColors { $0 == 1 ? theme.foreground : nil }
+                    .textSeparators()
                     .preservesCase()
                     .icon(at: 1) { FileGlyph(name: name) }
                     .lineLimit(1)
@@ -43,7 +45,7 @@ struct ReplacePreview: View {
                                 rejectedHunkIDs: Binding(get: { search.rejected[path] ?? [] }, set: { search.rejected[path] = $0 })
                             )
                             .hidesHeader()
-                            .keepUndoHunkControls()
+                            .bareHunks()
                             .editorLines()
                             .syntaxColoured()
                             .lineNumberGutter()

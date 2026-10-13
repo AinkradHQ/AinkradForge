@@ -15,10 +15,10 @@ struct SearchPanel: View {
     var body: some View {
         @Bindable var search = model.search
         VStack(alignment: .leading, spacing: skin.size.s8) {
-            SearchInputField(text: $search.query.text, placeholder: "Search", focus: $queryFocused) {
-                InlineToggle(title: "Aa", isOn: $search.query.matchCase, help: "Match case")
-                InlineToggle(title: "⌶", isOn: $search.query.wholeWord, help: "Whole word")
-                InlineToggle(title: "✱", isOn: $search.query.regex, help: "Regular expression")
+            AinkradSearchField(text: $search.query.text, placeholder: "Search", focus: $queryFocused).codeQuery().trailingAccessory {
+                AinkradFieldToggle("Aa", isOn: $search.query.matchCase, help: "Match case")
+                AinkradFieldToggle("⌶", isOn: $search.query.wholeWord, help: "Whole word")
+                AinkradFieldToggle("✱", isOn: $search.query.regex, help: "Regular expression")
             }
             Button { search.isReplaceOpen.toggle() } label: {  // design-lint: allow raw-control disclosure text (mockup .sexp)
                 Text("\(search.isReplaceOpen ? "▾" : "▸") Replace")
@@ -30,20 +30,20 @@ struct SearchPanel: View {
             .padding(.horizontal, skin.size.s2)
             .help(search.isReplaceOpen ? "Hide Replace" : "Show Replace")
             if search.isReplaceOpen {
-                SearchInputField(
+                AinkradSearchField(
                     text: $search.replacement, placeholder: search.query.regex ? "$1 for a group" : "Replace", focus: $replaceFocused
-                ) {
-                    InlineToggle(title: "AB", isOn: $search.preserveCase, help: "Preserve case (isSelected → isActive, IsSelected → IsActive)")
+                ).codeQuery().trailingAccessory {
+                    AinkradFieldToggle("AB", isOn: $search.preserveCase, help: "Preserve case (isSelected → isActive, IsSelected → IsActive)")
                     AinkradButton(title: "Replace All", style: .primary) { search.confirmingReplaceAll = true }
+                        .compact()
                         .fixedSize()
-                        .controlSize(.small)
                         .disabled(search.results.isEmpty)
                         .help("Replace every match below (⌥⌘↵)")
                 }
             }
             VStack(spacing: skin.size.s6) {
-                SearchInputField(text: $search.include, placeholder: "Sources/**, *.swift", label: "include")
-                SearchInputField(text: $search.exclude, placeholder: ".build/**, *.min.js", label: "exclude")
+                AinkradTextField(text: $search.include, placeholder: "Sources/**, *.swift").leadingLabel("include").compact()
+                AinkradTextField(text: $search.exclude, placeholder: ".build/**, *.min.js").leadingLabel("exclude").compact()
             }
             summary
             results

@@ -14,7 +14,11 @@ struct PaletteItem: Hashable, Identifiable {
 
     let id: String
     let title: String
-    let systemName: String
+    /// The row's text glyph (`◆`, `≡`, `▶`) — "" for none — and its hue (forge.css `.ic.*`; nil: the cyan accent).
+    let glyph: String
+    var hue: String? = nil
+    /// A symbol's kind (`struct`, `func`), leading the row in the type hue in place of a glyph (mockup 02).
+    var kind: String? = nil
     /// The folder, for files.
     let detail: String?
     /// The keycap, for commands — shown trailing.
@@ -209,7 +213,7 @@ struct Palette: View {
         AinkradCommandMenu(
             items: items,
             selection: Binding(get: { nil }, set: { if let item = $0 { activate(item) } }),
-            icon: { $0.systemName },
+            icon: { $0.glyph },
             label: { $0.title },
             detail: { $0.detail },
             value: { $0.value },
@@ -219,6 +223,8 @@ struct Palette: View {
             handlesKeyPresses: true
         )
         .paletteRows()
+        .iconGlyphs { $0.hue.map(ForgeStyle.hue) }
+        .kinds({ $0.kind }, tint: { _ in nil })
         .matchedCharacters { $0.matched }
         .sections { $0.section }
     }
@@ -293,7 +299,7 @@ struct Palette: View {
             let matches = ForgeCommand.matching(typed, in: available)
             func item(_ command: ForgeCommand, section: String?) -> PaletteItem {
                 PaletteItem(
-                    id: "command:\(command.rawValue)", title: command.paletteTitle, systemName: "",
+                    id: "command:\(command.rawValue)", title: command.paletteTitle, glyph: "",
                     // Run Task… names what it would run (mockup 03), from the workspace's Makefile / package.json.
                     detail: command == .runTask && !model.tasks.tasks.isEmpty
                         ? model.tasks.tasks.prefix(3).map(\.shows).joined(separator: " · ") : nil,
@@ -317,7 +323,7 @@ struct Palette: View {
                 .sorted { $0.1 > $1.1 }
                 .map { task, _ in
                     PaletteItem(
-                        id: "task:\(task.id)", title: task.name, systemName: "play", detail: task.group, value: task.shows,
+                        id: "task:\(task.id)", title: task.name, glyph: "▶", detail: task.group, value: task.shows,
                         payload: .task(task))
                 }
         }
@@ -327,7 +333,7 @@ struct Palette: View {
             guard let line = Int(query.dropFirst().trimmingCharacters(in: .whitespaces)), line > 0,
                 model.tabs.active != nil
             else { return [] }
-            return [PaletteItem(id: "line", title: "Go to line \(line)", systemName: "arrow.right.to.line", detail: nil, payload: .line(line))]
+            return [PaletteItem(id: "line", title: "Go to line \(line)", glyph: "→", detail: nil, payload: .line(line))]
         }
         guard let workspace = model.workspace else { return [] }
         // "Recently opened" first, then "Files" — each in rank order.
@@ -340,9 +346,9 @@ struct Palette: View {
         return ordered.map { match in
             let name = (match.path as NSString).lastPathComponent
             let folder = (match.path as NSString).deletingLastPathComponent
+            let (glyph, hue) = FileGlyph.glyph(name, isDirectory: false)
             return PaletteItem(
-                id: "file:\(match.path)", title: name,
-                systemName: FileGlyph.glyph(name, isDirectory: false).0 == "◆" ? "diamond.fill" : "doc",
+                id: "file:\(match.path)", title: name, glyph: glyph, hue: hue,
                 detail: folder.isEmpty ? nil : folder, payload: .file(match.path),
                 section: recent.contains(match.path) ? "Recently opened" : "Files",
                 matched: QuickOpen.matchedOffsets(query, in: name))

@@ -137,31 +137,22 @@ struct ProgressMeter: View {
 
 /// The editor area with no file open in an empty folder (mockup 19 A): a faint ⚒ and the ways in, as keycaps.
 struct EmptyEditorHints: View {
-    @Environment(\.ainkradSkin) private var skin
+    let model: ForgeModel
     @Environment(\.ainkradTheme) private var theme
+    @Environment(\.ainkradSkin) private var skin
 
     var body: some View {
-        VStack(spacing: skin.size.s8) {
-            Image(systemName: "hammer")
-                .font(skin.font(AinkradFontToken(sizeKey: "t34")))
-                .foregroundStyle(theme.accentSecondary.opacity(skin.opacity.o50))
-            HStack(spacing: skin.size.s4) {
-                hint("⌘P", "open a file ·")
-                hint("⇧⌘P", "commands ·")
-                hint("⌘O", "switch workspace")
+        // The keys are the user's (⌘K rebinds them), so a hint never names a chord that no longer works.
+        let hints: [(ForgeCommand, String)] = [(.quickOpen, "open a file"), (.commandPalette, "commands"), (.openFolder, "switch workspace")]
+        AinkradEmptyState(
+            icon: "hammer",
+            keyHints: hints.compactMap { command, label in
+                model.shortcut(for: command).map { AinkradEmptyState.KeyHint(keys: $0.display, label: label) }
             }
-            .font(skin.font(AinkradFontToken(sizeKey: "t12")))
-            .foregroundStyle(skin.color(skin.text.muted))
-        }
-        .padding(.bottom, skin.size.s40)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func hint(_ keys: String, _ text: String) -> some View {
-        HStack(spacing: skin.size.s4) {
-            AinkradKbd(keys).outlined()
-            Text(text)
-        }
+        )
+        .glyph("⚒")
+        .glyphSize(34)
+        .iconTint(theme.accentSecondary.opacity(skin.opacity.o50))
     }
 }
 
