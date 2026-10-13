@@ -13,9 +13,14 @@ struct AskRequest: Equatable {
     let code: String
     var prompt = ""
 
-    /// The launch payload Grimoire reads (its `AskLaunch`): the project folder and the request.
+    /// The launch payload Grimoire reads (its `AskLaunch`): the project folder, the whole request as `prompt`, and
+    /// its parts — the file, lines and code for Grimoire's context chip, and the words for its field. An
+    /// `openDocument`, so the host brings an open Grimoire forward instead of opening another.
     func payload(root: URL) -> String? {
-        let body = ["kind": "askAgent", "path": root.path(percentEncoded: false), "prompt": message]
+        let body: [String: Any] = [
+            "kind": AinkradLaunchIntent.openDocumentKind, "path": root.path(percentEncoded: false), "prompt": message,
+            "request": prompt, "file": path, "lines": [lines.lowerBound, lines.upperBound], "code": code,
+        ]
         return (try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])).map { String(decoding: $0, as: UTF8.self) }
     }
 

@@ -87,6 +87,7 @@ extension ForgeModel {
             }
         }
         agent.reviewingAll = false
+        agent.turns.clear()
         Task { await workspace.refresh() }
     }
 
@@ -94,5 +95,6 @@ extension ForgeModel {
         for path in Array(agent.files.keys) { agent.keepAll(path) }
         for path in Array(agent.others.keys) { agent.settled(path) }
         agent.reviewingAll = false
+        agent.turns.clear()
     }
 }

@@ -4,6 +4,7 @@ import Foundation
 /// cannot see them, so Forge keeps them instead).
 extension ForgeModel {
     /// Every open path once, across panes.
+    var activeDocument: EditorDocument? { tabs.active.flatMap { documents[$0] } }
     var openPaths: [String] { panes.flatMap(\.paths).reduce(into: []) { if !$0.contains($1) { $0.append($1) } } }
     var unsavedPaths: [String] { openPaths.filter { documents[$0]?.isDirty == true } }
 
