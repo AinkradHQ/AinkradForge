@@ -413,6 +413,7 @@ struct EditorHost: View {
         }
 
         func textViewDidChangeSelection(controller: TextViewController, newPositions: [CursorPosition]) {
+            clampSelection(controller)
             if let first = newPositions.first {
                 onCursor(first.start.line, first.start.column)
                 onSelection(first.range)
