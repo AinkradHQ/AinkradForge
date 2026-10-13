@@ -92,6 +92,8 @@ private struct WorkspaceCard: View {
             .contentShape(Rectangle())
             .onHover { isHovered = $0 }
         }
+        // FD20: under Glass Apple's own pull-down is so see-through the tabs behind it read through.
+        .kitMenuUnderGlass()
         .help(workspace.root.path(percentEncoded: false))
     }
 
