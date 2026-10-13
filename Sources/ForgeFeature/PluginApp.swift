@@ -95,7 +95,21 @@ public struct ForgeApp: AinkradApp, AinkradAppTeardown {
                             defaultDescription: "Login PATH",
                             isModified: { model.editorSettings.serverPaths[spec.id] != nil },
                             reset: { model.setServerPath(spec.id, "") })
-                    }),
+                    }
+                        + model.editorSettings.customServers.map { server in
+                            // Set up from "Set server path…" on a file Forge has no server for (FP112).
+                            SettingsField(
+                                path: root.appending("servers").appending(server.id),
+                                label: "\(server.language) — your server",
+                                help: "Runs for .\(server.extensions.joined(separator: ", .")) files with arguments \"\(server.arguments.joined(separator: " "))\". Reset removes it.",
+                                keywords: [server.id, server.language, "language server", "lsp", "path", "custom"],
+                                kind: .text(Binding(
+                                    get: { model.editorSettings.serverPaths[server.id] ?? "" },
+                                    set: { model.setServerPath(server.id, $0) })),
+                                defaultDescription: "None",
+                                isModified: { true },
+                                reset: { model.removeCustomServer(server.id) })
+                        }),
             ],
             appID: id)
     }

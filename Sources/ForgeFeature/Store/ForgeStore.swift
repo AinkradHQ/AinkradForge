@@ -47,6 +47,8 @@ struct EditorSettings: Codable, Equatable, Sendable {
     var showInvisibles = false
     /// Language server id → the executable to run instead of the one on the login PATH.
     var serverPaths: [String: String] = [:]
+    /// Servers the user set up for languages Forge has none for; each one's executable is in `serverPaths`.
+    var customServers: [CustomServer] = []
 
     init() {}
 
@@ -60,6 +62,7 @@ struct EditorSettings: Codable, Equatable, Sendable {
         showMinimap = (try? c.decodeIfPresent(Bool.self, forKey: .showMinimap)) ?? d.showMinimap
         showInvisibles = (try? c.decodeIfPresent(Bool.self, forKey: .showInvisibles)) ?? d.showInvisibles
         serverPaths = (try? c.decodeIfPresent([String: String].self, forKey: .serverPaths)) ?? d.serverPaths
+        customServers = (try? c.decodeIfPresent([CustomServer].self, forKey: .customServers)) ?? d.customServers
     }
 }
 

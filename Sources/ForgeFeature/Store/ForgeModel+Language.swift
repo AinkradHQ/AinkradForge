@@ -28,7 +28,7 @@ extension ForgeModel {
     /// Nil while one is running or starting (E1D1 FD33).
     var activeServerGap: String? {
         guard let path = tabs.active else { return nil }
-        guard let (spec, _) = LanguageRegistry.server(for: path) else { return "No language server covers this file." }
+        guard let (spec, _) = languages.server(for: path) else { return "No language server covers this file." }
         switch languages.statuses[spec.id] {
         case .notInstalled: return "\(spec.command) is not installed — \(spec.installHint)"
         case .failed(let why): return "\(spec.command) failed: \(why)"
@@ -40,6 +40,7 @@ extension ForgeModel {
     /// Starts the window's language servers for a workspace, with the paths set in settings.
     func beginLanguages(root: URL) {
         languages.overrides = editorSettings.serverPaths
+        languages.setCustom(editorSettings.customServers.map { $0.spec(path: editorSettings.serverPaths[$0.id]) })
         languages.begin(root: root)
     }
 
@@ -48,7 +49,7 @@ extension ForgeModel {
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
         editorSettings.serverPaths[specID] = trimmed.isEmpty ? nil : (trimmed as NSString).expandingTildeInPath
         languages.setOverride(specID, path: editorSettings.serverPaths[specID])
-        for (file, document) in documents where document.state == .ready && LanguageRegistry.server(for: file)?.0.id == specID {
+        for (file, document) in documents where document.state == .ready && languages.server(for: file)?.0.id == specID {
             languages.opened(path: file, text: document.storage.string)
         }
     }
@@ -57,7 +58,7 @@ extension ForgeModel {
     func hover(pane: Int, path: String, at hit: (offset: Int, rect: CGRect)?) async {
         hoverRequest += 1
         let request = hoverRequest
-        guard let hit, let document = documents[path], let (spec, _) = LanguageRegistry.server(for: path) else {
+        guard let hit, let document = documents[path], let (spec, _) = languages.server(for: path) else {
             hover = nil
             return
         }
@@ -104,7 +105,7 @@ extension ForgeModel {
 
     /// The characters after which `path`'s server offers completions and signature help.
     func triggers(for path: String) -> (completion: Set<String>, signature: Set<String>) {
-        guard let (spec, _) = LanguageRegistry.server(for: path) else { return ([], []) }
+        guard let (spec, _) = languages.server(for: path) else { return ([], []) }
         let signature = languages.signatureTriggers[spec.id] ?? []
         // A character that opens signature help doesn't also ask for completions: sourcekit-lsp lists "(" for both,
         // and a completion at "(" after one at "." crashes it — taking signature help down with it (E0 FD15).

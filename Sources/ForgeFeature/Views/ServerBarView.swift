@@ -66,9 +66,14 @@ struct ServerBarView: View {
     @ViewBuilder private func actions(compact: Bool) -> some View {
         switch bar.kind {
         case .missing:
-            if let spec = bar.spec, !compact {
-                AinkradButton(title: "Set Server Path…", style: .secondary) {
-                    if let path = ServerPathPicker.choose(spec) { model.setServerPath(spec.id, path) }
+            if !compact {
+                // Forge's own server: where it is. No server for the language (FP112): any stdio LSP and its arguments.
+                AinkradButton(title: "Set server path…", style: .secondary) {
+                    if let spec = bar.spec {
+                        if let path = ServerPathPicker.choose(spec) { model.setServerPath(spec.id, path) }
+                    } else if let chosen = CustomServerPicker.choose(language: bar.language) {
+                        model.setCustomServer(forFileAt: bar.path, executable: chosen.path, arguments: chosen.arguments)
+                    }
                 }
                 .secondaryAccent()
                 .fixedSize()
