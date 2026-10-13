@@ -59,7 +59,7 @@ public struct EditorColors: Equatable, Sendable {
     }
 
     var theme: EditorTheme {
-        EditorTheme(
+        var theme = EditorTheme(
             text: .init(color: text), insertionPoint: insertionPoint, invisibles: .init(color: text.withAlphaComponent(0.25)),
             // sRGB, not `.clear`: a gray-colourspace clear trips the minimap's brightness check.
             background: NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 0),
@@ -68,6 +68,11 @@ public struct EditorColors: Equatable, Sendable {
             attributes: .init(color: attributes), variables: .init(color: variables), values: .init(color: values),
             numbers: .init(color: numbers), strings: .init(color: strings), characters: .init(color: strings),
             comments: .init(color: comments, italic: true))
+        // Every member — a call, a declared function, a property — in the call hue (forge.css `.fn`, mockup 01).
+        theme.functions = .init(color: commands)
+        theme.functionCalls = .init(color: commands)
+        theme.properties = .init(color: commands)
+        return theme
     }
 }
 
@@ -176,6 +181,8 @@ public struct ForgeCodeEditor: View {
         anchorLine: Int? = nil, onAnchor: @escaping (CGRect?) -> Void = { _ in },
         onSelection: @escaping (NSRange) -> Void = { _ in }
     ) {
+        // Calls drawn in their own hue (forge.css `.fn`); CodeEdit leaves them unhighlighted by default.
+        TreeSitterClient.Constants.highlightsCalls = true
         self.storage = storage
         self.language = language
         self.colors = colors
@@ -273,7 +280,9 @@ struct EditorHost: View {
                     showMinimap: options.showMinimap,
                     invisibleCharactersConfiguration: options.showInvisibles
                         ? InvisibleCharactersConfiguration(showSpaces: true, showTabs: true, showLineEndings: false)
-                        : .empty)),
+                        : .empty,
+                    // Mockup 01's ▾ / ▸ on each fold's first line, not CodeEdit's ribbon.
+                    foldIndicatorStyle: .arrows)),
             state: $state,
             coordinators: [coordinator],
             completionDelegate: suggest == nil ? nil : coordinator,
