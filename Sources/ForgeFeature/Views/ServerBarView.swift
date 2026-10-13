@@ -156,8 +156,8 @@ struct EmptyEditorHints: View {
     }
 }
 
-/// A sidebar tab's empty state (mockup 19 A, B): the kit's glyph, title and message, then its actions — side by
-/// side when they fit the sidebar, else stacked — both in the mockups' outlined style, not a primary.
+/// A sidebar tab's empty state (mockup 19 A, B): the kit's compact glyph, title and message, then its actions — side
+/// by side when they fit the sidebar, else stacked — both in the mockups' small outlined style, not a primary.
 struct SidebarEmptyState<Actions: View>: View {
     let icon: String
     /// The mockup's text glyph (`▤`, `⑂`) in place of the symbol: 26 pt, the cyan accent at 70 % (`.sempty .glyph`).
@@ -176,15 +176,16 @@ struct SidebarEmptyState<Actions: View>: View {
                 HStack(spacing: skin.size.s8) { actions }
                 VStack(spacing: skin.size.s8) { actions }
             }
-            .padding(.top, -skin.size.s16)
+            // The compact state keeps its own 40 pt foot; the actions sit 12 pt under its message (`.sempty`'s gap + 4).
+            .padding(.top, skin.size.s12 - skin.size.s40)
         }
         .padding(.bottom, skin.size.s40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var state: AinkradEmptyState {
-        let state = AinkradEmptyState(icon: icon, title: title, message: message)
+        let state = AinkradEmptyState(icon: icon, title: title, message: message).compact()
         guard let glyph else { return state }
-        return state.glyph(glyph).glyphSize(26).iconTint(theme.accentSecondary.opacity(skin.opacity.o70))
+        return state.glyph(glyph).iconTint(theme.accentSecondary.opacity(skin.opacity.o70))
     }
 }

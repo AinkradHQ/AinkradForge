@@ -4,7 +4,7 @@ import SwiftUI
 /// The editor area while a replace is being previewed (mockup 08): a tab "SidebarRow.swift ↔ Replace preview" and
 /// a pane with the breadcrumb "Replace preview › SidebarRow.swift › 2 changes" over that file's changes, drawn like
 /// the editor — line numbers, syntax colours, full-row washes, unchanged lines folded, hunks running on without
-/// their box (read-only, as the mockup). Nothing is written until ⇄ or Replace All. The tab's ✕ closes the preview.
+/// their box, each with its ✓ Keep / ↶ Undo tick (an unticked hunk is left as is). Nothing is written until ⇄ or Replace All. The tab's ✕ closes the preview.
 struct ReplacePreview: View {
     let model: ForgeModel
     let path: String
@@ -45,7 +45,8 @@ struct ReplacePreview: View {
                                 rejectedHunkIDs: Binding(get: { search.rejected[path] ?? [] }, set: { search.rejected[path] = $0 })
                             )
                             .hidesHeader()
-                            .bareHunks()
+                            .bareHunks(untickable: true)
+                            .lineMetrics(fontSize: 12.5, rowHeight: 20)
                             .editorLines()
                             .syntaxColoured()
                             .lineNumberGutter()

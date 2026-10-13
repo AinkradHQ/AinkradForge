@@ -37,6 +37,31 @@ struct ReplaceTests {
         }
     }
 
+    @Test func replaceAllLeavesThePreviewsUntickedHunksAndANewQueryForgetsThem() async throws {
+        let text = (1...20).map { $0 == 3 || $0 == 17 ? "let isSelected = \($0)" : "line \($0)" }.joined(separator: "\n") + "\n"
+        let (model, root) = try await workspace(["A.swift": Data(text.utf8)])
+        defer { try? FileManager.default.removeItem(at: root) }
+        model.search.query.text = "isSelected"
+        model.search.replacement = "isActive"
+        model.rerunSearch()
+        try await settle(model)
+        let hunks = try #require(model.replacePlan(for: "A.swift")?.diff?.hunks)
+        #expect(hunks.count == 2)
+
+        // An untick made under another query does not survive into this one: its hunk ids meant other lines.
+        model.search.rejected["A.swift"] = [hunks[0].id]
+        model.search.query.text = "isSelected "
+        #expect(model.search.rejected.isEmpty)
+        model.search.query.text = "isSelected"
+
+        model.search.rejected["A.swift"] = [hunks[1].id]
+        model.replaceAll()
+        try await settle(model)
+        let written = try String(contentsOf: root.appending(path: "A.swift"), encoding: .utf8)
+        #expect(written.contains("let isActive = 3") && written.contains("let isSelected = 17"))
+        #expect(model.search.rejected.isEmpty)
+    }
+
     @Test func aClosedFileIsWrittenInItsOwnEncodingAndAnOpenOneOnlyChangesInItsBuffer() async throws {
         let closed = Data([0xEF, 0xBB, 0xBF]) + Data("let isSelected = 1\r\nisSelected()\r\n".utf8)
         let (model, root) = try await workspace(["Closed.swift": closed, "Open.swift": Data("var isSelected = 2\n".utf8)])

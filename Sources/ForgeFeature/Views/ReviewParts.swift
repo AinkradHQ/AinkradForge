@@ -61,9 +61,10 @@ struct ReviewFileRow: View {
 
 extension AinkradDiffReview {
     /// The review mockups' diff (16, 18): no header (the file row names the file), ✓ Keep / ↶ Undo ticks,
-    /// editor-style lines with full-row washes, plain text (the mockups colour no syntax there).
+    /// editor-style lines with full-row washes, plain text (the mockups colour no syntax there), 11.5 pt rows at
+    /// the mockups' 1.55 line height (`.rv .hunk`).
     func reviewStyle() -> Self {
-        hidesHeader().keepUndoHunkControls().editorLines()
+        hidesHeader().keepUndoHunkControls().editorLines().lineMetrics(fontSize: 11.5, rowHeight: 18)
     }
 }
 

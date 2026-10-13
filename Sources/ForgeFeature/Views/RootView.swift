@@ -88,6 +88,8 @@ struct RootView: View {
         .background { NoticeToaster(model: model) }
         .ainkradToastHost()
         .ainkradHostTheme(theme)
+        // Keycaps read ⌘⇧P, as the mockups write them (⇧⌘B and ⇧⌘M flip with it; ⌥⌘ and ⌃⌘ keep Apple's order).
+        .ainkradCommandFirstKeys()
         .task { await model.start(launch: takeLaunch()) }
     }
 }

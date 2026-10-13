@@ -63,17 +63,13 @@ private struct TaskRow: View {
     /// `.tk`: a bare cyan `▶` / `■`, the name (mono, 150 pt), the command (faint mono), how it last went.
     var body: some View {
         HStack(spacing: skin.size.s8) {
-            Button {  // design-lint: allow raw-control the mockup's bare run glyph
+            // 16 pt keeps the row at the mockup's height; the glyph's column stays the mockup's 20.
+            AinkradIconButton(systemName: isRunning ? "stop" : "play", size: skin.size.s16, tooltip: isRunning ? "Stop" : "Run \(task.shows)") {
                 if isRunning { model.tasks.stop(task, in: model.terminals) } else { model.runTask(task) }
-            } label: {
-                Text(isRunning ? "■" : "▶")
-                    .font(skin.font(AinkradFontToken(sizeKey: "t10")))
-                    .foregroundStyle(theme.accentSecondary)
-                    .frame(width: skin.size.s20)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .help(isRunning ? "Stop" : "Run \(task.shows)")
+            .textGlyph(isRunning ? "■" : "▶", size: skin.size.s10)
+            .bare()
+            .frame(width: skin.size.s20)
             Text(task.name)
                 .font(skin.font(AinkradFontToken(size: 11.5, weight: "medium", mono: "family")))
                 .foregroundStyle(theme.foreground)

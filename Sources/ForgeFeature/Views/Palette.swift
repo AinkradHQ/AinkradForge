@@ -227,7 +227,8 @@ struct Palette: View {
             handlesKeyPresses: true
         )
         .paletteRows()
-        .iconGlyphs { $0.hue.map(ForgeStyle.hue) }
+        // 23 pt: the system font draws ◆ small; this matches the mockup's ◆ by eye (02).
+        .iconGlyphs(tint: { $0.hue.map(ForgeStyle.hue) }, size: 23)
         .kinds({ $0.kind }, tint: { _ in nil })
         .matchedCharacters { $0.matched }
         .sections { $0.section }
