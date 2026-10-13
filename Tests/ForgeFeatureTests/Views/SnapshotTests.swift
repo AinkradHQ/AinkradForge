@@ -94,6 +94,16 @@ final class SnapshotTests: XCTestCase {
             masking: [CGRect(x: 300, y: 70, width: 600, height: 28)])
     }
 
+    /// Welcome at 520 pt (three apps tiled): the recents card narrows with the window (E1D1 FD35).
+    func testWelcomeNarrow() throws {
+        let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
+        model.store.update { $0.recents = [.init(path: repo.path, opened: .distantPast)] }
+        // The repo's folder name is random per run: mask the path line.
+        try Snapshot.assertMatches(
+            model, named: "welcome-narrow", size: CGSize(width: 520, height: 560),
+            masking: [CGRect(x: 30, y: 360, width: 370, height: 20)])
+    }
+
     /// ⌘P over the window, filtered to "sbrow".
     func testQuickOpen() throws {
         let model = try Snapshot.model(opening: repo)
