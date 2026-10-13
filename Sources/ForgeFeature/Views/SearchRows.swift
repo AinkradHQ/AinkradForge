@@ -22,6 +22,13 @@ struct ResultFileRow: View {
         Button(action: toggle) { label }  // design-lint: allow raw-control keyboard-reachable row (kit has no row button)
             .buttonStyle(.plain)
             .help(path)
+            .rowActionKeys(action)
+    }
+
+    /// The row's ⇄ or ✕, also run from the keyboard when the row has focus.
+    private var action: RowAction? {
+        if let onReplace { return RowAction(glyph: "⇄", help: "Replace in this file (⇧↵)", action: onReplace) }
+        return onDismiss.map { RowAction(glyph: "✕", help: "Dismiss this file's results (⌫)", action: $0) }
     }
 
     private var label: some View {
@@ -43,11 +50,7 @@ struct ResultFileRow: View {
                 .lineLimit(1)
             Spacer(minLength: skin.size.s4)
             CountPill(count: count)
-            if let onReplace {
-                RowAction(glyph: "⇄", help: "Replace in this file", action: onReplace).opacity(isHovered ? 1 : 0)
-            } else if let onDismiss {
-                RowAction(glyph: "✕", help: "Dismiss this file's results", action: onDismiss).opacity(isHovered ? 1 : 0)
-            }
+            if let action { action.opacity(isHovered ? 1 : 0) }
         }
         .padding(.vertical, skin.size.s5)
         .padding(.horizontal, skin.size.s8)
@@ -73,7 +76,9 @@ struct CountPill: View {
     }
 }
 
-/// A row's faint text action (`.act`: ⇄, ✕).
+/// A row's faint text action (`.act`: ⇄, ✕). Nested in its row's button, so Full Keyboard Access can't reach
+/// it: the focused row runs it from the keyboard instead (FD46) — ⌫ for ✕, ⇧↵ for ⇄ — and VoiceOver lists it
+/// as the row's action.
 struct RowAction: View {
     let glyph: String
     let help: String
@@ -89,6 +94,32 @@ struct RowAction: View {
         }
         .buttonStyle(.plain)
         .help(help)
+    }
+
+    /// Whether a focused row runs it on this key: ⌫ dismisses, ⇧↵ replaces now (as ⇧↵ renames now).
+    func runs(on key: KeyEquivalent, modifiers: EventModifiers) -> Bool {
+        let modifiers = modifiers.intersection([.command, .option, .control, .shift])
+        switch glyph {
+        case "✕": return key == .delete && modifiers.isEmpty
+        case "⇄": return key == .return && modifiers == .shift
+        default: return false
+        }
+    }
+}
+
+extension View {
+    /// Runs a row's ⇄ / ✕ from the keyboard while the row has focus, and names it to VoiceOver (FD46).
+    @ViewBuilder func rowActionKeys(_ action: RowAction?) -> some View {
+        if let action {
+            onKeyPress(phases: .down) { press in
+                guard action.runs(on: press.key, modifiers: press.modifiers) else { return .ignored }
+                action.action()
+                return .handled
+            }
+            .accessibilityAction(named: action.help, action.action)
+        } else {
+            self
+        }
     }
 }
 
@@ -111,6 +142,7 @@ struct ResultLineRow: View {
         Button(action: onClick) { label }  // design-lint: allow raw-control keyboard-reachable row (kit has no row button)
             .buttonStyle(.plain)
             .simultaneousGesture(TapGesture(count: 2).onEnded(onDoubleClick))
+            .rowActionKeys(action)
     }
 
     private var label: some View {

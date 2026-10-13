@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ForgeFeature
@@ -132,5 +133,16 @@ struct ResultActionTests {
         try await settle(model)
         #expect(try String(contentsOf: file, encoding: .utf8) == "// new\n// newer\nisActive(1)\nisSelected(2)\nisActive(1)\n")
         #expect(model.search.results.isEmpty)
+    }
+
+    @Test func aFocusedRowRunsItsActionFromTheKeyboard() {
+        // FD46: the nested ✕ / ⇄ can't take Full Keyboard Access focus, so the focused row runs them: ⌫ and ⇧↵.
+        let dismiss = RowAction(glyph: "✕", help: "Dismiss") {}
+        #expect(dismiss.runs(on: .delete, modifiers: []))
+        #expect(!dismiss.runs(on: .delete, modifiers: .command) && !dismiss.runs(on: .return, modifiers: .shift))
+        let replace = RowAction(glyph: "⇄", help: "Replace this one") {}
+        #expect(replace.runs(on: .return, modifiers: .shift))
+        #expect(!replace.runs(on: .return, modifiers: []) && !replace.runs(on: .delete, modifiers: []))
+        #expect(!RowAction(glyph: "‹", help: "Previous") {}.runs(on: .delete, modifiers: []))
     }
 }

@@ -126,8 +126,8 @@ struct SearchPanel: View {
                                     : model.tabs.active == file.path && model.activeDocument?.cursor.line == match.line,
                                 replacement: replacementText,
                                 action: search.isReplaceOpen
-                                    ? RowAction(glyph: "⇄", help: "Replace this one") { model.replace(in: file.path, line: match.line) }
-                                    : RowAction(glyph: "✕", help: "Dismiss") { search.dismiss(file.path, line: match.line) }
+                                    ? RowAction(glyph: "⇄", help: "Replace this one (⇧↵)") { model.replace(in: file.path, line: match.line) }
+                                    : RowAction(glyph: "✕", help: "Dismiss (⌫)") { search.dismiss(file.path, line: match.line) }
                             ) {
                                 if search.isReplaceOpen {
                                     search.previewPath = file.path
