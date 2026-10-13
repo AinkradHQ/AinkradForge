@@ -141,17 +141,33 @@ private struct NoticeToaster: View {
 private struct ShortcutLayer: View {
     let model: ForgeModel
     @Environment(\.ainkradPaneIsFocused) private var isFocused
+    @State private var chord = NextKey()
 
     var body: some View {
+        let available = model.availableCommands
         ZStack {
             // Only the focused pane claims keys: an unfocused one would take the
             // chord from the pane you are working in, or from the host (FD36).
             if isFocused {
-                ForEach(model.availableCommands.filter { $0.shortcut != nil }) { command in
+                ForEach(available.filter { $0.shortcut.map { !$0.afterCommandK } ?? false }) { command in
                     if let shortcut = command.shortcut {
                         Button(command.title) { model.run(command) }  // design-lint: allow raw-control key-equivalent claim
                             .keyboardShortcut(KeyEquivalent(shortcut.key), modifiers: shortcut.modifiers)
                     }
+                }
+                // ⌘K starts a two-step chord (⌘K ⌘\ splits down) — claimed only while one can run and the palette
+                // (whose ⌘K rebinds) is closed. The next key press finishes it, or is dropped.
+                if model.palette == nil, available.contains(where: { $0.shortcut?.afterCommandK == true }) {
+                    Button("Chord") {  // design-lint: allow raw-control key-equivalent claim
+                        chord.listen { event in
+                            let second = Shortcut(event: event, afterCommandK: true)
+                            if let command = model.availableCommands.first(where: { second != nil && $0.shortcut == second }) {
+                                model.run(command)
+                            }
+                            return true
+                        }
+                    }
+                    .keyboardShortcut("k", modifiers: .command)
                 }
             }
         }

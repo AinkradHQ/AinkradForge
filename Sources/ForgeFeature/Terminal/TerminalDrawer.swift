@@ -27,6 +27,8 @@ final class TerminalDrawer {
     var height: Double = 270
     private(set) var tabs: [Tab] = []
     var active: Int?
+    /// Split Terminal: two terminals shown side by side while either is the active one (empty when none).
+    private(set) var pair: [Int] = []
     /// A busy terminal the user asked to close; the window confirms first.
     var confirmingClose: Int?
     /// Leaving the workspace while something runs in a terminal: the window names what runs (as it was when
@@ -63,6 +65,7 @@ final class TerminalDrawer {
         routers = [:]
         tabs = []
         active = nil
+        pair = []
         isOpen = false
         isMaximised = false
         root = nil
@@ -111,6 +114,19 @@ final class TerminalDrawer {
 
     func view(_ id: Int) -> ForgeTerminalView? { views[id] }
 
+    /// Split Terminal: a new shell beside the active terminal (or two, when there is none yet).
+    func split() {
+        if tabs.isEmpty { add() }
+        guard let left = active ?? tabs.last?.id, let right = add() else { return }
+        pair = [left, right]
+    }
+
+    /// The pair to show side by side now: the split, while one of it is active and no task list covers it.
+    var shownPair: [Int]? {
+        guard !showsTasks, let active, pair.contains(active) else { return nil }
+        return pair
+    }
+
     func select(_ id: Int) {
         active = id
         showsTasks = false
@@ -128,6 +144,7 @@ final class TerminalDrawer {
         events[id] = nil
         routers[id] = nil
         tabs.removeAll { $0.id == id }
+        if pair.contains(id) { pair = [] }
         onClosed(id)
         if active == id { active = tabs.last?.id }
         if tabs.isEmpty && !showsTasks {

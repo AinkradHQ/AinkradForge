@@ -94,6 +94,8 @@ extension ForgeModel {
         case .previousProblem: goToProblem(backward: true)
         case .toggleSidebar: sidebarShown = !isSidebarShown
         case .undoAllChanges: if let path = tabs.active { undoAllChanges(path) }
+        case .joinSplits: joinSplits()
+        case .splitTerminal: terminals.split()
         case .maximiseTerminal:
             if !terminals.isOpen { terminals.toggle() }
             terminals.isMaximised.toggle()

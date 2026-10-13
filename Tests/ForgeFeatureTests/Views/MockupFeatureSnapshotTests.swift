@@ -51,4 +51,26 @@ final class MockupFeatureSnapshotTests: XCTestCase {
         model.palette = "sbrow"
         try Snapshot.assertMatches(model, named: "quick-open-files-symbols")
     }
+
+    /// Split Editor Down (⌘K ⌘\): two panes stacked, the inactive one dimmed (mockup 04's stacked layout).
+    func testSplitDown() throws {
+        let model = try window()
+        model.run(.splitDown)
+        model.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarModel.swift", pinned: true)
+        try SweepSupport.waitUntilLoaded(model)
+        // CESE's parked find panel, once per pane.
+        try Snapshot.assertMatches(
+            model, named: "split-down",
+            masking: [CGRect(x: 280, y: 70, width: 920, height: 28), CGRect(x: 280, y: 418, width: 920, height: 30)])
+    }
+
+    /// Split Terminal: two shells side by side in the drawer, both tabs lit. What the shells print depends on
+    /// this Mac's prompt, so the terminals themselves are masked; the tabs and the layout are checked.
+    func testSplitTerminal() throws {
+        let model = try window()
+        model.run(.splitTerminal)
+        XCTAssertEqual(model.terminals.shownPair?.count, 2)
+        try Snapshot.assertMatches(
+            model, named: "split-terminal", masking: [CGRect(x: 280, y: 70, width: 920, height: 28), CGRect(x: 280, y: 470, width: 920, height: 260)])
+    }
 }

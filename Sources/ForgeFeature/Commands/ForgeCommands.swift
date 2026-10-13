@@ -4,15 +4,23 @@ import SwiftUI
 struct Shortcut: Equatable {
     let key: Character
     let modifiers: EventModifiers
+    /// Pressed after ⌘K (VS Code's two-step chords: ⌘K ⌘\ splits down).
+    var afterCommandK = false
 
-    /// e.g. "⌥⌘S", in the order macOS prints modifiers.
+    /// e.g. "⌥⌘S", in the order macOS prints modifiers; a chord's two steps space-separated ("⌘K ⌘\").
     var display: String {
-        var text = ""
+        var text = afterCommandK ? "⌘K " : ""
         if modifiers.contains(.control) { text += "⌃" }
         if modifiers.contains(.option) { text += "⌥" }
         if modifiers.contains(.shift) { text += "⇧" }
         if modifiers.contains(.command) { text += "⌘" }
-        return text + (key == "\r" ? "↵" : key == Self.backspace ? "⌫" : key == Self.escape ? "Esc" : key == Self.f12 ? "F12" : key == Self.f2 ? "F2" : key == Self.f8 ? "F8" : String(key).uppercased())
+        return text + Self.name(of: key)
+    }
+
+    /// The key's printed name: ↵, ⌫, Esc, F1–F19, else the character.
+    static func name(of key: Character) -> String {
+        if let value = key.unicodeScalars.first?.value, (0xF704...0xF716).contains(value) { return "F\(value - 0xF703)" }
+        return key == "\r" ? "↵" : key == backspace ? "⌫" : key == escape ? "Esc" : String(key).uppercased()
     }
 
     /// AppKit's private-use characters for the function keys.
@@ -39,6 +47,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
     case toggleTerminal, newTerminal, maximiseTerminal, toggleBlame, runTask, rerunLastTask
     case keepChange, undoChange, keepAllChanges, undoAllChanges, askAgent, showHover, closeHints
     case reviewOutside, showIssues, nextProblem, previousProblem, toggleSidebar
+    case joinSplits, splitTerminal
 
     var id: String { rawValue }
 
@@ -100,6 +109,8 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .nextProblem: "Go to Next Problem"
         case .previousProblem: "Go to Previous Problem"
         case .toggleSidebar: "Toggle Sidebar"
+        case .joinSplits: "Join All Splits"
+        case .splitTerminal: "Split Terminal"
         }
     }
 
@@ -112,11 +123,11 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .quickOpen, .goToLine, .goToDefinition, .findReferences, .nextProblem, .previousProblem, .nextTab, .previousTab:
             "Go"
         case .commandPalette, .closeTab, .showFiles, .showChanges, .showIssues, .toggleSidebar, .splitRight, .splitDown,
-            .focusFirstPane, .focusSecondPane, .closePane:
+            .focusFirstPane, .focusSecondPane, .closePane, .joinSplits:
             "View"
         case .findInFiles, .replaceAll: "Search"
         case .renameSymbol, .codeActions, .formatDocument, .showHover, .closeHints: "Editor"
-        case .openTerminal, .toggleTerminal, .newTerminal, .maximiseTerminal: "Terminal"
+        case .openTerminal, .toggleTerminal, .newTerminal, .maximiseTerminal, .splitTerminal: "Terminal"
         case .toggleBlame: "Git"
         case .runTask, .rerunLastTask: "Tasks"
         case .keepChange, .undoChange, .keepAllChanges, .undoAllChanges, .askAgent, .reviewOutside: "Agent"
@@ -177,6 +188,8 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .nextProblem: "arrow.down.to.line"
         case .previousProblem: "arrow.up.to.line"
         case .toggleSidebar: "sidebar.left"
+        case .joinSplits: "rectangle"
+        case .splitTerminal: "rectangle.split.2x1"
         }
     }
 
@@ -196,6 +209,10 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .showChanges: Shortcut(key: "g", modifiers: [.control, .shift])
         case .copyPath: Shortcut(key: "c", modifiers: [.command, .option])
         case .splitRight: Shortcut(key: "\\", modifiers: .command)
+        case .splitDown: Shortcut(key: "\\", modifiers: .command, afterCommandK: true)
+        // The mockup's keys (VS Code's on Windows) — macOS's screenshot tool takes ⇧⌘5 first unless turned off;
+        // rebind it from the palette (⌘K).
+        case .splitTerminal: Shortcut(key: "5", modifiers: [.command, .shift])
         case .focusFirstPane: Shortcut(key: "1", modifiers: .command)
         case .focusSecondPane: Shortcut(key: "2", modifiers: .command)
         case .newFile: Shortcut(key: "n", modifiers: .command)
@@ -226,7 +243,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .previousProblem: Shortcut(key: Shortcut.f8, modifiers: .shift)
         // Xcode's navigator chord: VS Code's ⌘B is Bold wherever a text menu is installed.
         case .toggleSidebar: Shortcut(key: "0", modifiers: .command)
-        case .closeWorkspace, .revealInTree, .refresh, .openTerminal, .splitDown, .closePane, .renameActiveFile,
+        case .closeWorkspace, .revealInTree, .refresh, .openTerminal, .closePane, .joinSplits, .renameActiveFile,
             .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8, .keepAllChanges, .undoAllChanges, .showHover,
             .reviewOutside, .showIssues:
             nil
@@ -238,13 +255,13 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .quickOpen, .commandPalette, .openFolder: .none
         case .closeWorkspace, .saveAll, .showFiles, .showChanges, .refresh, .openTerminal, .newFile, .newFolder,
             .findInFiles, .replaceAll, .toggleTerminal, .newTerminal, .maximiseTerminal, .runTask, .rerunLastTask,
-            .reviewOutside, .showIssues, .nextProblem, .previousProblem, .toggleSidebar:
+            .reviewOutside, .showIssues, .nextProblem, .previousProblem, .toggleSidebar, .splitTerminal:
             .workspace
         case .goToLine, .save, .closeTab, .nextTab, .previousTab, .revealInTree, .copyPath, .splitRight, .splitDown,
             .renameActiveFile, .revealInFinder, .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8,
             .goToDefinition, .findReferences, .renameSymbol, .codeActions, .formatDocument, .toggleBlame, .askAgent, .showHover:
             .file
-        case .focusFirstPane, .focusSecondPane, .closePane: .split
+        case .focusFirstPane, .focusSecondPane, .closePane, .joinSplits: .split
         case .keepChange, .undoChange: .agentChange
         case .keepAllChanges, .undoAllChanges: .agentFile
         case .closeHints: .hint
