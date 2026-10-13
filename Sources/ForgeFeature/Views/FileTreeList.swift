@@ -179,8 +179,8 @@ struct FileRow: View {
             Image(systemName: FileIcon.symbol(for: node))
                 .font(skin.font(AinkradFontToken(sizeKey: "t11")))
                 .foregroundStyle(
-                    node.isDirectory
-                        ? theme.accentSecondary : FileIcon.tint(for: node.name, theme: theme) ?? skin.color(skin.text.faint))
+                    onSelection ?? (node.isDirectory
+                        ? theme.accentSecondary : FileIcon.tint(for: node.name, theme: theme) ?? skin.color(skin.text.faint)))
                 .frame(width: skin.size.s14)
             Text(node.name)
                 .font(skin.font(AinkradFontToken(sizeKey: "t12")))
@@ -191,7 +191,7 @@ struct FileRow: View {
             if let mark {
                 Text(mark.rawValue)
                     .font(skin.font(AinkradFontToken(sizeKey: "t10", weight: "semibold", monospacedDigits: true)))
-                    .foregroundStyle(color(for: mark))
+                    .foregroundStyle(onSelection ?? color(for: mark))
             }
         }
         .padding(.vertical, skin.size.s3)
@@ -202,7 +202,15 @@ struct FileRow: View {
         .onHover { isHovered = $0 }
     }
 
+    /// Under Glass a selected row is filled with the accent, which drowned the accent-blue of an untracked name
+    /// (E1D1 FD31) and dulled every other tint: there the row's text takes the colour readable on the accent, as
+    /// the kit's own row text does. Neon's selection is a faint wash, so the git colours stay.
+    private var onSelection: Color? {
+        isSelected && skin.usesNativeGlass ? skin.color(skin.palette.accentPrimary).contrastingText : nil
+    }
+
     private var nameColor: Color {
+        if let onSelection { return onSelection }
         if let mark { return color(for: mark) }
         return node.isDirectory || isSelected ? theme.foreground.opacity(skin.opacity.o90) : skin.color(skin.text.muted)
     }
