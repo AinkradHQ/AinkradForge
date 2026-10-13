@@ -12,6 +12,29 @@ struct LanguageCoreTests {
         #expect(LanguageRegistry.server(for: "README.md") == nil)
     }
 
+    /// FD25: HTML, CSS (and SCSS / Less), JSON (and JSONC) and YAML, each under the languageId its server expects,
+    /// with the npm package to install it from.
+    @Test func webAndDataFilesMapToTheirServers() {
+        let expected: [(String, String, String)] = [
+            ("site/index.html", "vscode-html-language-server", "html"), ("a.htm", "vscode-html-language-server", "html"),
+            ("s.css", "vscode-css-language-server", "css"), ("s.scss", "vscode-css-language-server", "scss"),
+            ("s.less", "vscode-css-language-server", "less"), ("package.json", "vscode-json-language-server", "json"),
+            (".vscode/settings.jsonc", "vscode-json-language-server", "jsonc"), ("ci.yml", "yaml-language-server", "yaml"),
+            ("k8s/app.YAML", "yaml-language-server", "yaml"),
+        ]
+        for (path, server, languageID) in expected {
+            let found = LanguageRegistry.server(for: path)
+            #expect(found?.spec.id == server, "\(path)")
+            #expect(found?.languageID == languageID, "\(path)")
+            #expect(found?.spec.arguments == ["--stdio"])
+        }
+        #expect(LanguageRegistry.server(for: "a.css")?.spec.installHint == "npm i -g vscode-langservers-extracted")
+        #expect(LanguageRegistry.server(for: "a.yaml")?.spec.installHint == "npm i -g yaml-language-server")
+        // One server per extension.
+        let extensions = LanguageRegistry.servers.flatMap(\.languageIDs.keys)
+        #expect(extensions.count == Set(extensions).count)
+    }
+
     @Test func positionsAreUTF16AndClamped() {
         // "é" is one UTF-16 unit, "🙂" two: LSP characters count code units, like NSRange.
         let index = LineIndex("let é = 1\nlet 🙂x = 2\n")

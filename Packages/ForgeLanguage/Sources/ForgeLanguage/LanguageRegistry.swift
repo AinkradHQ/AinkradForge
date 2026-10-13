@@ -37,6 +37,22 @@ public enum LanguageRegistry {
         ServerSpec(
             id: "pyright", language: "Python", command: "pyright-langserver", arguments: ["--stdio"],
             languageIDs: ["py": "python"], installHint: "npm i -g pyright"),
+        // The three servers VS Code ships, packaged together as vscode-langservers-extracted.
+        ServerSpec(
+            id: "vscode-html-language-server", language: "HTML", command: "vscode-html-language-server",
+            arguments: ["--stdio"], languageIDs: ["html": "html", "htm": "html"],
+            installHint: "npm i -g vscode-langservers-extracted"),
+        ServerSpec(
+            id: "vscode-css-language-server", language: "CSS", command: "vscode-css-language-server",
+            arguments: ["--stdio"], languageIDs: ["css": "css", "scss": "scss", "less": "less"],
+            installHint: "npm i -g vscode-langservers-extracted"),
+        ServerSpec(
+            id: "vscode-json-language-server", language: "JSON", command: "vscode-json-language-server",
+            arguments: ["--stdio"], languageIDs: ["json": "json", "jsonc": "jsonc"],
+            installHint: "npm i -g vscode-langservers-extracted"),
+        ServerSpec(
+            id: "yaml-language-server", language: "YAML", command: "yaml-language-server", arguments: ["--stdio"],
+            languageIDs: ["yaml": "yaml", "yml": "yaml"], installHint: "npm i -g yaml-language-server"),
     ]
 
     /// The server for a file, with the `languageId` to open it under; nil when no server serves it.

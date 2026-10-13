@@ -22,12 +22,12 @@ struct ServerPathTests {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("forge-gap-\(UUID().uuidString.prefix(8))")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        for name in ["a.swift", "b.yml"] { try "x\n".write(to: root.appending(path: name), atomically: true, encoding: .utf8) }
+        for name in ["a.swift", "b.rb"] { try "x\n".write(to: root.appending(path: name), atomically: true, encoding: .utf8) }
         let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
         #expect(model.activeServerGap == nil)
         model.setServerPath("sourcekit-lsp", "/nonexistent/forge-gap")
         await model.start(launch: root.path)
-        model.open(file: "b.yml", pinned: true)
+        model.open(file: "b.rb", pinned: true)
         #expect(model.activeServerGap == "No language server covers this file.")
         model.open(file: "a.swift", pinned: true)
         for _ in 0..<100 where model.activeServerGap == nil { try await Task.sleep(for: .milliseconds(20)) }
