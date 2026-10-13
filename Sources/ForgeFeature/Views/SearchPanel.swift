@@ -34,11 +34,12 @@ struct SearchPanel: View {
             } else {
                 AinkradSearchField(
                     text: $search.replacement, placeholder: search.query.regex ? "$1 for a group" : "Replace", focus: $replaceFocused
-                // No fixed height: the mockup's replace field grows round its Replace All button (08).
-                ).codeQuery().chamfered().trailingAccessory {
+                // 42 pt round its 30 pt Replace All, as mockup 08 draws it.
+                ).codeQuery().fieldHeight(skin.size.s42).chamfered().trailingAccessory {
                     AinkradFieldToggle("AB", isOn: $search.preserveCase, help: "Preserve case (isSelected → isActive, IsSelected → IsActive)")
                     AinkradButton(title: "Replace All", style: .primary) { search.confirmingReplaceAll = true }
                         .compact()
+                        .buttonHeight(skin.size.s30)
                         .fixedSize()
                         .disabled(search.results.isEmpty)
                         .help(model.titled("Replace every match below", .replaceAll))

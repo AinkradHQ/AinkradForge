@@ -40,8 +40,10 @@ struct TerminalDrawerView: View {
                     tooltip: model.titled(drawer.isMaximised ? "Restore" : "Maximise", .maximiseTerminal)
                 ) { drawer.isMaximised.toggle() }
                 .textGlyph(drawer.isMaximised ? "⤡" : "⤢", size: skin.size.s14)
+                .outlineBox()
                 AinkradIconButton(systemName: "xmark", tooltip: model.titled("Hide", .toggleTerminal)) { drawer.isOpen = false }
                     .textGlyph("✕", size: skin.size.s14)
+                    .outlineBox()
             }
             .padding(.horizontal, skin.size.s10)
             .padding(.top, skin.size.s8)

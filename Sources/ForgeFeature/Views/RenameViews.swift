@@ -7,25 +7,16 @@ struct RenameField: View {
     let state: RenameState
     @FocusState private var focused: Bool
     @Environment(\.ainkradSkin) private var skin
-    @Environment(\.ainkradTheme) private var theme
 
     /// `.renamebox`: a slim mono field (`.sfield`) over a faint hint, 330 pt with the card's 8 pt inset.
     var body: some View {
         VStack(alignment: .leading, spacing: skin.size.s6) {
-            TextField(state.original, text: Binding(get: { model.rename?.newName ?? "" }, set: { model.rename?.newName = $0 }))  // design-lint: allow raw-control the mockup's slim field
-                .textFieldStyle(.plain)
-                .font(skin.font(AinkradFontToken(sizeKey: "t12", mono: "family")))
-                .foregroundStyle(theme.foreground)
-                .tint(theme.accentSecondary)
-                .padding(.vertical, skin.size.s6)
-                .padding(.leading, skin.size.s10)
-                .padding(.trailing, skin.size.s8)
-                .modifier(FieldSurface())
+            AinkradTextField(text: Binding(get: { model.rename?.newName ?? "" }, set: { model.rename?.newName = $0 }), placeholder: state.original)
+                .fieldHeight(skin.size.s28)
+                .chamfered()
+                .monospaced()
+                .onReturn { model.commitRename(preview: Self.previews(on: $0)) }
                 .focused($focused)
-                .onKeyPress(.return, phases: .down) { press in
-                    model.commitRename(preview: !press.modifiers.contains(.shift))
-                    return .handled
-                }
                 .onExitCommand { model.rename = nil }
             Text(hint)
                 .font(skin.font(AinkradFontToken(sizeKey: "t10_5")))
@@ -37,28 +28,14 @@ struct RenameField: View {
         .onAppear { DispatchQueue.main.async { focused = true } }  // see Palette's onAppear (E0 FD16)
     }
 
+    /// ↵ previews; ⇧↵ renames now.
+    static func previews(on modifiers: EventModifiers) -> Bool { !modifiers.contains(.shift) }
+
     private var hint: String {
         let reach = state.places.map { places in
             " — \(places) place\(places == 1 ? "" : "s") in \(state.files ?? 1) file\((state.files ?? 1) == 1 ? "" : "s")"
         } ?? ""
         return "Rename ‘\(state.original)’\(reach) · ↵ preview · ⇧↵ rename now · Esc"
-    }
-}
-
-/// `.sfield.cut`: Neon's chamfered field on `--fill-strong` with the cyan stroke; a glass capsule under Glass.
-struct FieldSurface: ViewModifier {
-    @Environment(\.ainkradSkin) private var skin
-    @Environment(\.ainkradTheme) private var theme
-
-    func body(content: Content) -> some View {
-        if #available(macOS 26, *), skin.usesNativeGlass {
-            content.glassEffect(.regular, in: .capsule)
-        } else {
-            let shape = skin.shape(cut: skin.cut.c8)
-            content
-                .background(shape.fill(ForgeStyle.fillStrong(skin, theme)))
-                .overlay(shape.strokeBorder(ForgeStyle.stroke(skin, theme), lineWidth: skin.size.s1))
-        }
     }
 }
 
