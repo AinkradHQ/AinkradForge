@@ -61,21 +61,42 @@ struct GitPeekCard: View {
     }
 }
 
-/// Blame at the end of the caret's line, quiet; on hover, the commit's card.
+/// Blame at the end of the caret's line, quiet; on hover, the commit's card. Fills the editor, to know its width.
 struct BlameView: View {
     let model: ForgeModel
     let note: BlameNote
-    @State private var isHovered = false
+    /// Where the note starts: just past the line's end.
+    let leading: CGFloat
+    @State private var isHovered: Bool
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
 
+    /// `isHovered` opens the card from the start, for snapshots.
+    init(model: ForgeModel, note: BlameNote, leading: CGFloat, isHovered: Bool = false) {
+        self.model = model
+        self.note = note
+        self.leading = leading
+        _isHovered = State(initialValue: isHovered)
+    }
+
     var body: some View {
+        GeometryReader { editor in
+            // The card is wider than the note: near the editor's right edge it slides left to stay inside, while the
+            // note stays put (E1D1 FD17).
+            let overflow = leading + skin.size.s360 + skin.size.s16 - editor.size.width
+            let shift = isHovered && note.card != nil ? max(0, min(leading, overflow)) : 0
+            content(shift: shift).padding(.leading, leading - shift)
+        }
+    }
+
+    private func content(shift: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: skin.size.s6) {
             Text(label)
                 .font(skin.font(AinkradFontToken(sizeKey: "t11")))
                 .italic()
                 .foregroundStyle(skin.color(skin.text.faint))
                 .lineLimit(1)
+                .padding(.leading, shift)
             if isHovered, let card = note.card {
                 VStack(alignment: .leading, spacing: skin.size.s4) {
                     HStack {

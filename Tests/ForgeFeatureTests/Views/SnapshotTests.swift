@@ -104,6 +104,21 @@ final class SnapshotTests: XCTestCase {
             masking: [CGRect(x: 30, y: 360, width: 370, height: 20)])
     }
 
+    /// The blame card near the editor's right edge slides left to stay inside it; the note stays put (E1D1 FD17).
+    func testBlameCardStaysInTheEditor() throws {
+        // An uncommitted line: its note does not read the clock.
+        let note = BlameNote(
+            path: Self.sidebarRow, line: 4,
+            blame: BlameLine(hash: String(repeating: "0", count: 40), author: "You", time: .distantPast, summary: ""),
+            card: CommitCard(
+                hash: "e26d646", author: "Ahmed M. Elhalaby", when: "11 hours ago", subject: "agent edits",
+                stat: "1 file changed, 4 insertions(+), 2 deletions(-)"))
+        let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
+        try Snapshot.assertMatches(
+            BlameView(model: model, note: note, leading: 400, isHovered: true).padding(.top, 20),
+            named: "blame-card", size: CGSize(width: 640, height: 200))
+    }
+
     /// ⌘P over the window, filtered to "sbrow".
     func testQuickOpen() throws {
         let model = try Snapshot.model(opening: repo)

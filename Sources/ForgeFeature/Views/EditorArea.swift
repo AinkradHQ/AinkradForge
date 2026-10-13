@@ -214,8 +214,7 @@ private struct DocumentView: View {
             }
             .overlay(alignment: .topLeading) {
                 if let note = model.git.blame, note.path == path, pane == model.activePane {
-                    BlameView(model: model, note: note)
-                        .padding(.leading, document.caretLineEnd + skin.size.s28)
+                    BlameView(model: model, note: note, leading: document.caretLineEnd + skin.size.s28)
                         .padding(.top, document.caretRect.minY)
                 }
             }
