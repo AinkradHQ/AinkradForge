@@ -15,7 +15,7 @@ struct SearchPanel: View {
     var body: some View {
         @Bindable var search = model.search
         VStack(alignment: .leading, spacing: skin.size.s8) {
-            AinkradSearchField(text: $search.query.text, placeholder: "Search", focus: $queryFocused).codeQuery().trailingAccessory {
+            AinkradSearchField(text: $search.query.text, placeholder: "Search", focus: $queryFocused).codeQuery().fieldHeight(skin.size.s28).chamfered().trailingAccessory {
                 AinkradFieldToggle("Aa", isOn: $search.query.matchCase, help: "Match case")
                 AinkradFieldToggle("⌶", isOn: $search.query.wholeWord, help: "Whole word")
                 AinkradFieldToggle("✱", isOn: $search.query.regex, help: "Regular expression")
@@ -34,7 +34,8 @@ struct SearchPanel: View {
             } else {
                 AinkradSearchField(
                     text: $search.replacement, placeholder: search.query.regex ? "$1 for a group" : "Replace", focus: $replaceFocused
-                ).codeQuery().trailingAccessory {
+                // No fixed height: the mockup's replace field grows round its Replace All button (08).
+                ).codeQuery().chamfered().trailingAccessory {
                     AinkradFieldToggle("AB", isOn: $search.preserveCase, help: "Preserve case (isSelected → isActive, IsSelected → IsActive)")
                     AinkradButton(title: "Replace All", style: .primary) { search.confirmingReplaceAll = true }
                         .compact()
@@ -47,8 +48,8 @@ struct SearchPanel: View {
                 .help("Esc hides Replace")
             }
             VStack(spacing: skin.size.s6) {
-                AinkradTextField(text: $search.include, placeholder: "Sources/**, *.swift").leadingLabel("include").compact()
-                AinkradTextField(text: $search.exclude, placeholder: ".build/**, *.min.js").leadingLabel("exclude").compact()
+                AinkradTextField(text: $search.include, placeholder: "Sources/**, *.swift").leadingLabel("include").compact().fieldHeight(skin.size.s24).chamfered()
+                AinkradTextField(text: $search.exclude, placeholder: ".build/**, *.min.js").leadingLabel("exclude").compact().fieldHeight(skin.size.s24).chamfered()
             }
             summary
             results

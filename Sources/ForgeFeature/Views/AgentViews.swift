@@ -286,7 +286,9 @@ struct AskAgentCard: View {
             AinkradTextArea(
                 text: Binding(get: { model.agent.ask?.prompt ?? "" }, set: { model.agent.ask?.prompt = $0 }),
                 placeholder: "What should the agent do?", minHeight: skin.size.s54, maxHeight: skin.size.s120, autoFocus: true,
-                onSubmit: { if canSend { model.sendAsk() } })
+                onSubmit: { if canSend { model.sendAsk() } }
+            )
+            .fontSize(12.5)
             HStack(spacing: skin.size.s8) {
                 Text("Grimoire · this workspace")
                 Spacer(minLength: skin.size.s8)

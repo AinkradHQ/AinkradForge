@@ -40,9 +40,9 @@ struct FileTreeList: View {
                     icon: "doc.plaintext", glyph: "▤", title: "This folder is empty", message: "Create a file, or drop files here to copy them in."
                 ) {
                     AinkradButton(title: model.labelled("New File", .newFile), style: .secondary) { model.beginNew(folder: false, in: "") }
-                        .secondaryAccent().fixedSize()
+                        .secondaryAccent().compact().fixedSize()
                     AinkradButton(title: "New Folder", style: .secondary) { model.beginNew(folder: true, in: "") }
-                        .secondaryAccent().fixedSize()
+                        .secondaryAccent().compact().fixedSize()
                 }
                 .dropDestination(for: URL.self) { urls, _ in drop(urls, into: "") }
             }
@@ -164,9 +164,9 @@ struct ChangesList: View {
                     message: "Changes, gutter marks and blame need git. The rest works as usual."
                 ) {
                     AinkradButton(title: "Initialize Repository", style: .secondary) { model.initializeRepository() }
-                        .secondaryAccent().fixedSize()
+                        .secondaryAccent().compact().fixedSize()
                     AinkradButton(title: "Open in Git Mage", style: .ghost) { model.openGitMage() }
-                        .borderless().secondaryAccent().fixedSize()
+                        .borderless().secondaryAccent().compact().fixedSize()
                 }
             } else if workspace.changes.isEmpty {
                 Text("No changes.")
