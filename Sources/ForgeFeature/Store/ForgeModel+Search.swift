@@ -63,24 +63,40 @@ extension ForgeModel {
 /// their own encoding and line endings. Nothing with unsaved edits is ever overwritten on disk.
 extension ForgeModel {
     /// What replacing in `path` would do, from its open buffer or its file — only the matches still listed
-    /// (none dismissed with ✕), or with `line`, only that line's first — the one its row starts at.
+    /// (none dismissed with ✕), or with `line`, only the first match of that listed row. Matches are found by
+    /// identity in the text as it is now (FD44), so lines that moved since the search can't swap places.
     func replacePlan(for path: String, line: Int? = nil) -> ReplacePlan? {
         guard let workspace, let regex = try? search.query.compile() else { return nil }
         let text: String? = documents[path].flatMap { $0.state == .ready ? $0.storage.string : nil }
             ?? SearchModel.readText(workspace.url(for: path))
         guard let text else { return nil }
-        let dismissed = search.dismissedFiles.contains(path) ? nil : search.dismissedLines[path] ?? []
+        let dismissed = search.dismissedMatches[path] ?? []
+        // ⇄'s row, as it was listed; a row no longer listed has nothing to replace.
+        var target: LineMatch.Key?
+        if let line {
+            guard let listed = search.results.first(where: { $0.path == path })?.matches.first(where: { $0.line == line }) else {
+                return ReplacePlan.make(path: path, original: text, updated: text, count: 0)
+            }
+            target = listed.key
+        }
+        let current = search.dismissedFiles.contains(path) ? [] : TextSearch.matches(in: text, regex: regex)
+        let chosen = Set(current.filter { !dismissed.contains($0.key) && (target == nil || $0.key == target) }.map(\.line))
         return ReplacePlan.make(
             path: path, text: text, regex: regex, replacement: search.replacement, isRegex: search.query.regex,
-            preserveCase: search.preserveCase, limit: line == nil ? nil : 1
-        ) { (line == nil || $0 == line) && dismissed?.contains($0) == false }
+            preserveCase: search.preserveCase, limit: line == nil ? nil : 1, lines: chosen.contains)
     }
 
     /// ⇄ on a result line: replaces that one match, the line's first (an unsaved edit in an open buffer; otherwise written in
     /// the file's own encoding), then searches again so the counts follow.
     @discardableResult
     func replace(in path: String, line: Int) -> Int {
-        guard let plan = replacePlan(for: path, line: line), plan.count > 0, let workspace else { return 0 }
+        guard let plan = replacePlan(for: path, line: line), let workspace else { return 0 }
+        guard plan.count > 0 else {
+            // Never silently (FD45): the line no longer holds the match — the file changed since the search.
+            notice = "Nothing to replace on line \(line) of \((path as NSString).lastPathComponent) — it changed since the search."
+            rerunSearch()
+            return 0
+        }
         guard write(plan.updated, to: path, in: workspace) else { return 0 }
         // The preview's hunks are renumbered by the change: an untick would land on another hunk.
         search.rejected[path] = nil
