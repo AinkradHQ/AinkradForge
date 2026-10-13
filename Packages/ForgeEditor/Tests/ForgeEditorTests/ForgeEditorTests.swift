@@ -36,4 +36,18 @@ struct ForgeEditorTests {
         #expect(EditorSuggestion.filter(all, prefix: "STA").map(\.label) == ["state", "statusText", "lastUpdate"])
         #expect(EditorSuggestion.filter(all, prefix: "xyz").isEmpty)
     }
+
+    /// Completion opens inside a word or after a trigger, never on a number (E0 FD22) or after "(" (E0 FD15).
+    @MainActor @Test func completionStartsOnWordsNotNumbers() {
+        func start(_ text: String) -> Int? {
+            EditorHost.Coordinator.completionStart(in: text as NSString, caret: (text as NSString).length, triggers: ["."])
+        }
+        #expect(start("greet(times: gr") == 13)
+        #expect(start("greeter.") == 8)
+        #expect(start("greet(times: 2") == nil)
+        #expect(start("let x = 42") == nil)
+        #expect(start("0x1F") == nil)
+        #expect(start("int32") == 0)
+        #expect(start("greet(") == nil)
+    }
 }

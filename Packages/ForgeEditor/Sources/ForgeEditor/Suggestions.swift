@@ -126,19 +126,27 @@ extension EditorHost.Coordinator: @preconcurrency CodeSuggestionDelegate {
         hover.dismiss()
         let caret = cursorPosition.range.location
         let text = textView.textView.textStorage.string as NSString
-        var start = min(caret, text.length)
-        while start > 0, isWordUnit(text.character(at: start - 1)) { start -= 1 }
-        // Only inside a word or right after a trigger: whatever path asked, a completion at "(" (a signature
-        // trigger, not ours) crashes sourcekit-lsp after one at "." (E0 FD15).
-        if start == caret, caret > 0, !suggestionTriggers.contains(text.substring(with: NSRange(location: caret - 1, length: 1))) {
-            return nil
-        }
+        guard let start = Self.completionStart(in: text, caret: caret, triggers: suggestionTriggers) else { return nil }
         let found = await suggest(caret)
         offered = found
         wordStart = start
         let items = EditorSuggestion.filter(found, prefix: text.substring(with: NSRange(location: start, length: caret - start)))
         guard !items.isEmpty else { return nil }
         return (CursorPosition(range: NSRange(location: start, length: 0)), items.map { SuggestionEntry(suggestion: $0, colors: colors) })
+    }
+
+    /// Where the word being completed starts, or nil when there is nothing to complete. Only inside a word or
+    /// right after a trigger: whatever path asked, a completion at "(" (a signature trigger, not ours) crashes
+    /// sourcekit-lsp after one at "." (E0 FD15). Never on a number: CodeEdit asks on digits, and Return after
+    /// `times: 2` must break the line, not accept `Int32` (E0 FD22).
+    static func completionStart(in text: NSString, caret: Int, triggers: Set<String>) -> Int? {
+        var start = min(caret, text.length)
+        while start > 0, isWordUnit(text.character(at: start - 1)) { start -= 1 }
+        if start == caret, caret > 0, !triggers.contains(text.substring(with: NSRange(location: caret - 1, length: 1))) {
+            return nil
+        }
+        if start < caret, UnicodeScalar(text.character(at: start)).map(CharacterSet.decimalDigits.contains) == true { return nil }
+        return start
     }
 
     /// Typing narrows the list; leaving the word (a space, a bracket, moving back past its start) closes it.
