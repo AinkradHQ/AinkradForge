@@ -37,7 +37,8 @@ final class SearchModel {
     /// the selected row, with its ⇄ showing (mockup 08).
     var previewPath: String?
     var previewLine: Int?
-    /// Per file, the preview hunks the user unticked: Replace leaves those lines as they are.
+    /// Per file, the preview hunks the user unticked: Replace leaves those lines as they are. Hunk ids are positions,
+    /// so a new query, new globs or a dismissed line (which re-cut the hunks) forget them.
     var rejected: [String: Set<Int>] = [:]
     /// Replace All was asked for; the window confirms first.
     var confirmingReplaceAll = false
@@ -96,6 +97,7 @@ final class SearchModel {
     /// ✕ on a result: one line (`line`) or the whole file leaves the list — and Replace's scope.
     func dismiss(_ path: String, line: Int? = nil) {
         guard let index = results.firstIndex(where: { $0.path == path }) else { return }
+        rejected[path] = nil
         if let line {
             dismissedLines[path, default: []].insert(line)
             results[index].matches.removeAll { $0.line == line }
@@ -114,6 +116,7 @@ final class SearchModel {
     private func forgetDismissed() {
         if !dismissedLines.isEmpty { dismissedLines = [:] }
         if !dismissedFiles.isEmpty { dismissedFiles = [] }
+        if !rejected.isEmpty { rejected = [:] }
     }
 
     private func search(regex: NSRegularExpression, root: URL, files: [String], buffers: [String: String]) async {
