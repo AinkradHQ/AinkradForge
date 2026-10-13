@@ -97,7 +97,7 @@ private struct PaneView: View {
                     .animation(reduceMotion ? nil : skin.animation(skin.motion.present), value: model.serverBar(for: path))
                 } else if model.workspace?.files.isEmpty == true {
                     // Nothing to pick in an empty folder (E1D1 FD32): the ways in instead of a blank pane (E6).
-                    AinkradEmptyState(icon: "hammer", title: "No file open", message: "⌘N new file · ⇧⌘P commands · ⌘O open folder")
+                    EmptyEditorHints()
                 } else {
                     AinkradEmptyState(
                         icon: "doc.text", title: "No file open",
