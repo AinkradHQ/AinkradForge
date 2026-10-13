@@ -86,6 +86,7 @@ extension ForgeModel {
         palette = nil
         guard line > 0, tabs.active != nil else { return }
         pendingLine = line
+        pendingFocus = true
     }
 
     private func cycleTab(by step: Int) {

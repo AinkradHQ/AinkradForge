@@ -156,6 +156,7 @@ private struct DocumentView: View {
             CodeEditor(
                 document: document, palette: palette, options: model.editorOptions, goToLine: goToLine,
                 onGoToLineHandled: { model.pendingLine = nil },
+                focus: model.activePane == pane && model.pendingFocus, onFocusHandled: { model.pendingFocus = false },
                 // The caret moved here — this pane is the one being worked in.
                 onCaret: { model.focus(pane: pane) }, marks: marks + agentMarks.wash,
                 definitions: { [model, path] offset in await model.definitions(path: path, offset: offset) },

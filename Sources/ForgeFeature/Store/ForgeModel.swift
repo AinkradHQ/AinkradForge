@@ -23,6 +23,8 @@ final class ForgeModel {
     var palette: String?
     /// A line for the active editor to jump to, consumed by the editor.
     var pendingLine: Int?
+    /// The active editor takes keyboard focus (a file opened from the palette), consumed by the editor.
+    var pendingFocus = false
     /// Newest first, for ⌘P.
     private(set) var recentFiles: [String] = []
     /// Shown as a toast: a failed save, or an app that would not open.
@@ -88,10 +90,6 @@ final class ForgeModel {
         case open(URL)
         case close
     }
-
-    /// Every open path once, across panes.
-    var openPaths: [String] { panes.flatMap(\.paths).reduce(into: []) { if !$0.contains($1) { $0.append($1) } } }
-    var unsavedPaths: [String] { openPaths.filter { documents[$0]?.isDirty == true } }
 
     init(store: ForgeStore, apps: PluginAppLauncher? = nil) {
         self.store = store

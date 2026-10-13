@@ -173,3 +173,21 @@ extension EditorHost.Coordinator: @preconcurrency CodeSuggestionDelegate {
 
     func completionWindowDidClose() { offered = [] }
 }
+
+extension EditorHost.Coordinator {
+    /// After a signature trigger was typed, or whenever the caret moves while the hint shows (the server then
+    /// moves the active parameter along, or answers that the caret has left the call).
+    func trackSignature(_ controller: TextViewController, _ positions: [CursorPosition]) {
+        guard !signatureTriggers.isEmpty || signatureShown else { return }
+        guard positions.count == 1, let caret = positions.first?.range, caret.length == 0 else {
+            if signatureShown { onSignature(nil) }
+            return
+        }
+        let text = controller.textView.textStorage.string as NSString
+        let typed = caret.location > 0 && caret.location <= text.length
+            ? text.substring(with: NSRange(location: caret.location - 1, length: 1)) : ""
+        guard signatureShown || signatureTriggers.contains(typed) else { return }
+        guard let frame = caretFrame(controller, caret.location) else { return }
+        onSignature((caret.location, frame))
+    }
+}

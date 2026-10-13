@@ -3,6 +3,10 @@ import Foundation
 /// What the window saves: the workspace's layout, and unsaved buffers across a quit (the host's quit prompt
 /// cannot see them, so Forge keeps them instead).
 extension ForgeModel {
+    /// Every open path once, across panes.
+    var openPaths: [String] { panes.flatMap(\.paths).reduce(into: []) { if !$0.contains($1) { $0.append($1) } } }
+    var unsavedPaths: [String] { openPaths.filter { documents[$0]?.isDirty == true } }
+
     func persist() {
         guard let key = workspace?.root.path(percentEncoded: false) else { return }
         let state = ForgeDocument.WorkspaceState(
