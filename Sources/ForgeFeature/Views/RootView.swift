@@ -7,13 +7,20 @@ struct RootView: View {
     let theme: HostTheme
     /// What another app asked Forge to open (`host.apps.takePendingLaunch()`), read once at first appearance.
     var takeLaunch: () -> String? = { nil }
+    @Environment(\.ainkradSkin) private var skin
 
     var body: some View {
         Group {
             if let workspace = model.workspace {
-                HStack(spacing: 0) {
-                    Sidebar(model: model, workspace: workspace)
-                    EditorArea(model: model, workspace: workspace, palette: theme.terminalPalette)
+                GeometryReader { window in
+                    HStack(spacing: 0) {
+                        // 300 pt, giving way in a narrow window down to 280 (the tab picker's width) so the editor
+                        // keeps its room (E1D1 FD28).
+                        Sidebar(
+                            model: model, workspace: workspace,
+                            width: min(skin.size.s300, max(skin.size.s280, window.size.width * 0.3)))
+                        EditorArea(model: model, workspace: workspace, palette: theme.terminalPalette)
+                    }
                 }
             } else {
                 WelcomeView(model: model)

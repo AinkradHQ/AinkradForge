@@ -9,17 +9,33 @@ struct StatusRow: View {
     @Environment(\.ainkradSkin) private var skin
 
     var body: some View {
+        // Too narrow for everything: the file's line endings, encoding and language go first, so the counts,
+        // branch and server keep their room (E1D1 FD28).
+        ViewThatFits(in: .horizontal) {
+            row(showsFormat: true)
+            row(showsFormat: false)
+        }
+        .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
+        .foregroundStyle(skin.color(skin.text.muted))
+        .lineLimit(1)
+        .padding(.horizontal, skin.size.s18)
+        .padding(.vertical, skin.size.s8)
+    }
+
+    private func row(showsFormat: Bool) -> some View {
         HStack(spacing: skin.size.s14) {
             if let branch = workspace.branch {
                 Label(branch, systemImage: "arrow.triangle.branch")
             }
-            IssueCounts(model: model)
+            IssueCounts(model: model).fixedSize()
             ServerChip(model: model)
             OutsideChangesButton(model: model)
             if workspace.isLoading { AinkradSpinner() }
             Spacer(minLength: skin.size.s8)
             if let document = model.activeDocument, document.state == .ready {
                 Text("Ln \(document.cursor.line), Col \(document.cursor.column)")
+            }
+            if showsFormat, let document = model.activeDocument, document.state == .ready {
                 StatusMenu(title: document.format.lineEnding.rawValue, items: TextFormat.LineEnding.allCases.map { ending in
                     AinkradMenuItem(title: "Convert to \(ending.rawValue)", systemName: ending == document.format.lineEnding ? "checkmark" : nil) {
                         document.convertLineEndings(to: ending)
@@ -33,11 +49,6 @@ struct StatusRow: View {
                 Text(document.language.name)
             }
         }
-        .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
-        .foregroundStyle(skin.color(skin.text.muted))
-        .lineLimit(1)
-        .padding(.horizontal, skin.size.s18)
-        .padding(.vertical, skin.size.s8)
     }
 }
 

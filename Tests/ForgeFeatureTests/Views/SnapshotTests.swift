@@ -70,6 +70,18 @@ final class SnapshotTests: XCTestCase {
         try Snapshot.assertMatches(model, named: "empty-folder")
     }
 
+    /// A narrow window (760 pt): the sidebar gives way and the status bar degrades, nothing clips (E1D1 FD28).
+    func testNarrowWindow() throws {
+        let model = try Snapshot.model(opening: repo)
+        Snapshot.expandSidebar(model)
+        model.open(file: Self.sidebarRow, pinned: true)
+        try SweepSupport.waitUntilLoaded(model)
+        // CESE's parked find panel, as in `testSearch`.
+        try Snapshot.assertMatches(
+            model, named: "narrow", size: CGSize(width: 760, height: 560),
+            masking: [CGRect(x: 280, y: 70, width: 480, height: 28)])
+    }
+
     /// ⌘P over the window, filtered to "sbrow".
     func testQuickOpen() throws {
         let model = try Snapshot.model(opening: repo)
