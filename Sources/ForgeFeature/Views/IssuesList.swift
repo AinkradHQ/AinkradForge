@@ -87,6 +87,13 @@ private struct IssueRow: View {
     @Environment(\.ainkradStatusColors) private var status
 
     var body: some View {
+        // A plain button, so Full Keyboard Access can reach the issue (E1D1 FD34).
+        Button(action: open) { label }  // design-lint: allow raw-control keyboard-reachable row (kit has no row button)
+            .buttonStyle(.plain)
+            .help(issue.source.map { "\(issue.message) — \($0)" } ?? issue.message)
+    }
+
+    private var label: some View {
         HStack(alignment: .firstTextBaseline, spacing: skin.size.s8) {
             Image(systemName: IssueStyle.symbol(issue.severity))
                 .font(skin.font(AinkradFontToken(sizeKey: "t11")))
@@ -106,8 +113,6 @@ private struct IssueRow: View {
         .ainkradRowBackground(isSelected: false, isHovered: isHovered)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
-        .onTapGesture(perform: open)
-        .help(issue.source.map { "\(issue.message) — \($0)" } ?? issue.message)
     }
 }
 
