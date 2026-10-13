@@ -156,10 +156,18 @@ enum Snapshot {
     /// Draws `model`'s window and compares it with `Goldens/<name>.png` (or records it).
     /// `masking` blanks rects (top-left origin, points) in both images first — for text that reads the clock.
     static func assertMatches(
-        _ model: ForgeModel, named name: String, masking masks: [CGRect] = [], file: StaticString = #filePath,
-        line: UInt = #line
+        _ model: ForgeModel, named name: String, size: CGSize = size, masking masks: [CGRect] = [],
+        file: StaticString = #filePath, line: UInt = #line
     ) throws {
-        let image = try XCTUnwrap(render(model), "the window did not draw", file: file, line: line)
+        try assertMatches(RootView(model: model, theme: hostTheme()), named: name, size: size, masking: masks, file: file, line: line)
+    }
+
+    /// `assertMatches` for any view, drawn alone on the window's background.
+    static func assertMatches(
+        _ view: some View, named name: String, size: CGSize = size, masking masks: [CGRect] = [],
+        file: StaticString = #filePath, line: UInt = #line
+    ) throws {
+        let image = try XCTUnwrap(render(view, size: size), "the window did not draw", file: file, line: line)
         let golden = goldens.appendingPathComponent("\(name).png")
         if isRecording {
             try FileManager.default.createDirectory(at: goldens, withIntermediateDirectories: true)
@@ -184,16 +192,10 @@ enum Snapshot {
 
     /// The window, once four draws a quarter second apart agree: some layers land late (the fold ribbon after
     /// its ranges are computed, highlights after a parse), and two quick draws can both precede them.
-    static func render(_ model: ForgeModel) -> CGImage? {
+    static func render(_ view: some View, size: CGSize = size) -> CGImage? {
         let skin = AinkradSkin.standard
-        let theme = HostTheme(HostThemeTokens(skin: skin))
-        theme.updateStatusColors(
-            HostStatusColors(
-                success: skin.color(skin.palette.success), warning: skin.color(skin.palette.warning),
-                danger: skin.color(skin.palette.danger)))
-        theme.updateTerminalPalette(HostTerminalPalette(skin.terminal))
         let host = NSHostingView(
-            rootView: RootView(model: model, theme: theme)
+            rootView: view
                 .frame(width: size.width, height: size.height)
                 .background(skin.color(skin.palette.background))
                 .ainkradSkin(skin)
@@ -211,7 +213,7 @@ enum Snapshot {
         SweepSupport.spin(until: 0.5) { false }
         while Date() < deadline {
             host.layoutSubtreeIfNeeded()
-            guard let shot = draw(host) else { return nil }
+            guard let shot = draw(host, size: size) else { return nil }
             unchanged = previous.map { difference(shot, $0) == 0 } == true ? unchanged + 1 : 0
             if unchanged == 3 { return shot }
             previous = shot
@@ -220,7 +222,19 @@ enum Snapshot {
         return previous
     }
 
-    private static func draw(_ view: NSView) -> CGImage? {
+    /// The Neon host theme `RootView` takes.
+    static func hostTheme() -> HostTheme {
+        let skin = AinkradSkin.standard
+        let theme = HostTheme(HostThemeTokens(skin: skin))
+        theme.updateStatusColors(
+            HostStatusColors(
+                success: skin.color(skin.palette.success), warning: skin.color(skin.palette.warning),
+                danger: skin.color(skin.palette.danger)))
+        theme.updateTerminalPalette(HostTerminalPalette(skin.terminal))
+        return theme
+    }
+
+    private static func draw(_ view: NSView, size: CGSize) -> CGImage? {
         guard
             let rep = NSBitmapImageRep(
                 bitmapDataPlanes: nil, pixelsWide: Int(size.width), pixelsHigh: Int(size.height), bitsPerSample: 8,
@@ -237,10 +251,8 @@ enum Snapshot {
         guard a.width == b.width, a.height == b.height else { return 1 }
         let lhs = pixels(a)
         let rhs = pixels(b)
-        let scale = Double(a.width) / size.width
-        let masked = masks.map {
-            CGRect(x: $0.minX * scale, y: $0.minY * scale, width: $0.width * scale, height: $0.height * scale)
-        }
+        // Shots are drawn at 1×: a point is a pixel.
+        let masked = masks
         var changed = 0
         for index in stride(from: 0, to: lhs.count, by: 4) {
             let pixel = index / 4
