@@ -76,6 +76,43 @@ struct HubTests {
         hub.end()
     }
 
+    /// Quick open's `@` and `#`: the file's outline, and the workspace's symbols from sourcekit's index (a package,
+    /// saved, so the index has it); a file no server covers has no outline at all.
+    @Test func sourcekitListsDocumentAndWorkspaceSymbols() async throws {
+        guard ShellEnvironment.locate("sourcekit-lsp") != nil else { return }
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("forge-lsp-\(UUID().uuidString.prefix(8))")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let text = "struct SidebarRow {\n    var title = \"\"\n    func body() {}\n}\n"
+        try text.write(to: root.appending(path: "main.swift"), atomically: true, encoding: .utf8)
+        try "// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name: \"P\", targets: [.executableTarget(name: \"P\", path: \".\", sources: [\"main.swift\"])])\n"
+            .write(to: root.appending(path: "Package.swift"), atomically: true, encoding: .utf8)
+
+        let hub = LanguageHub()
+        hub.begin(root: root)
+        hub.opened(path: "main.swift", text: text)
+        var outline: [SymbolEntry] = []
+        for _ in 0..<100 where outline.isEmpty {
+            outline = await hub.documentSymbols(path: "main.swift") ?? []
+            if outline.isEmpty { try await Task.sleep(for: .milliseconds(100)) }
+        }
+        #expect(outline.map(\.name) == ["SidebarRow", "title", "body()"])
+        #expect(outline.first?.kind == "struct" && outline.first?.line == 0)
+        #expect(await hub.documentSymbols(path: "README.md") == nil)
+
+        hub.saved(path: "main.swift")
+        var found: [SymbolEntry] = []
+        var unsupported: [String] = []
+        for _ in 0..<40 where !found.contains(where: { $0.name == "SidebarRow" }) {
+            (found, unsupported) = await hub.workspaceSymbols(query: "SidebarRow")
+            if !found.contains(where: { $0.name == "SidebarRow" }) { try await Task.sleep(for: .seconds(1)) }
+        }
+        #expect(unsupported.isEmpty)
+        let row = try #require(found.first { $0.name == "SidebarRow" }, "\(found.map(\.name))")
+        #expect(row.path == "main.swift" && row.line == 0)
+        hub.end()
+    }
+
     /// Completion and signature help at the caret, the latest edit flushed first.
     @Test func sourcekitCompletesAndHelpsWithSignatures() async throws {
         guard ShellEnvironment.locate("sourcekit-lsp") != nil else { return }

@@ -8,6 +8,8 @@ struct PaletteItem: Hashable, Identifiable {
         case command(ForgeCommand)
         case line(Int)
         case task(WorkspaceTask)
+        /// A symbol's file and 1-based line.
+        case symbol(path: String, line: Int)
     }
 
     let id: String
@@ -25,7 +27,7 @@ struct PaletteItem: Hashable, Identifiable {
 }
 
 /// ⌘P / ⌘⇧P / ⌃G — one panel; the first character picks the mode, as in VS Code:
-/// nothing = files, `>` = commands, `:` = go to line.
+/// nothing = files, `>` = commands, `:` = go to line, `@` = this file's symbols, `#` = the workspace's, `!` = tasks.
 struct Palette: View {
     let model: ForgeModel
     let start: String
@@ -49,6 +51,9 @@ struct Palette: View {
         }
         // Through the responder chain (the field has focus), not a key-equivalent claim on Esc.
         .onExitCommand { model.palette = nil }
+        .onChange(of: model.paletteSymbols) { _, _ in highlight = items.isEmpty ? nil : 0 }
+        .task(id: symbolTask) { await model.loadPaletteSymbols(for: prefix + query) }
+        .background { openKeys }
     }
 
     private var items: [PaletteItem] {
@@ -59,7 +64,7 @@ struct Palette: View {
     private var panel: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: skin.size.s10) {
-                Text(prefix == ">" ? "›" : prefix == ":" ? ":" : prefix == "!" ? "▶" : "⌕")
+                Text(prefix == ">" ? "›" : prefix == "!" ? "▶" : prefix.isEmpty ? "⌕" : prefix)
                     .foregroundStyle(skin.color(skin.text.faint))
                 // A bare field (the mockup's `.q`), not the kit's boxed search field.
                 TextField(placeholder, text: $query)  // design-lint: allow raw-control the palette's bare query line
@@ -67,7 +72,7 @@ struct Palette: View {
                     .foregroundStyle(theme.foreground)
                     .tint(theme.accentSecondary)
                     .focused($focused)
-                    .onSubmit(activateHighlighted)
+                    .onSubmit { activateHighlighted() }
                     // ⌫ on an empty field leaves command / line mode for files, as in VS Code.
                     .onKeyPress(.delete) {
                         guard query.isEmpty, !prefix.isEmpty else { return .ignored }
@@ -117,12 +122,31 @@ struct Palette: View {
             highlight = items.isEmpty ? nil : 0
         }
         .onChange(of: query) { _, typed in
-            // Typing ">" or ":" first switches mode.
-            if prefix.isEmpty, let first = typed.first, first == ">" || first == ":" || first == "!" { (prefix, query) = Self.split(typed) }
+            // Typing a mode character first switches mode.
+            if prefix.isEmpty, let first = typed.first, Self.modes.contains(first) { (prefix, query) = Self.split(typed) }
             // Re-ranking moves rows: a highlight left at row 7 would point at a different file.
             highlight = items.isEmpty ? nil : 0
         }
         .onChange(of: prefix) { _, _ in highlight = items.isEmpty ? nil : 0 }
+    }
+
+    /// Symbols are fetched for this: the file's once per mode, the workspace's per query.
+    private var symbolTask: String { prefix == "#" ? prefix + query : prefix + (model.tabs.active ?? "") }
+
+    /// ⌘↵ opens the highlighted file or symbol in the split, ⌥↵ in a new tab group — key-equivalent claims, so
+    /// they reach the palette while its field has the keyboard.
+    @ViewBuilder private var openKeys: some View {
+        if prefix.isEmpty || prefix == "@" || prefix == "#" {
+            ZStack {
+                Button("Open to the Side") { activateHighlighted(in: .split) }  // design-lint: allow raw-control key-equivalent claim
+                    .keyboardShortcut(.return, modifiers: .command)
+                Button("Open in a New Tab Group") { activateHighlighted(in: .newGroup) }  // design-lint: allow raw-control key-equivalent claim
+                    .keyboardShortcut(.return, modifiers: .option)
+            }
+            .opacity(0)
+            .frame(width: 0, height: 0)
+            .accessibilityHidden(true)
+        }
     }
 
     /// The chord that opens this mode, as the query line's keycap.
@@ -130,7 +154,7 @@ struct Palette: View {
         switch prefix {
         case ">": ForgeCommand.commandPalette.shortcut?.display
         case ":": ForgeCommand.goToLine.shortcut?.display
-        case "!": nil
+        case "!", "@", "#": nil
         default: ForgeCommand.quickOpen.shortcut?.display
         }
     }
@@ -155,7 +179,14 @@ struct Palette: View {
     }
 
     private var placeholder: String {
-        prefix == ">" ? "Run a command…" : prefix == ":" ? "Type a line number…" : prefix == "!" ? "Run a task…" : "Go to file…"
+        switch prefix {
+        case ">": "Run a command…"
+        case ":": "Type a line number…"
+        case "!": "Run a task…"
+        case "@": "Go to a symbol in this file…"
+        case "#": "Go to a symbol in the workspace…"
+        default: "Go to file…"
+        }
     }
 
     /// `.foot`: what ↵ does on the left, the other modes on the right — only what Forge does today.
@@ -164,37 +195,39 @@ struct Palette: View {
         case ":": (["↵ go to the line"], "⌫ files")
         case ">": (["↵ run"], "⌫ files")
         case "!": (["↵ run the task"], "⌫ files")
-        default: (["↵ open"], ": line · > command · ! task")
+        case "@", "#": (["↵ go to the symbol", "⌘↵ open to the side"], "⌫ files")
+        default: (["↵ open", "⌘↵ open to the side", "⌥↵ open in a new tab group"], ": line · @ symbol · > command")
         }
     }
 
+    /// The characters that pick a mode when typed first.
+    static let modes: Set<Character> = [">", ":", "!", "@", "#"]
+
     /// ">open" → (">", "open"); "side" → ("", "side").
     static func split(_ text: String) -> (prefix: String, query: String) {
-        guard let first = text.first, first == ">" || first == ":" || first == "!" else { return ("", text) }
+        guard let first = text.first, modes.contains(first) else { return ("", text) }
         return (String(first), String(text.dropFirst()))
     }
 
     private var empty: some View {
         AinkradEmptyState(
             icon: "magnifyingglass", title: "No matches",
-            message: model.workspace == nil && prefix != ">"
+            message: (prefix == "@" || prefix == "#") && model.paletteSymbols.note != nil ? model.paletteSymbols.note ?? ""
+                : model.workspace == nil && prefix != ">"
                 ? "Open a folder first, or type > for commands."
                 : prefix.isEmpty && query.isEmpty ? "This folder has no files yet — type > for commands."
                 : "Nothing matches “\(prefix + query)”.")
     }
 
-    private func activateHighlighted() {
+    private func activateHighlighted(in target: PaletteTarget = .here) {
         guard let index = highlight, items.indices.contains(index) else { return }
-        activate(items[index])
+        activate(items[index], in: target)
     }
 
-    private func activate(_ item: PaletteItem) {
+    private func activate(_ item: PaletteItem, in target: PaletteTarget = .here) {
         switch item.payload {
-        case .file(let path):
-            model.palette = nil
-            model.open(file: path, pinned: true)
-            // The field that had focus leaves with the palette: hand it to the editor (E1D1 FD8).
-            model.pendingFocus = true
+        case .file(let path): model.openFromPalette(path, in: target)
+        case .symbol(let path, let line): model.openFromPalette(path, line: line, in: target)
         case .command(let command):
             model.noteCommandUsed(command)
             model.run(command)
@@ -237,6 +270,8 @@ struct Palette: View {
                         payload: .task(task))
                 }
         }
+        if query.hasPrefix("@") { return symbolItems(String(query.dropFirst()), model: model) }
+        if query.hasPrefix("#") { return symbolItems(String(query.dropFirst()), model: model, filter: false) }
         if query.hasPrefix(":") {
             guard let line = Int(query.dropFirst().trimmingCharacters(in: .whitespaces)), line > 0,
                 model.tabs.active != nil
@@ -248,6 +283,9 @@ struct Palette: View {
         let recent = Set(model.recentFiles)
         let ranked = QuickOpen.rank(query, files: workspace.files, recent: model.recentFiles)
         let ordered = ranked.filter { recent.contains($0.path) } + ranked.filter { !recent.contains($0.path) }
+        // Then a few of this file's symbols (the mockup's "Symbols · type @ to search only symbols").
+        let symbols = query.trimmingCharacters(in: .whitespaces).isEmpty
+            ? [] : symbolItems(query, model: model, section: "Symbols · type @ to search only symbols", limit: 3)
         return ordered.map { match in
             let name = (match.path as NSString).lastPathComponent
             let folder = (match.path as NSString).deletingLastPathComponent
@@ -257,6 +295,6 @@ struct Palette: View {
                 detail: folder.isEmpty ? nil : folder, payload: .file(match.path),
                 section: recent.contains(match.path) ? "Recently opened" : "Files",
                 matched: QuickOpen.matchedOffsets(query, in: name))
-        }
+        } + symbols
     }
 }

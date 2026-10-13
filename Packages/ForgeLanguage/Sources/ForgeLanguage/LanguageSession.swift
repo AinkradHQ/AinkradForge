@@ -218,6 +218,21 @@ actor LanguageSession {
         }
     }
 
+    /// `workspace/symbol`: nil when the server does not offer it (a `WorkspaceSymbol` without a range is dropped).
+    func workspaceSymbols(query: String) async -> [SymbolInformation]? {
+        guard let server, let provider = capabilities?.workspaceSymbolProvider else { return nil }
+        if case .optionA(false) = provider { return nil }
+        switch (try? await server.workspaceSymbol(WorkspaceSymbolParams(query: query))) ?? nil {
+        case .optionA(let found): return found
+        case .optionB(let found):
+            return found.compactMap { symbol in
+                guard case .optionA(let location)? = symbol.location else { return nil }
+                return SymbolInformation(name: symbol.name, kind: symbol.kind, location: location, containerName: symbol.containerName)
+            }
+        case nil: return []
+        }
+    }
+
     func references(uri: String, line: Int, character: Int) async -> [Location] {
         guard let server, documents[uri] != nil else { return [] }
         let params = ReferenceParams(
