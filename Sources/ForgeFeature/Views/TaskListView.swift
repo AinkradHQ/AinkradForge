@@ -74,14 +74,21 @@ private struct TaskRow: View {
                 .font(skin.font(AinkradFontToken(size: 11.5, weight: "medium", mono: "family")))
                 .foregroundStyle(theme.foreground)
                 .lineLimit(1)
-                .frame(width: skin.size.s150, alignment: .leading)
+                // Up to 150 pt: in a narrow drawer it gives way too, so the row never outgrows its column (FD50).
+                .frame(maxWidth: skin.size.s150, alignment: .leading)
+                // Ahead of the command, so the names keep one column while the commands truncate.
+                .layoutPriority(1)
             Text(task.shows)
                 .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "family")))
                 .foregroundStyle(skin.color(skin.text.faint))
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            // Never wraps (FD50): the command truncates instead.
             outcome
+                .lineLimit(1)
+                .fixedSize()
+                .layoutPriority(2)
         }
         .padding(.vertical, skin.size.s4)
         .padding(.horizontal, skin.size.s6)
