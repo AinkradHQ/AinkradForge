@@ -13,8 +13,9 @@ enum QuickOpen {
         let needle = Array(query.lowercased().filter { !$0.isWhitespace })
         let recency = Dictionary(recent.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
         guard !needle.isEmpty else {
-            // Nothing typed: recent files, newest first.
-            return recent.filter(Set(files).contains).prefix(limit).enumerated()
+            // Nothing typed: recent files, newest first; with none yet, the workspace's files (E1D1 FD1).
+            let recents = recent.filter(Set(files).contains)
+            return (recents.isEmpty ? files : recents).prefix(limit).enumerated()
                 .map { Match(path: $1, score: -$0) }
         }
         var matches: [Match] = []

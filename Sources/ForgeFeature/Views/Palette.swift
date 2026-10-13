@@ -134,7 +134,9 @@ struct Palette: View {
         AinkradEmptyState(
             icon: "magnifyingglass", title: "No matches",
             message: model.workspace == nil && prefix != ">"
-                ? "Open a folder first, or type > for commands." : "Nothing matches “\(prefix + query)”.")
+                ? "Open a folder first, or type > for commands."
+                : prefix.isEmpty && query.isEmpty ? "This folder has no files yet — type > for commands."
+                : "Nothing matches “\(prefix + query)”.")
     }
 
     private func activateHighlighted() {
