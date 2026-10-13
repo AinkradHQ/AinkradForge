@@ -40,6 +40,10 @@ public final class LanguageHub {
     public private(set) var issues: [String: [Issue]] = [:]
     /// Server id → state, for every server an open file has asked for.
     public private(set) var statuses: [String: ServerStatus] = [:]
+    /// Server id → what it is busy with ("Indexing 412 / 1280"), while it reports progress.
+    public private(set) var progress: [String: String] = [:]
+    /// Server id → its log, newest last (the last 500 lines): start, stop, and the server's own messages.
+    @ObservationIgnored public private(set) var logs: [String: [String]] = [:]
     /// Server id → the characters after which it offers completions / signature help.
     public private(set) var completionTriggers: [String: Set<String>] = [:]
     public private(set) var signatureTriggers: [String: Set<String>] = [:]
@@ -79,6 +83,8 @@ public final class LanguageHub {
         pendingTexts = [:]
         issues = [:]
         statuses = [:]
+        progress = [:]
+        logs = [:]
         completionTriggers = [:]
         signatureTriggers = [:]
         diagnostics = [:]
@@ -301,6 +307,7 @@ public final class LanguageHub {
         if let session = sessions.removeValue(forKey: specID) { Task { await session.shutdown() } }
         chains[specID] = nil
         statuses[specID] = nil
+        progress[specID] = nil
         for (path, list) in issues where LanguageRegistry.server(for: path)?.0.id == specID && !list.isEmpty { issues[path] = nil }
     }
 
@@ -350,6 +357,11 @@ public final class LanguageHub {
             }
             issues[path] = mapped.isEmpty ? nil : mapped.sorted { ($0.severity, $0.start.line) < ($1.severity, $1.start.line) }
             self.diagnostics[path] = diagnostics.isEmpty ? nil : diagnostics
+        case .progress(let line):
+            progress[spec.id] = line
+        case .log(let line):
+            let stamp = Date().formatted(date: .omitted, time: .standard)
+            logs[spec.id] = (logs[spec.id] ?? []).suffix(499) + ["\(stamp)  \(line)"]
         case .applyEdit(let edit, let reply):
             let applied = onApplyEdit?(relative(edit.textChanges)) ?? false
             Task { await reply(applied) }

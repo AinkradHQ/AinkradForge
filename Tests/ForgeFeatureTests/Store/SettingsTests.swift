@@ -21,7 +21,7 @@ struct SettingsTests {
         let fields = page.groups.flatMap(\.fields)
         // Six editor settings, and a path for each language server.
         #expect(page.groups.map(\.title) == ["Editor", "Language servers"])
-        #expect(page.groups[0].fields.count == 6 && page.groups[1].fields.count == 5)
+        #expect(page.groups[0].fields.count == 6 && page.groups[1].fields.count == 9)
         guard case .toggle(let wrap) = try #require(fields.first { $0.label == "Wrap lines" }).kind else {
             Issue.record("Wrap lines is not a toggle"); return
         }

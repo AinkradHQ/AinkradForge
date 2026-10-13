@@ -184,9 +184,12 @@ enum Snapshot {
     static let goldens = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Goldens")
     static var isRecording: Bool { ProcessInfo.processInfo.environment["FORGE_GOLDEN_RECORD"] == "1" }
 
-    /// `SweepSupport.model(opening:)`, with every language server pointed at nothing first.
+    /// `SweepSupport.model(opening:)`, with every language server pointed at nothing first — and their "not
+    /// installed" hint bars turned off, so the editor sits where these screens expect it (`StateSnapshotTests`
+    /// shoots the bars).
     static func model(opening repo: URL) throws -> ForgeModel {
         let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
+        model.store.update { $0.quietLanguages = LanguageRegistry.servers.map(\.language) }
         var settings = EditorSettings()
         settings.serverPaths = Dictionary(
             uniqueKeysWithValues: LanguageRegistry.servers.map { ($0.id, "/nonexistent/forge-snapshot") })

@@ -26,6 +26,8 @@ struct StatusRow: View {
         HStack(spacing: skin.size.s14) {
             if let branch = workspace.branch {
                 Label(branch, systemImage: "arrow.triangle.branch")
+            } else if !workspace.isLoading {
+                Text("no git").foregroundStyle(skin.color(skin.text.faint)).help("Not a git repository")
             }
             IssueCounts(model: model).fixedSize()
             ServerChip(model: model)
@@ -70,18 +72,19 @@ private struct StatusMenu: View {
 }
 
 /// ⊗ errors ⚠ warnings — opens the Issues tab. Only once a server runs: "0 0" with none would read as clean
-/// (E1D1 FD33).
+/// (E1D1 FD33); "– –" (unknown) while the active file's server starts (E6).
 private struct IssueCounts: View {
     let model: ForgeModel
     @Environment(\.ainkradStatusColors) private var status
     @Environment(\.ainkradSkin) private var skin
 
     var body: some View {
-        if model.languages.statuses.values.contains(.ready) {
+        let known = model.languages.statuses.values.contains(.ready)
+        if known || activeServerStarting {
             HStack(spacing: skin.size.s6) {
-                Label("\(model.languages.errorCount)", systemImage: "xmark.octagon")
+                Label(known ? "\(model.languages.errorCount)" : "–", systemImage: "xmark.octagon")
                     .foregroundStyle(model.languages.errorCount > 0 ? status.danger : skin.color(skin.text.muted))
-                Label("\(model.languages.warningCount)", systemImage: "exclamationmark.triangle")
+                Label(known ? "\(model.languages.warningCount)" : "–", systemImage: "exclamationmark.triangle")
                     .foregroundStyle(model.languages.warningCount > 0 ? status.warning : skin.color(skin.text.muted))
             }
             .contentShape(Rectangle())
@@ -89,10 +92,16 @@ private struct IssueCounts: View {
             .help("Show issues")
         }
     }
+
+    private var activeServerStarting: Bool {
+        guard let path = model.tabs.active, let (spec, _) = LanguageRegistry.server(for: path) else { return false }
+        return model.languages.statuses[spec.id] == .starting
+    }
 }
 
 /// The active file's language server and its state — or that it has none, or the server is missing (E1D1 FD33);
-/// the menu lists every server the workspace uses.
+/// the menu lists every server the workspace uses. E6: a hollow ○ for no server, a spinner and the server's
+/// progress while it starts or indexes, red with an inline Restart once it has stopped.
 private struct ServerChip: View {
     let model: ForgeModel
     @Environment(\.ainkradSkin) private var skin
@@ -102,19 +111,56 @@ private struct ServerChip: View {
     var body: some View {
         if let path = model.tabs.active, let (spec, _) = LanguageRegistry.server(for: path) {
             let state = model.languages.statuses[spec.id] ?? .notRunning
-            AinkradMenuButton(items: items) {
-                HStack(spacing: skin.size.s4) {
-                    Circle().fill(color(state)).frame(width: skin.size.s6, height: skin.size.s6)
-                    Text(model.activeServerGap == nil ? spec.command : "\(spec.command) \(state == .notInstalled ? "not installed" : "failed")")
+            let progress = model.languages.progress[spec.id]
+            HStack(spacing: skin.size.s6) {
+                AinkradMenuButton(items: items(spec)) {
+                    HStack(spacing: skin.size.s4) {
+                        if state == .starting || (state == .ready && progress != nil) {
+                            AinkradSpinner(size: skin.size.s10)
+                        } else if state == .notInstalled {
+                            hollowDot
+                        } else {
+                            Circle().fill(color(state)).frame(width: skin.size.s6, height: skin.size.s6)
+                        }
+                        Text(label(spec, state, progress))
+                    }
+                }
+                .help(Self.describe(state, spec: spec))
+                if Self.isStopped(state) {
+                    AinkradButton(title: "Restart", style: .ghost) { model.languages.restart(spec.id) }.fixedSize()
                 }
             }
-            .help(Self.describe(state, spec: spec))
         } else if model.tabs.active != nil {
-            Text("No language server").help("No language server covers this file: no issues, completion or hover here.")
+            HStack(spacing: skin.size.s4) {
+                hollowDot
+                Text("No language server")
+            }
+            .help("No language server covers this file: no issues, completion or hover here.")
         }
     }
 
-    private var items: [AinkradMenuItem] {
+    private var hollowDot: some View {
+        Circle().strokeBorder(skin.color(skin.text.faint), lineWidth: skin.size.s1).frame(width: skin.size.s7, height: skin.size.s7)
+    }
+
+    private func label(_ spec: ServerSpec, _ state: ServerStatus, _ progress: String?) -> String {
+        switch state {
+        case .starting: "\(spec.command) starting\(progress.map { " · \($0.lowercased())" } ?? "")"
+        case .notInstalled: "\(spec.command) not installed"
+        case .failed: "\(spec.command) failed"
+        case .crashed: "\(spec.command) stopped"
+        case .ready, .notRunning: progress.map { "\(spec.command) · \($0.lowercased())" } ?? spec.command
+        }
+    }
+
+    static func isStopped(_ state: ServerStatus) -> Bool {
+        switch state {
+        case .failed, .crashed: true
+        default: false
+        }
+    }
+
+    private func items(_ active: ServerSpec) -> [AinkradMenuItem] {
         let used = LanguageRegistry.servers.filter { model.languages.statuses[$0.id] != nil }
         var items = used.map { spec in
             let state = model.languages.statuses[spec.id] ?? .notRunning
@@ -125,6 +171,10 @@ private struct ServerChip: View {
                 model.languages.restart(spec.id)
             })
         }
+        items.append(AinkradMenuItem(title: "Set \(active.command) Path…", systemName: "folder") {
+            if let path = ServerPathPicker.choose(active) { model.setServerPath(active.id, path) }
+        })
+        items.append(AinkradMenuItem(title: "Show \(active.command) Log", systemName: "doc.text") { model.showServerLog(active.id) })
         return items
     }
 
@@ -132,7 +182,8 @@ private struct ServerChip: View {
         switch state {
         case .ready: status.success
         case .starting: theme.accentSecondary
-        case .failed, .notInstalled: status.warning
+        case .failed, .crashed: status.danger
+        case .notInstalled: status.warning
         case .notRunning: skin.color(skin.text.faint)
         }
     }
@@ -144,6 +195,7 @@ private struct ServerChip: View {
         case .notRunning: "not running"
         case .notInstalled: "not installed — \(spec.installHint)"
         case .failed(let why): "failed: \(why)"
+        case .crashed(let how): "stopped (\(how)), twice in 5 minutes"
         }
     }
 }

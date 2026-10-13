@@ -44,8 +44,8 @@ enum ShellEnvironment {
 }
 
 /// One running language server for one workspace. An actor: LSP is stateful and order-sensitive, so the hub
-/// chains calls one after another. Restarts after a crash (with backoff, at most 3 times in 2 minutes) and
-/// re-opens every document the server had.
+/// chains calls one after another. Restarts once, silently, after a crash and re-opens every document the
+/// server had; a second crash within five minutes leaves it stopped (`CrashPolicy`).
 actor LanguageSession {
     enum Event: Sendable {
         case diagnostics(uri: String, [Diagnostic])
@@ -54,6 +54,10 @@ actor LanguageSession {
         case triggers(completion: Set<String>, signature: Set<String>)
         /// The server asks Forge to make an edit (after a command it ran); `reply` says whether it was made.
         case applyEdit(WorkspaceEdit, reply: @Sendable (Bool) async -> Void)
+        /// What the server is busy with ("Indexing 412 / 1280"), from `$/progress`; nil when idle.
+        case progress(String?)
+        /// A line for the server's log: its own log messages, and when it started and stopped.
+        case log(String)
     }
 
     let spec: ServerSpec
@@ -64,7 +68,11 @@ actor LanguageSession {
     private var server: InitializingServer?
     private var eventLoop: Task<Void, Never>?
     private var documents: [String: (languageID: String, version: Int, text: String)] = [:]
-    private var crashes: [Date] = []
+    private var policy = CrashPolicy()
+    private var progress = ProgressTracker()
+    /// Bumped at every start, so the end of a process already replaced (a restart) is not taken for a crash.
+    private var generation = 0
+    private var process: Process?
     private var isShuttingDown = false
     private(set) var capabilities: ServerCapabilities?
 
@@ -78,12 +86,17 @@ actor LanguageSession {
     /// Starts the process and does the initialize handshake.
     func start() async {
         emit.yield(.status(.starting))
+        generation += 1
+        let generation = generation
+        process = nil
         do {
-            let channel: DataChannel = try DataChannel.localProcessChannel(
+            let (channel, process) = try DataChannel.localProcessChannel(
                 parameters: Process.ExecutionParameters(
                     path: executable, arguments: spec.arguments, environment: ShellEnvironment.environment,
                     currentDirectoryURL: root),
-                terminationHandler: { [weak self] in Task { await self?.terminated() } })
+                terminationHandler: { [weak self] in Task { await self?.terminated(generation) } })
+            self.process = process
+            emit.yield(.log("Started \(executable) \(spec.arguments.joined(separator: " "))"))
             let root = root
             let server = InitializingServer(server: JSONRPCServerConnection(dataChannel: channel)) {
                 InitializeParams(
@@ -99,6 +112,12 @@ actor LanguageSession {
                     switch event {
                     case .notification(.textDocumentPublishDiagnostics(let params)):
                         emit.yield(.diagnostics(uri: params.uri, params.diagnostics))
+                    case .notification(.protocolProgress(let params)):
+                        progressed(params)
+                    case .notification(.windowLogMessage(let params)):
+                        emit.yield(.log(params.message))
+                    case .notification(.windowShowMessage(let params)):
+                        emit.yield(.log(params.message))
                     case .request(_, let request):
                         await Self.answer(request, root: root, emit: emit)
                     default: break
@@ -116,7 +135,15 @@ actor LanguageSession {
                         uri: uri, languageId: document.languageID, version: document.version, text: document.text)))
             }
             emit.yield(.status(.ready))
+            emit.yield(.log("Ready"))
         } catch {
+            // A process that died is `terminated`'s to report (as a crash); this is a live one failing, or none.
+            // The pipe can close a moment before the process is reaped: give it that moment.
+            if process?.isRunning == true { try? await Task.sleep(for: .milliseconds(300)) }
+            guard generation == self.generation, process?.isRunning != false else { return }
+            progress = ProgressTracker()
+            emit.yield(.progress(nil))
+            emit.yield(.log("Failed to start: \(error.localizedDescription)"))
             emit.yield(.status(.failed(error.localizedDescription)))
         }
     }
@@ -279,6 +306,8 @@ actor LanguageSession {
         eventLoop?.cancel()
         try? await server?.shutdownAndExit()
         server = nil
+        progress = ProgressTracker()
+        emit.yield(.progress(nil))
         emit.yield(.status(.notRunning))
     }
 
@@ -286,21 +315,31 @@ actor LanguageSession {
     func restart() async {
         await shutdown()
         isShuttingDown = false
-        crashes = []
+        policy.reset()
         await start()
     }
 
-    private func terminated() async {
-        guard !isShuttingDown else { return }
+    private func progressed(_ params: ProgressParams) {
+        let line = progress.update(token: ProgressTracker.key(params.token), value: params.value)
+        emit.yield(.progress(line))
+    }
+
+    /// The process ended without being asked to: restart it once, silently; a second time within five minutes,
+    /// stop and say how it ended.
+    private func terminated(_ ended: Int) async {
+        guard ended == generation, !isShuttingDown else { return }
         server = nil
-        let now = Date()
-        crashes = crashes.filter { now.timeIntervalSince($0) < 120 } + [now]
-        guard crashes.count <= 3 else {
-            emit.yield(.status(.failed("\(spec.command) stopped 3 times in 2 minutes. Restart it from the status bar.")))
+        progress = ProgressTracker()
+        emit.yield(.progress(nil))
+        let how = process.map { CrashPolicy.describe(status: $0.terminationStatus, bySignal: $0.terminationReason == .uncaughtSignal) } ?? "exit"
+        emit.yield(.log("Stopped (\(how))"))
+        guard policy.crashed(at: Date()) else {
+            emit.yield(.status(.crashed(how)))
             return
         }
         emit.yield(.status(.starting))
-        try? await Task.sleep(for: .seconds(Double(crashes.count)))
+        try? await Task.sleep(for: .seconds(1))
+        guard ended == generation, !isShuttingDown else { return }
         await start()
     }
 
@@ -336,7 +375,8 @@ actor LanguageSession {
             publishDiagnostics: PublishDiagnosticsClientCapabilities(
                 relatedInformation: false, tagSupport: nil, versionSupport: false, codeDescriptionSupport: false,
                 dataSupport: false)),
-        window: nil, general: nil, experimental: nil)
+        window: WindowClientCapabilities(workDoneProgress: true, showMessage: nil, showDocument: nil), general: nil,
+        experimental: nil)
 }
 
 /// A server's state, for the status bar and its menu.
@@ -346,4 +386,6 @@ actor LanguageSession {
     case starting
     case ready
     case failed(String)
+    /// Stopped twice within five minutes; how it last ended ("signal 11 (SEGV)"). Restarts only when asked.
+    case crashed(String)
 }
