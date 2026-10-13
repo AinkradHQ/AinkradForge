@@ -188,6 +188,13 @@ final class SnapshotTests: XCTestCase {
     /// The review by Grimoire turn (E5, screen 18): turn 3 open with its request and first diff, an outside edit
     /// grouped by time, turn 2 folded; the status bar names the newest turn. Times are masked (they read the clock).
     func testTurnReview() throws {
+        // A frozen clock: the header's layout follows the time's width ("1:38 PM" vs "12:35 PM").
+        TurnReviewClock.time = { _ in "12:35 PM" }
+        TurnReviewClock.ago = { _ in "5 s ago" }
+        defer {
+            TurnReviewClock.time = { $0.formatted(date: .omitted, time: .shortened) }
+            TurnReviewClock.ago = { ShortAgo.text($0) }
+        }
         let sort = "Sources/Ainkrad/Features/Sidebar/SidebarSort.swift"
         let sortText = "enum SidebarSort {\n    static func order(_ a: Int, _ b: Int) -> Bool {\n        a < b\n    }\n}\n"
         try sortText.write(to: repo.appendingPathComponent(sort), atomically: true, encoding: .utf8)

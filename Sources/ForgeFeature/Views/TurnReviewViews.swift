@@ -1,6 +1,12 @@
 import AinkradAppKit
 import SwiftUI
 
+/// The clock text the turn review shows. Goldens freeze it: "1:38 PM" and "12:35 PM" differ in width and move the layout.
+@MainActor enum TurnReviewClock {
+    static var time: (Date) -> String = { $0.formatted(date: .omitted, time: .shortened) }
+    static var ago: (Date) -> String = { ShortAgo.text($0) }
+}
+
 /// The review by Grimoire turn (screen 18): each turn a wash headed "Claude · turn 3 · 4 files" with its request,
 /// Keep turn / Undo turn and "Ask about this turn…"; other writers' edits grouped by time window. Newest open,
 /// older folded; a kept group dims to one row until Done.
@@ -69,7 +75,7 @@ struct TurnReviewPane: View {
     private func header(_ groups: [TurnLedger.Group]) -> some View {
         let turns = groups.filter { $0.turn != nil && !$0.kept }.count
         let files = Set(groups.filter { !$0.kept }.flatMap { $0.files.map(\.path) }).count
-        let since = groups.map(\.from).min().map { " · since " + $0.formatted(date: .omitted, time: .shortened) } ?? ""
+        let since = groups.map(\.from).min().map { " · since " + TurnReviewClock.time($0) } ?? ""
         let title = VStack(alignment: .leading, spacing: skin.size.s2) {
             Text("Changes outside Forge").font(skin.font(AinkradFontToken(sizeKey: "t14", weight: "semibold")))
             Text("\(turns) turn\(turns == 1 ? "" : "s") · \(files) file\(files == 1 ? "" : "s")\(since) · grouped by agent turn")
@@ -283,11 +289,10 @@ private struct TurnGroupView: View {
 
     private var meta: String {
         guard group.turn != nil else {
-            let from = group.from.formatted(date: .omitted, time: .shortened)
-            let to = group.to.formatted(date: .omitted, time: .shortened)
+            let from = TurnReviewClock.time(group.from), to = TurnReviewClock.time(group.to)
             return (from == to ? from : "\(from)–\(to)") + " · not from a Grimoire turn"
         }
-        let ago = ShortAgo.text(group.to)
+        let ago = TurnReviewClock.ago(group.to)
         return group.kept ? ago : "Grimoire · " + ago
     }
 
