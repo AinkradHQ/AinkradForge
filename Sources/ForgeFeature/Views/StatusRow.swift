@@ -72,7 +72,7 @@ private struct StatusMenu: View {
 }
 
 /// ⊗ errors ⚠ warnings — opens the Issues tab. Only once a server runs: "0 0" with none would read as clean
-/// (E1D1 FD33); "– –" (unknown) while the active file's server starts (E6).
+/// (E1D1 FD33); "– –" (unknown) while the active file's server starts or after it stopped (E6, E1D2 FD42).
 private struct IssueCounts: View {
     let model: ForgeModel
     @Environment(\.ainkradStatusColors) private var status
@@ -80,7 +80,7 @@ private struct IssueCounts: View {
 
     var body: some View {
         let known = model.languages.statuses.values.contains(.ready)
-        if known || activeServerStarting {
+        if known || activeServerStarting || activeServerStopped {
             // A plain button, so Full Keyboard Access reaches it (E1D2 FD40).
             Button { model.sideTab = .problems } label: {  // design-lint: allow raw-control keyboard-reachable status item
                 HStack(spacing: skin.size.s6) {
@@ -96,9 +96,13 @@ private struct IssueCounts: View {
         }
     }
 
-    private var activeServerStarting: Bool {
-        guard let path = model.tabs.active, let (spec, _) = LanguageRegistry.server(for: path) else { return false }
-        return model.languages.statuses[spec.id] == .starting
+    private var activeServerStarting: Bool { activeServerStatus == .starting }
+
+    private var activeServerStopped: Bool { activeServerStatus.map(ServerChip.isStopped) ?? false }
+
+    private var activeServerStatus: ServerStatus? {
+        guard let path = model.tabs.active, let (spec, _) = LanguageRegistry.server(for: path) else { return nil }
+        return model.languages.statuses[spec.id]
     }
 }
 
@@ -198,7 +202,7 @@ private struct ServerChip: View {
         case .notRunning: "not running"
         case .notInstalled: "not installed — \(spec.installHint)"
         case .failed(let why): "failed: \(why)"
-        case .crashed(let how): "stopped (\(how)), twice in 5 minutes"
+        case .crashed(let how): "stopped: \(how), twice in 5 minutes"
         }
     }
 }
