@@ -55,6 +55,7 @@ struct PanesTests {
         defer { try? FileManager.default.removeItem(at: folder) }
         model.splitEditor(stacked: false)
         model.open(file: "c.swift", pinned: true)
+        model.documents["c.swift"]?.storage.mutableString.append("\n")
         model.didEdit("c.swift")
         model.closePane()
         #expect(model.panes.count == 1)
@@ -116,6 +117,7 @@ struct TreeOperationTests {
     @Test func trashingAnUnsavedOpenFileIsRefused() async throws {
         let (model, folder) = try await model()
         defer { try? FileManager.default.removeItem(at: folder) }
+        model.documents["Sources/A.swift"]?.storage.mutableString.append("\n")
         model.didEdit("Sources/A.swift")
         model.trash("Sources/A.swift")
         #expect(model.notice?.contains("Save or close") == true)

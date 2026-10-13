@@ -45,6 +45,7 @@ final class SweepTests: XCTestCase {
         let closing = try SweepSupport.model(opening: repo)
         closing.open(file: "Sources/Ainkrad/Features/Sidebar/SidebarRow.swift", pinned: true)
         try SweepSupport.waitUntilLoaded(closing)
+        closing.activeDocument?.storage.mutableString.append("\n")
         closing.didEdit("Sources/Ainkrad/Features/Sidebar/SidebarRow.swift")
         closing.close("Sources/Ainkrad/Features/Sidebar/SidebarRow.swift")
 
@@ -94,6 +95,7 @@ final class SweepTests: XCTestCase {
         try (Data([0xFF, 0xFE]) + "import os\r\n\r\nlet log = Logger()\r\n".data(using: .utf16LittleEndian)!).write(to: crlf)
         conflicted.open(file: "Sources/Ainkrad/Core/Log.swift", pinned: true)
         try SweepSupport.waitUntilLoaded(conflicted)
+        conflicted.activeDocument?.storage.mutableString.append("\n")
         conflicted.didEdit("Sources/Ainkrad/Core/Log.swift")
         try (Data([0xFF, 0xFE]) + "import os\r\n".data(using: .utf16LittleEndian)!).write(to: crlf)
         try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(5)], ofItemAtPath: crlf.path)
