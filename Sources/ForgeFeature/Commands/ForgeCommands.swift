@@ -35,7 +35,7 @@ struct Shortcut: Equatable {
 /// them, from this one list — so nothing is reachable only by knowing where its button is.
 enum ForgeCommand: String, CaseIterable, Identifiable {
     case quickOpen, commandPalette, goToLine
-    case openFolder, closeWorkspace
+    case openFolder, switchWorkspace, closeWorkspace
     case save, saveAll, closeTab, nextTab, previousTab
     case showFiles, showChanges, revealInTree, refresh
     case copyPath, openTerminal
@@ -69,6 +69,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .commandPalette: "Show All Commands"
         case .goToLine: "Go to Line…"
         case .openFolder: "Open Folder…"
+        case .switchWorkspace: "Switch Workspace…"
         case .closeWorkspace: "Close Workspace"
         case .save: "Save"
         case .saveAll: "Save All"
@@ -128,7 +129,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
     /// The palette's group word (`View: Split Editor Right`).
     var category: String {
         switch self {
-        case .openFolder, .closeWorkspace, .save, .saveAll, .newFile, .newFolder, .renameActiveFile, .revealInFinder,
+        case .openFolder, .switchWorkspace, .closeWorkspace, .save, .saveAll, .newFile, .newFolder, .renameActiveFile, .revealInFinder,
             .trashActiveFile, .copyPath, .revealInTree, .refresh, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8:
             "File"
         case .quickOpen, .goToLine, .goToDefinition, .findReferences, .nextProblem, .previousProblem, .nextTab, .previousTab:
@@ -154,6 +155,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .commandPalette: "command"
         case .goToLine: "arrow.right.to.line"
         case .openFolder: "folder"
+        case .switchWorkspace: "rectangle.stack"
         case .closeWorkspace: "xmark.square"
         case .save, .saveAll: "square.and.arrow.down"
         case .closeTab: "xmark"
@@ -212,6 +214,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .commandPalette: Shortcut(key: "p", modifiers: [.command, .shift])
         case .goToLine: Shortcut(key: "g", modifiers: .control)
         case .openFolder: Shortcut(key: "o", modifiers: .command)
+        case .switchWorkspace: Shortcut(key: "o", modifiers: [.control, .command])
         case .save: Shortcut(key: "s", modifiers: .command)
         case .saveAll: Shortcut(key: "s", modifiers: [.command, .option])
         case .closeTab: Shortcut(key: "w", modifiers: .command)
@@ -265,7 +268,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
 
     var requirement: Requirement {
         switch self {
-        case .quickOpen, .commandPalette, .openFolder: .none
+        case .quickOpen, .commandPalette, .openFolder, .switchWorkspace: .none
         case .closeWorkspace, .saveAll, .showFiles, .showChanges, .refresh, .openTerminal, .newFile, .newFolder,
             .findInFiles, .replaceAll, .toggleTerminal, .newTerminal, .maximiseTerminal, .runTask, .rerunLastTask,
             .reviewOutside, .showIssues, .nextProblem, .previousProblem, .toggleSidebar, .splitTerminal, .openInGitMage:

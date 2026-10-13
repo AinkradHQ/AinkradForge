@@ -42,8 +42,7 @@ struct ReviewBar: View {
     }
 }
 
-/// The current change's actions, at the end of its first line (mockup 15 `.achip`): ✓ Keep, ↶ Undo, ▾ Was — and
-/// what it was, under a "✦ Was · lines 18–19 before the change · 12 s ago" head.
+/// The current change's actions, at the end of its first line (mockup 15 `.achip`): ✓ Keep, ↶ Undo, ▾ Was.
 struct ChangeChip: View {
     let model: ForgeModel
     let path: String
@@ -53,25 +52,59 @@ struct ChangeChip: View {
     @Environment(\.ainkradStatusColors) private var status
 
     var body: some View {
-        VStack(alignment: .leading, spacing: skin.size.s6) {
-            HStack(spacing: skin.size.s2) {
-                chipButton(model.labelled("✓ Keep", .keepChange), status.success, model.titled("Keep", .keepChange)) { model.keepChange(path, hunk: hunk) }
-                chipButton(model.labelled("↶ Undo", .undoChange), status.danger, model.titled("Undo", .undoChange)) { model.undoChange(path, hunk: hunk) }
-                chipButton(model.agent.showingWas ? "▴ Was" : "▾ Was", skin.color(skin.text.muted), "What these lines were") {
-                    model.agent.showingWas.toggle()
-                }
-            }
-            .padding(skin.size.s2)
-            .background(chipShape.fill(theme.surface.opacity(skin.opacity.o92)))
-            .shadow(color: theme.background.opacity(skin.opacity.o35), radius: skin.size.s8, y: skin.size.s6)
-            if model.agent.showingWas, let file = model.agent.files[path], let change = file.diff.hunks[safe: hunk] {
-                was(change, since: file.since)
+        HStack(spacing: skin.size.s2) {
+            chipButton(model.labelled("✓ Keep", .keepChange), status.success, model.titled("Keep", .keepChange)) { model.keepChange(path, hunk: hunk) }
+            chipButton(model.labelled("↶ Undo", .undoChange), status.danger, model.titled("Undo", .undoChange)) { model.undoChange(path, hunk: hunk) }
+            chipButton(model.agent.showingWas ? "▴ Was" : "▾ Was", skin.color(skin.text.muted), "What these lines were") {
+                model.agent.showingWas.toggle()
             }
         }
+        .padding(skin.size.s2)
+        .background(chipShape.fill(theme.surface.opacity(skin.opacity.o92)))
+        .shadow(color: theme.background.opacity(skin.opacity.o35), radius: skin.size.s8, y: skin.size.s6)
+    }
+
+    /// Where the chip goes for a line whose text spans `anchor`: after the text when it fits before the editor's
+    /// right `margin`; else flipped above the line at the right edge (below it on the first line), clear of the
+    /// changed text. ponytail: above may cover the previous line's tail when that one is long too.
+    static func origin(anchor: CGRect, chip: CGSize, width: CGFloat, gap: CGFloat, margin: CGFloat) -> CGPoint {
+        let after = anchor.maxX + gap
+        if after + chip.width <= width - margin { return CGPoint(x: after, y: max(0, anchor.minY - 2)) }
+        let above = anchor.minY - chip.height - 2
+        return CGPoint(x: max(0, width - margin - chip.width), y: above >= 0 ? above : anchor.maxY + 2)
     }
 
     private var chipShape: AnyShape {
         skin.usesNativeGlass ? AnyShape(Capsule()) : AnyShape(RoundedRectangle(cornerRadius: skin.size.s6))
+    }
+
+    private func chipButton(_ title: String, _ tint: Color, _ help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {  // design-lint: allow raw-control compact chip action (kit has no pill segment button)
+            Text(title)
+                .font(skin.font(AinkradFontToken(sizeKey: "t10_5")))
+                .foregroundStyle(tint)
+                .padding(.vertical, skin.size.s2)
+                .padding(.horizontal, skin.size.s8)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+}
+
+/// What the current change's lines were (▾ Was), under a "✦ Was · lines 18–19 before the change · 12 s ago" head.
+struct WasCard: View {
+    let model: ForgeModel
+    let path: String
+    let hunk: Int
+    @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
+    @Environment(\.ainkradStatusColors) private var status
+
+    var body: some View {
+        if let file = model.agent.files[path], let change = file.diff.hunks[safe: hunk] {
+            was(change, since: file.since)
+        }
     }
 
     private func was(_ change: AinkradDiffHunk, since: Date) -> some View {
@@ -116,19 +149,6 @@ struct ChangeChip: View {
         let indent = lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
             .map { $0.prefix { $0 == " " || $0 == "\t" }.count }.min() ?? 0
         return lines.map { String($0.dropFirst(min(indent, $0.prefix { $0 == " " || $0 == "\t" }.count))) }
-    }
-
-    private func chipButton(_ title: String, _ tint: Color, _ help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {  // design-lint: allow raw-control compact chip action (kit has no pill segment button)
-            Text(title)
-                .font(skin.font(AinkradFontToken(sizeKey: "t10_5")))
-                .foregroundStyle(tint)
-                .padding(.vertical, skin.size.s2)
-                .padding(.horizontal, skin.size.s8)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(help)
     }
 }
 

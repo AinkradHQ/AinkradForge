@@ -211,6 +211,8 @@ private struct DocumentView: View {
 
     /// Where the current outside change's first line is, as the editor last reported it.
     @State private var anchor: CGRect?
+    /// The change chip's size, as last laid out (a first guess until then).
+    @State private var chipSize = CGSize(width: 200, height: 22)
 
     var body: some View {
         switch document.state {
@@ -293,11 +295,21 @@ private struct DocumentView: View {
             .overlay { OverviewRuler(marks: overview, lineCount: lineCount) }
             .overlay(alignment: .topLeading) {
                 if review != nil, let anchor {
-                    // At the line's end, but never so far right that the Was card leaves the editor.
+                    // After the line's text, or flipped clear of it (`ChangeChip.origin`); the Was card under the
+                    // chip, never so far right that it leaves the editor.
                     GeometryReader { geo in
+                        let at = ChangeChip.origin(anchor: anchor, chip: chipSize, width: geo.size.width, gap: skin.size.s28, margin: skin.size.s16)
                         ChangeChip(model: model, path: path, hunk: hunk)
-                            .padding(.leading, max(0, min(anchor.maxX + skin.size.s28, geo.size.width - skin.size.s460 - skin.size.s16)))
-                            .padding(.top, max(0, anchor.minY - skin.size.s2))
+                            .fixedSize()
+                            .onGeometryChange(for: CGSize.self, of: \.size) { chipSize = $0 }
+                            .padding(.leading, at.x)
+                            .padding(.top, at.y)
+                        if model.agent.showingWas {
+                            WasCard(model: model, path: path, hunk: hunk)
+                                .padding(.leading, max(0, min(at.x, geo.size.width - skin.size.s460 - skin.size.s16)))
+                                // Below the changed line too, when the chip flipped above it.
+                                .padding(.top, max(at.y + chipSize.height, anchor.maxY) + skin.size.s6)
+                        }
                     }
                 }
             }

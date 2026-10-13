@@ -70,6 +70,19 @@ struct PaletteTests {
         #expect(Palette.items(for: ":12", model: model).isEmpty)
     }
 
+    /// ⌃⌘O (mockups 01, 05, 19): the recent workspaces as a palette, newest first, filtered by what is typed.
+    @Test func switchWorkspaceListsTheRecentWorkspaces() {
+        let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
+        model.store.noteOpened("/p/AinkradForge", at: Date(timeIntervalSince1970: 1))
+        model.store.noteOpened("/p/Ainkrad", at: Date(timeIntervalSince1970: 2))
+        #expect(ForgeCommand.switchWorkspace.shortcut?.display == "⌃⌘O")
+        #expect(!ForgeModel.reserved(Shortcut(key: "o", modifiers: [.control, .command])))
+        model.run(.switchWorkspace)
+        #expect(model.palette == "~")
+        #expect(Palette.items(for: "~", model: model).map(\.payload) == [.workspace("/p/Ainkrad"), .workspace("/p/AinkradForge")])
+        #expect(Palette.items(for: "~frg", model: model).map(\.title) == ["AinkradForge"])
+    }
+
     @Test func theModeCharacterIsSplitOffTheQuery() {
         #expect(Palette.split(">open") == (">", "open"))
         #expect(Palette.split(":12") == (":", "12"))
