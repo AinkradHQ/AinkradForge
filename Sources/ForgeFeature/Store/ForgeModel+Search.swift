@@ -62,15 +62,30 @@ extension ForgeModel {
 /// Replace across files. Open files change in their buffer (unsaved, ⌘S writes them); others are written in
 /// their own encoding and line endings. Nothing with unsaved edits is ever overwritten on disk.
 extension ForgeModel {
-    /// What replacing in `path` would do, from its open buffer or its file.
-    func replacePlan(for path: String) -> ReplacePlan? {
+    /// What replacing in `path` would do, from its open buffer or its file — only the matches still listed
+    /// (none dismissed with ✕), or with `line`, only that line's.
+    func replacePlan(for path: String, line: Int? = nil) -> ReplacePlan? {
         guard let workspace, let regex = try? search.query.compile() else { return nil }
         let text: String? = documents[path].flatMap { $0.state == .ready ? $0.storage.string : nil }
             ?? SearchModel.readText(workspace.url(for: path))
         guard let text else { return nil }
+        let dismissed = search.dismissedFiles.contains(path) ? nil : search.dismissedLines[path] ?? []
         return ReplacePlan.make(
             path: path, text: text, regex: regex, replacement: search.replacement, isRegex: search.query.regex,
-            preserveCase: search.preserveCase)
+            preserveCase: search.preserveCase
+        ) { (line == nil || $0 == line) && dismissed?.contains($0) == false }
+    }
+
+    /// ⇄ on a result line: replaces that line's match (an unsaved edit in an open buffer; otherwise written in
+    /// the file's own encoding), then searches again so the counts follow.
+    @discardableResult
+    func replace(in path: String, line: Int) -> Int {
+        guard let plan = replacePlan(for: path, line: line), plan.count > 0, let workspace else { return 0 }
+        guard write(plan.updated, to: path, in: workspace) else { return 0 }
+        // The preview's hunks are renumbered by the change: an untick would land on another hunk.
+        search.rejected[path] = nil
+        rerunSearch()
+        return plan.count
     }
 
     /// Replaces in one file, leaving the preview's unticked hunks alone.

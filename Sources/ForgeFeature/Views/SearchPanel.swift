@@ -102,7 +102,8 @@ struct SearchPanel: View {
                         // While previewing a replace, the file is what is selected — not each of its lines,
                         // whose strike-through would vanish under a solid selection fill.
                         isSelected: search.isReplaceOpen && search.previewPath == file.path,
-                        onReplace: search.isReplaceOpen ? { model.replace(in: file.path) } : nil
+                        onReplace: search.isReplaceOpen ? { model.replace(in: file.path) } : nil,
+                        onDismiss: { search.dismiss(file.path) }
                     ) {
                         if folded { search.collapsed.remove(file.path) } else { search.collapsed.insert(file.path) }
                     }
@@ -112,7 +113,10 @@ struct SearchPanel: View {
                                 match: match,
                                 isSelected: !search.isReplaceOpen
                                     && model.tabs.active == file.path && model.activeDocument?.cursor.line == match.line,
-                                replacement: replacementText
+                                replacement: replacementText,
+                                action: search.isReplaceOpen
+                                    ? RowAction(glyph: "⇄", help: "Replace this one") { model.replace(in: file.path, line: match.line) }
+                                    : RowAction(glyph: "✕", help: "Dismiss") { search.dismiss(file.path, line: match.line) }
                             ) {
                                 if search.isReplaceOpen {
                                     search.previewPath = file.path

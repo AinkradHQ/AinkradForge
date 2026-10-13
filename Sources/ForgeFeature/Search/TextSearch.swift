@@ -53,11 +53,25 @@ enum TextSearch {
 
     /// `text` with every match replaced. With `regex`, `$1`… in `replacement` are capture groups; otherwise
     /// it is literal. `preserveCase` adapts the replacement to each match: ALL CAPS, Capitalised, lower.
+    /// `lines`, when given, picks the matches to replace by the (1-based) line they start on.
     static func replace(
-        in text: String, regex: NSRegularExpression, with replacement: String, isRegex: Bool, preserveCase: Bool
+        in text: String, regex: NSRegularExpression, with replacement: String, isRegex: Bool, preserveCase: Bool,
+        lines: ((Int) -> Bool)? = nil
     ) -> (text: String, count: Int) {
         let ns = text as NSString
-        let found = regex.matches(in: text, range: NSRange(location: 0, length: ns.length))
+        var found = regex.matches(in: text, range: NSRange(location: 0, length: ns.length))
+        if let lines {
+            // Line starts in UTF-16 offsets, by the same rule as `matches(in:)`'s line numbers.
+            var starts: [Int] = []
+            ns.enumerateSubstrings(in: NSRange(location: 0, length: ns.length), options: [.byLines, .substringNotRequired]) {
+                _, _, enclosing, _ in starts.append(enclosing.location)
+            }
+            var line = 0
+            found = found.filter { match in
+                while line + 1 < starts.count, starts[line + 1] <= match.range.location { line += 1 }
+                return lines(line + 1)
+            }
+        }
         guard !found.isEmpty else { return (text, 0) }
         let template = isRegex ? replacement : NSRegularExpression.escapedTemplate(for: replacement)
         let out = NSMutableString(string: text)
