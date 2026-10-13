@@ -1,5 +1,5 @@
 {
-  "originHash" : "cee51766ca7b4f9163df74addfb112ffec3078b2f232aa5acb99415110ea859e",
+  "originHash" : "3314125164bb9951f5f180e6d2bfbb4130664e277ba98db8a29dd62fe69e9b66",
   "pins" : [
     {
       "identity" : "codeeditlanguages",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AhmedMElhalaby/CodeEditSourceEditor",
       "state" : {
-        "revision" : "147d49415bf747d7b69683f865182d9f55e012d3",
-        "version" : "0.15.2-forge.7"
+        "revision" : "d6970446b037154a8e9ef23a9d38f3a14a0f16e8",
+        "version" : "0.15.2-forge.8"
       }
     },
     {
