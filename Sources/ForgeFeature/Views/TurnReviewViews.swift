@@ -230,15 +230,23 @@ private struct TurnGroupView: View {
         let shown = shownFiles ?? [group.files.first?.path ?? ""]
         let counts = LineMerge.counts(file.before, file.after)
         let folder = (file.path as NSString).deletingLastPathComponent
+        let isShown = shown.contains(file.path)
+        // Open, the diff's own header names the file (it can't be hidden); the row then only says what happened
+        // to it — as Review All does (E1D1 FD13).
+        let note = file.before == nil ? "new file" : file.after == nil ? "deleted" : isShown ? nil : folder.isEmpty ? "·" : folder
         return VStack(alignment: .leading, spacing: skin.size.s4) {
             HStack(spacing: skin.size.s8) {
-                Image(systemName: "doc.text").foregroundStyle(skin.color(skin.text.faint))
-                Text((file.path as NSString).lastPathComponent).font(skin.font(AinkradFontToken(sizeKey: "t12")))
-                Text(file.before == nil ? "new file" : file.after == nil ? "deleted" : folder.isEmpty ? "·" : folder)
-                    .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "system")))
-                    .foregroundStyle(skin.color(skin.text.faint))
-                    .lineLimit(1)
-                    .truncationMode(.head)
+                Image(systemName: isShown ? "chevron.down" : "doc.text").foregroundStyle(skin.color(skin.text.faint))
+                if !isShown {
+                    Text((file.path as NSString).lastPathComponent).font(skin.font(AinkradFontToken(sizeKey: "t12")))
+                }
+                if let note {
+                    Text(note)
+                        .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "system")))
+                        .foregroundStyle(skin.color(skin.text.faint))
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
                 Spacer(minLength: skin.size.s8)
                 Text("+\(counts.added)").foregroundStyle(status.success)
                 Text("−\(counts.removed)").foregroundStyle(status.danger)
@@ -252,7 +260,7 @@ private struct TurnGroupView: View {
                 if next.remove(file.path) == nil { next.insert(file.path) }
                 shownFiles = next
             }
-            if shown.contains(file.path) {
+            if isShown {
                 let key = group.id + "|" + file.path
                 AinkradDiffReview(
                     fileDiff: ForgeModel.diff(file),
