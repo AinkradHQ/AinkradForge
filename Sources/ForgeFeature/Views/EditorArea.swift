@@ -246,7 +246,7 @@ private struct DocumentView: View {
                     // At the line's end, but never so far right that the Was card leaves the editor.
                     GeometryReader { geo in
                         ChangeChip(model: model, path: path, hunk: hunk)
-                            .padding(.leading, max(0, min(anchor.maxX + skin.size.s28, geo.size.width - skin.size.s420 - skin.size.s16)))
+                            .padding(.leading, max(0, min(anchor.maxX + skin.size.s28, geo.size.width - skin.size.s460 - skin.size.s16)))
                             .padding(.top, max(0, anchor.minY - skin.size.s2))
                     }
                 }

@@ -62,7 +62,7 @@ extension ForgeModel {
             let written = hunk.lines.compactMap { $0.kind == .insertion ? $0.newNumber : nil }
             if let first = written.first, let last = written.last {
                 // A mark per line: one spanning lines washes only its first.
-                wash += written.map { EditorMark(range: index.range(from: ($0 - 1, 0), to: ($0, 0)), color: color.withAlphaComponent(0.12), isWash: true) }
+                wash += written.map { EditorMark(range: index.range(from: ($0 - 1, 0), to: ($0, 0)), color: color.withAlphaComponent(0.09), isLineWash: true) }
                 gutter.append(EditorLineMark(lines: first...last, color: color, isRemoval: false, tag: Self.agentTagBase + number))
             } else if let line = agent.anchorLine(path, hunk: number) {
                 gutter.append(EditorLineMark(lines: (line - 1)...(line - 1), color: color, isRemoval: true, tag: Self.agentTagBase + number))
