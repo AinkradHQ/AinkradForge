@@ -54,8 +54,12 @@ extension ForgeModel {
         }
     }
 
-    /// The pointer rested on `offset` in `path` (or stopped resting, with nil).
-    func hover(pane: Int, path: String, at hit: (offset: Int, rect: CGRect)?) async {
+    /// The pointer rested on `offset` in `path` (or stopped resting, with nil). With ⌥ held, the quick help only:
+    /// the symbol's signature and documentation, without the issues under it (mockup 09).
+    func hover(
+        pane: Int, path: String, at hit: (offset: Int, rect: CGRect)?,
+        quickHelpOnly: Bool = NSEvent.modifierFlags.contains(.option)
+    ) async {
         hoverRequest += 1
         let request = hoverRequest
         guard let hit, let document = documents[path], let (spec, _) = languages.server(for: path) else {
@@ -64,7 +68,7 @@ extension ForgeModel {
         }
         let index = LineIndex(document.storage.string)
         let position = index.position(of: hit.offset)
-        let issues = (languages.issues[path] ?? []).filter { issue in
+        let issues = quickHelpOnly ? [] : (languages.issues[path] ?? []).filter { issue in
             let range = index.range(from: issue.start, to: issue.end)
             return NSLocationInRange(hit.offset, range) || (range.length == 0 && range.location == hit.offset)
         }
