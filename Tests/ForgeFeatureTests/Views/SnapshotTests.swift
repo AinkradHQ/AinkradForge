@@ -92,8 +92,12 @@ final class SnapshotTests: XCTestCase {
         model.open(file: Self.sidebarRow, pinned: false)
         model.pendingLine = 19
         try SweepSupport.waitUntilLoaded(model)
-        // The summary ends in the search's own duration ("· 3 ms"): the clock, not the UI.
-        try Snapshot.assertMatches(model, named: "search", masking: [CGRect(x: 100, y: 260, width: 100, height: 22)])
+        // The summary ends in the search's own duration ("· 3 ms"): the clock, not the UI. Off-screen drawing also
+        // shows CESE's parked find panel half-drawn over line 1, its placeholder text varying run to run.
+        // ponytail: masked; un-mask if the panel ever shows there live.
+        try Snapshot.assertMatches(
+            model, named: "search",
+            masking: [CGRect(x: 100, y: 260, width: 100, height: 22), CGRect(x: 314, y: 70, width: 886, height: 28)])
     }
 
     /// Review All: a file Forge had read, changed while closed, and a new one.
