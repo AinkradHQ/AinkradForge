@@ -213,12 +213,23 @@ final class SnapshotTests: XCTestCase {
         try Snapshot.assertMatches(
             TurnReviewPane(model: model, asking: model.turnGroups.first?.id), named: "turn-review-ask",
             size: CGSize(width: 900, height: 560), masking: Self.turnReviewAskClock)
+        // Narrow windows (E1D2 FD38): the actions wrap under the titles, then fold to icons;
+        // nothing leaves the pane. After the shots above, whose layout the "… ago" widths would move.
+        for (width, masks) in Self.turnReviewNarrowClock {
+            try Snapshot.assertMatches(
+                model, named: "turn-review-\(Int(width))", size: CGSize(width: width, height: 560), masking: masks)
+        }
     }
 
     static let turnReviewAskClock = [
         CGRect(x: 30, y: 44, width: 310, height: 20), CGRect(x: 300, y: 82, width: 170, height: 28),
         CGRect(x: 470, y: 462, width: 210, height: 28), CGRect(x: 690, y: 514, width: 130, height: 28),
     ]
+
+    /// Per width: the header's "since …", turn 3's "… ago" line and the outside group's time line.
+    static let turnReviewNarrowClock: [(CGFloat, [CGRect])] = [900, 760, 640, 520].map { width in
+        (width, [44, 146, 476].map { CGRect(x: 300, y: $0, width: width - 300, height: 20) })
+    }
 
     /// The header's "since …", each turn's "… ago" and the outside group's time window.
     static let turnReviewClock = [
