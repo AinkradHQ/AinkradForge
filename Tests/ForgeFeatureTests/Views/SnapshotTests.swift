@@ -59,6 +59,17 @@ final class SnapshotTests: XCTestCase {
         try Snapshot.assertMatches(model, named: "long-tabs")
     }
 
+    /// An empty folder: the tree and the editor say so, and the tree offers New File (E1D1 FD32).
+    func testEmptyFolder() throws {
+        let empty = repo.deletingLastPathComponent().appendingPathComponent("Empty")
+        try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+        let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
+        model.request(.open(empty))
+        SweepSupport.spin(until: 10) { model.workspace?.isLoading == false }
+        XCTAssertEqual(model.workspace?.files, [])
+        try Snapshot.assertMatches(model, named: "empty-folder")
+    }
+
     /// ⌘P over the window, filtered to "sbrow".
     func testQuickOpen() throws {
         let model = try Snapshot.model(opening: repo)

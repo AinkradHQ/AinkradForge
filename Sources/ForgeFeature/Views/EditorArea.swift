@@ -74,6 +74,9 @@ private struct PaneView: View {
                         // A wholesale buffer change (reload, line endings) rebuilds the editor so it re-parses.
                         .id("\(path)#\(document.revision)")
                     }
+                } else if model.workspace?.files.isEmpty == true {
+                    // Nothing to pick in an empty folder (E1D1 FD32).
+                    AinkradEmptyState(icon: "doc.text", title: "No file open", message: "This folder has no files yet. New File (⌘N) creates one.")
                 } else {
                     AinkradEmptyState(
                         icon: "doc.text", title: "No file open",

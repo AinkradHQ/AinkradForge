@@ -32,7 +32,14 @@ struct FileTreeList: View {
         .dropDestination(for: URL.self) { urls, _ in drop(urls, into: "") }
         .ainkradContextMenu(TreeMenu.rootItems(model: model))
         .overlay {
-            if workspace.tree.isEmpty, workspace.isLoading { AinkradSpinner() }
+            if workspace.tree.isEmpty, workspace.isLoading {
+                AinkradSpinner()
+            } else if workspace.tree.isEmpty, model.treeEdit == nil {
+                // An empty folder: say so, and offer the first file (E1D1 FD32).
+                AinkradEmptyState(
+                    icon: "folder", title: "This folder is empty", message: "Create its first file.", actionTitle: "New File"
+                ) { model.beginNew(folder: false, in: "") }
+            }
         }
     }
 
