@@ -26,13 +26,18 @@ struct TaskListView: View {
             ScrollView {
                 LazyVGrid(
                     columns: [GridItem(.flexible(), spacing: skin.size.s18, alignment: .top), GridItem(.flexible(), alignment: .top)],
-                    alignment: .leading, spacing: skin.size.s8
+                    alignment: .leading, spacing: 0
                 ) {
                     ForEach(groups, id: \.name) { group in
-                        VStack(alignment: .leading, spacing: skin.size.s2) {
-                            AinkradCaption(group.name)
+                        VStack(alignment: .leading, spacing: 0) {
+                            // `.tasks .grp`: always uppercase, faint 10.5 pt, tracked under Neon.
+                            Text(group.name.uppercased())
+                                .font(skin.font(AinkradFontToken(sizeKey: "t10_5")))
+                                .tracking(skin.usesNativeGlass ? 0 : skin.size.s10 * 0.08)
+                                .foregroundStyle(skin.color(skin.text.faint))
+                                .padding(.top, skin.size.s8)
                                 .padding(.horizontal, skin.size.s6)
-                                .padding(.bottom, skin.size.s2)
+                                .padding(.bottom, skin.size.s4)
                             ForEach(group.tasks) { task in TaskRow(model: model, task: task) }
                         }
                     }
@@ -54,30 +59,38 @@ private struct TaskRow: View {
 
     private var isRunning: Bool { model.tasks.running[task.id] != nil }
 
+    /// `.tk`: a bare cyan `▶` / `■`, the name (mono, 150 pt), the command (faint mono), how it last went.
     var body: some View {
         HStack(spacing: skin.size.s8) {
-            AinkradIconButton(
-                systemName: isRunning ? "stop.fill" : "play.fill", size: skin.size.s18,
-                tooltip: isRunning ? "Stop" : "Run \(task.shows)"
-            ) {
+            Button {  // design-lint: allow raw-control the mockup's bare run glyph
                 if isRunning { model.tasks.stop(task, in: model.terminals) } else { model.runTask(task) }
+            } label: {
+                Text(isRunning ? "■" : "▶")
+                    .font(skin.font(AinkradFontToken(sizeKey: "t10")))
+                    .foregroundStyle(theme.accentSecondary)
+                    .frame(width: skin.size.s20)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .help(isRunning ? "Stop" : "Run \(task.shows)")
             Text(task.name)
-                .font(skin.font(AinkradFontToken(sizeKey: "t12", mono: "system")))
+                .font(skin.font(AinkradFontToken(size: 11.5, weight: "medium", mono: "family")))
                 .foregroundStyle(theme.foreground)
                 .lineLimit(1)
-                .frame(minWidth: skin.size.s96, alignment: .leading)
+                .frame(width: skin.size.s150, alignment: .leading)
             Text(task.shows)
-                .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "system")))
+                .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "family")))
                 .foregroundStyle(skin.color(skin.text.faint))
                 .lineLimit(1)
                 .truncationMode(.tail)
-            Spacer(minLength: skin.size.s8)
+                .frame(maxWidth: .infinity, alignment: .leading)
             outcome
         }
-        .padding(.vertical, skin.size.s3)
+        .padding(.vertical, skin.size.s4)
         .padding(.horizontal, skin.size.s6)
-        .ainkradRowBackground(isSelected: false, isHovered: isHovered)
+        .background(
+            RoundedRectangle(cornerRadius: skin.size.s6, style: .continuous)
+                .fill(isHovered ? skin.color(skin.palette.white).opacity(skin.opacity.o05) : .clear))
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .onTapGesture(count: 2) { model.runTask(task) }
@@ -89,7 +102,7 @@ private struct TaskRow: View {
         if isRunning {
             Text("running").font(font).foregroundStyle(skin.color(skin.text.muted))
         } else if let result = model.tasks.results[task.id] {
-            let when = result.at.formatted(.relative(presentation: .named))
+            let when = result.at.formatted(.relative(presentation: .named, unitsStyle: .abbreviated))
             Text(result.succeeded ? "✓ \(result.seconds) s · \(when)" : "✗ exit \(result.exitCode.map(String.init) ?? "?") · \(when)")
                 .font(font)
                 .foregroundStyle(result.succeeded ? status.success : status.danger)

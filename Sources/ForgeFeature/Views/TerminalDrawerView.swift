@@ -20,14 +20,24 @@ struct TerminalDrawerView: View {
                         drawer.requestClose(tab.id)
                     }
                 }
-                AinkradIconButton(systemName: "plus", size: skin.size.s20, tooltip: "New Terminal (⌃⇧`)") { drawer.add() }
+                // A bare `＋`, as the tabs are bare (`.dt`).
+                Button { drawer.add() } label: {  // design-lint: allow raw-control the mockup's bare ＋ tab
+                    Text("＋")
+                        .font(skin.font(AinkradFontToken(size: 11.5)))
+                        .foregroundStyle(skin.color(skin.text.muted))
+                        .padding(.vertical, skin.size.s4)
+                        .padding(.horizontal, skin.size.s10)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("New Terminal (⌃⇧`)")
                 Spacer(minLength: skin.size.s8)
                 TasksPill(isActive: drawer.showsTasks) { drawer.showsTasks = true }
                 AinkradIconButton(
                     systemName: drawer.isMaximised ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
-                    size: skin.size.s20, tooltip: drawer.isMaximised ? "Restore (⇧⌘M)" : "Maximise (⇧⌘M)"
+                    tooltip: drawer.isMaximised ? "Restore (⇧⌘M)" : "Maximise (⇧⌘M)"
                 ) { drawer.isMaximised.toggle() }
-                AinkradIconButton(systemName: "xmark", size: skin.size.s20, tooltip: "Hide (⌃`)") { drawer.isOpen = false }
+                AinkradIconButton(systemName: "xmark", tooltip: "Hide (⌃`)") { drawer.isOpen = false }
             }
             .padding(.horizontal, skin.size.s10)
             .padding(.top, skin.size.s8)
@@ -46,7 +56,8 @@ struct TerminalDrawerView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: drawer.isMaximised ? .infinity : nil)
         .frame(height: drawer.isMaximised ? nil : drawer.height)
-        .background(RoundedRectangle(cornerRadius: skin.size.s10).fill(theme.surface.opacity(skin.opacity.o45)))
+        // `.drawer`: Neon on the editor pane's near-window fill with square corners; Glass on `--fill`, rounded.
+        .background(RoundedRectangle(cornerRadius: skin.usesNativeGlass ? skin.size.s10 : 0).fill(ForgeStyle.pane(skin, theme)))
         .overlay(alignment: .top) { grab }
     }
 
@@ -88,14 +99,13 @@ private struct TasksPill: View {
     }
 
     private var label: some View {
-        Label("Tasks", systemImage: "play")
-            .font(skin.font(AinkradFontToken(sizeKey: "t11", weight: isActive ? "medium" : "regular")))
+        Text("▶ Tasks")
+            .font(skin.font(AinkradFontToken(size: 11.5)))
             .foregroundStyle(isActive ? theme.foreground : skin.color(skin.text.muted))
             .padding(.vertical, skin.size.s4)
             .padding(.horizontal, skin.size.s10)
-            .background(
-                Capsule().fill(isActive ? theme.foreground.opacity(skin.opacity.o10) : isHovered ? theme.foreground.opacity(skin.opacity.o05) : .clear))
-            .contentShape(Capsule())
+            .background(DrawerTabFill(isActive: isActive, isHovered: isHovered))
+            .contentShape(Rectangle())
             .onHover { isHovered = $0 }
     }
 }
@@ -116,37 +126,60 @@ private struct DrawerTab: View {
             // A plain button, so Full Keyboard Access reaches the tab (E1D2 FD40); the close button stays its own.
             Button(action: onSelect) {  // design-lint: allow raw-control keyboard-reachable tab (kit has no tab button)
                 HStack(spacing: skin.size.s6) {
-                    badge.frame(width: skin.size.s12)
+                    badge
                     Text(tab.title)
-                        .font(skin.font(AinkradFontToken(sizeKey: "t11", weight: isActive ? "medium" : "regular")))
+                        .font(skin.font(AinkradFontToken(size: 11.5)))
                         .foregroundStyle(isActive ? theme.foreground : skin.color(skin.text.muted))
                         .lineLimit(1)
                 }
             }
             .buttonStyle(.plain)
-            AinkradIconButton(systemName: "xmark", size: skin.size.s14, tooltip: "Close Terminal", action: onClose)
-                .opacity(isHovered || isActive ? 1 : 0)
+            // `.dt .x`: a bare faint ✕, on a running or shell tab; a finished task's tab has none until hovered.
+            Button(action: onClose) {  // design-lint: allow raw-control the tab's bare ✕ glyph
+                Text("✕").font(skin.font(AinkradFontToken(sizeKey: "t9"))).foregroundStyle(skin.color(skin.text.faint))
+            }
+            .buttonStyle(.plain)
+            .help("Close Terminal")
+            .opacity(isHovered || !tab.ended || tab.command == nil ? 1 : 0)
         }
         .padding(.vertical, skin.size.s4)
-        .padding(.leading, skin.size.s10)
-        .padding(.trailing, skin.size.s4)
-        .background(
-            Capsule().fill(isActive ? theme.foreground.opacity(skin.opacity.o10) : isHovered ? theme.foreground.opacity(skin.opacity.o05) : .clear))
-        .contentShape(Capsule())
+        .padding(.horizontal, skin.size.s10)
+        .background(DrawerTabFill(isActive: isActive, isHovered: isHovered))
+        .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .onTapGesture(perform: onSelect)
         .help(tab.command ?? tab.title)
     }
 
+    /// `⌨︎` for a shell, a glowing cyan dot while a task runs, `✓` / `✗` once it ends.
     @ViewBuilder private var badge: some View {
+        let font = skin.font(AinkradFontToken(size: 11.5))
         if tab.command == nil {
-            Image(systemName: "terminal").font(skin.font(AinkradFontToken(sizeKey: "t10"))).foregroundStyle(skin.color(skin.text.faint))
+            Text("⌨︎").font(font).foregroundStyle(isActive ? theme.foreground : skin.color(skin.text.muted))
         } else if !tab.ended {
-            AinkradSpinner(size: skin.size.s10, tint: theme.accentSecondary)
+            Circle().fill(theme.accentSecondary).frame(width: skin.size.s7, height: skin.size.s7)
+                .shadow(color: theme.accentSecondary, radius: skin.size.s3)
         } else if tab.exitCode == 0 {
-            Image(systemName: "checkmark").font(skin.font(AinkradFontToken(sizeKey: "t10", weight: "bold"))).foregroundStyle(status.success)
+            Text("✓").font(font).foregroundStyle(status.success)
         } else {
-            Image(systemName: "xmark").font(skin.font(AinkradFontToken(sizeKey: "t10", weight: "bold"))).foregroundStyle(status.danger)
+            Text("✗").font(font).foregroundStyle(status.danger)
+        }
+    }
+}
+
+/// `.dtabs .dt`: Neon's 6 pt rounded wash (white 7 % when on); Glass's capsule (white 20 % when on).
+private struct DrawerTabFill: View {
+    let isActive: Bool
+    let isHovered: Bool
+    @Environment(\.ainkradSkin) private var skin
+
+    var body: some View {
+        let white = skin.color(skin.palette.white)
+        let fill = isActive ? white.opacity(skin.usesNativeGlass ? skin.opacity.o20 : skin.opacity.o07) : isHovered ? white.opacity(skin.opacity.o05) : .clear
+        if skin.usesNativeGlass {
+            Capsule().fill(fill)
+        } else {
+            RoundedRectangle(cornerRadius: skin.size.s6, style: .continuous).fill(fill)
         }
     }
 }
