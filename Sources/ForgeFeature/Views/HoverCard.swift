@@ -10,35 +10,44 @@ struct HoverCard: View {
     @Environment(\.ainkradTheme) private var theme
     @Environment(\.ainkradStatusColors) private var status
 
+    /// `.pop`: the issue (`.msg`), the signature syntax-coloured (`.sig`), the documentation (`.doc`), the source
+    /// line (`.src`) — 420 pt, each part inset 12.
     var body: some View {
-        VStack(alignment: .leading, spacing: skin.size.s8) {
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(info.issues) { issue in
-                HStack(alignment: .firstTextBaseline, spacing: skin.size.s6) {
-                    Image(systemName: IssueStyle.symbol(issue.severity))
+                HStack(alignment: .firstTextBaseline, spacing: skin.size.s8) {
+                    Text(IssueStyle.glyph(issue.severity))
                         .foregroundStyle(IssueStyle.color(issue.severity, status: status, theme: theme))
                     Text(issue.message)
                         .foregroundStyle(theme.foreground)
                 }
                 .font(skin.font(AinkradFontToken(sizeKey: "t12")))
+                .padding(.vertical, skin.size.s8)
             }
             ForEach(Array(Self.blocks(info.markdown ?? "").enumerated()), id: \.offset) { _, block in
                 switch block {
                 case .code(let code):
-                    Text(code)
-                        .font(skin.font(AinkradFontToken(sizeKey: "t12", mono: "system")))
-                        .foregroundStyle(theme.foreground)
+                    Text(CodeTint.attributed(code, skin: skin, theme: theme))
+                        .font(skin.font(AinkradFontToken(sizeKey: "t12", mono: "family")))
+                        .padding(.top, skin.size.s10)
+                        .padding(.bottom, skin.size.s6)
                 case .prose(let prose):
                     Text(prose)
                         .font(skin.font(AinkradFontToken(sizeKey: "t12")))
                         .foregroundStyle(skin.color(skin.text.muted))
+                        .lineSpacing(skin.size.s4)
                         .lineLimit(14)
+                        .padding(.top, skin.size.s4)
+                        .padding(.bottom, skin.size.s10)
                 }
             }
             Text("\(info.server) · ⌘-click to jump")
-                .font(skin.font(AinkradFontToken(sizeKey: "t10")))
+                .font(skin.font(AinkradFontToken(sizeKey: "t10_5")))
                 .foregroundStyle(skin.color(skin.text.faint))
+                .padding(.bottom, skin.size.s10)
         }
-        .frame(maxWidth: skin.size.s400, alignment: .leading)
+        .padding(.horizontal, skin.size.s12)
+        .frame(maxWidth: skin.size.s420, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -64,7 +73,7 @@ struct HoverCard: View {
     }
 }
 
-/// The signature of the call being typed, its active parameter bold and underlined.
+/// `.sighelp`: the signature of the call being typed on one slim line, its active parameter cyan and underlined.
 struct SignatureCard: View {
     let hint: SignatureHint
     @Environment(\.ainkradSkin) private var skin
@@ -72,24 +81,85 @@ struct SignatureCard: View {
 
     var body: some View {
         Text(label)
-            .font(skin.font(AinkradFontToken(sizeKey: "t12", mono: "system")))
+            .font(skin.font(AinkradFontToken(size: 11.5, mono: "family")))
             .lineLimit(2)
-            .frame(maxWidth: skin.size.s400, alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
+            // As wide as the signature (up to 420), not a fixed-width panel.
+            .frame(maxWidth: skin.size.s420 - skin.size.s20, alignment: .leading)
+            .fixedSize()
+            .padding(.vertical, skin.size.s6)
+            .padding(.horizontal, skin.size.s10)
     }
 
     private var label: AttributedString {
         var text = AttributedString(hint.label)
-        text.foregroundColor = skin.color(skin.text.muted)
+        text.foregroundColor = theme.foreground
         if let active = hint.activeParameter, let range = Range(active, in: hint.label),
             let start = AttributedString.Index(range.lowerBound, within: text),
             let end = AttributedString.Index(range.upperBound, within: text)
         {
-            text[start..<end].foregroundColor = theme.foreground
-            text[start..<end].inlinePresentationIntent = .stronglyEmphasized
+            text[start..<end].foregroundColor = theme.accentSecondary
             text[start..<end].underlineStyle = .single
         }
         return text
+    }
+}
+
+/// A line of code in the mockups' syntax hues (keywords, types, strings, numbers) — for a hover's signature.
+/// A token pass, not a parser: enough for one declaration.
+enum CodeTint {
+    static let keywords: Set<String> = [
+        "struct", "class", "enum", "protocol", "extension", "actor", "func", "var", "let", "init", "case", "some", "any",
+        "static", "private", "public", "internal", "fileprivate", "final", "mutating", "throws", "async", "await", "return",
+        "inout", "where", "import", "typealias", "associatedtype", "subscript", "nonisolated", "true", "false", "nil", "self",
+    ]
+
+    @MainActor static func attributed(_ code: String, skin: AinkradSkin, theme: HostThemeTokens) -> AttributedString {
+        let mockup = EditorPalette.mockup(themeID: theme.themeID, glass: skin.usesNativeGlass)
+        let keyword = mockup.map { ForgeStyle.hue($0.keyword) } ?? theme.accentPrimary
+        let type = mockup.map { ForgeStyle.hue($0.type) } ?? theme.accentSecondary
+        let string = mockup.map { ForgeStyle.hue($0.string) } ?? theme.accentTertiary
+        let number = mockup.map { ForgeStyle.hue($0.number) } ?? theme.accentPrimary
+        var out = AttributedString()
+        for token in tokens(code) {
+            var piece = AttributedString(token)
+            let first = token.first
+            if token.hasPrefix("\"") {
+                piece.foregroundColor = string
+            } else if keywords.contains(token) || token.hasPrefix("@") {
+                piece.foregroundColor = keyword
+            } else if let first, first.isUppercase {
+                piece.foregroundColor = type
+            } else if let first, first.isNumber {
+                piece.foregroundColor = number
+            } else {
+                piece.foregroundColor = theme.foreground
+            }
+            out += piece
+        }
+        return out
+    }
+
+    /// Words (`@`-prefixed too), string literals, and every other run of characters as is.
+    nonisolated static func tokens(_ code: String) -> [String] {
+        var tokens: [String] = []
+        var index = code.startIndex
+        while index < code.endIndex {
+            let char = code[index]
+            var end = code.index(after: index)
+            if char == "\"" {
+                while end < code.endIndex, code[end] != "\"" { end = code.index(after: end) }
+                if end < code.endIndex { end = code.index(after: end) }
+            } else if char.isLetter || char.isNumber || char == "_" || char == "@" {
+                while end < code.endIndex, code[end].isLetter || code[end].isNumber || code[end] == "_" { end = code.index(after: end) }
+            } else {
+                while end < code.endIndex, !(code[end].isLetter || code[end].isNumber || code[end] == "_" || code[end] == "@" || code[end] == "\"") {
+                    end = code.index(after: end)
+                }
+            }
+            tokens.append(String(code[index..<end]))
+            index = end
+        }
+        return tokens
     }
 }
 
@@ -101,6 +171,8 @@ struct EditorCardLayer<Card: View>: View {
     let prefersAbove: Bool
     /// The rename field takes clicks and keys; the hover and signature cards take neither.
     var interactive = false
+    /// Around the card; nil for the panel's usual 10 pt (the hover and signature cards inset themselves).
+    var inset: CGFloat?
     @ViewBuilder let card: Card
     @Environment(\.ainkradSkin) private var skin
 
@@ -110,7 +182,7 @@ struct EditorCardLayer<Card: View>: View {
             let roomBelow = geo.size.height - rect.maxY - gap
             let above = prefersAbove ? rect.minY > skin.size.s44 || roomBelow < skin.size.s44 : roomBelow < skin.size.s160
             card
-                .padding(skin.size.s10)
+                .padding(inset ?? skin.size.s10)
                 .ainkradPanel()
                 .padding(.leading, max(0, min(rect.minX - skin.size.s10, geo.size.width - skin.size.s420)))
                 .frame(
