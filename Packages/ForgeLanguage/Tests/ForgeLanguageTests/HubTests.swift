@@ -201,4 +201,29 @@ struct HubTests {
         hub.opened(path: "main.go", text: "package main\n")
         #expect(hub.statuses["gopls"] == .notInstalled)
     }
+
+    /// E6: a server that dies at start is restarted once, silently; its second death within five minutes leaves it
+    /// crashed, with how it ended, and the log says both.
+    @Test func aServerThatKeepsCrashingStopsAfterTheSecondTime() async throws {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("forge-crash-\(UUID().uuidString.prefix(8))")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let script = dir.appending(path: "crashy-server")
+        try "#!/bin/sh\nkill -SEGV $$\n".write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+
+        let hub = LanguageHub()
+        hub.overrides["gopls"] = script.path
+        hub.begin(root: dir)
+        hub.opened(path: "main.go", text: "package main\n")
+        for _ in 0..<100 where hub.statuses["gopls"] != .crashed("signal 11 (SEGV)") { try await Task.sleep(for: .milliseconds(50)) }
+        #expect(hub.statuses["gopls"] == .crashed("signal 11 (SEGV)"))
+        let log = hub.logs["gopls"] ?? []
+        #expect(log.filter { $0.hasSuffix("Stopped (signal 11 (SEGV))") }.count == 2, "\(log)")
+        // It stays down: no third start.
+        try await Task.sleep(for: .milliseconds(1500))
+        #expect(hub.statuses["gopls"] == .crashed("signal 11 (SEGV)"))
+        #expect((hub.logs["gopls"] ?? []).filter { $0.contains("Started") }.count == 2)
+        hub.end()
+    }
 }

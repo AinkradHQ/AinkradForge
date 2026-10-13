@@ -37,8 +37,10 @@ struct FileTreeList: View {
             } else if workspace.tree.isEmpty, model.treeEdit == nil {
                 // An empty folder: say so, and offer the first file (E1D1 FD32).
                 AinkradEmptyState(
-                    icon: "folder", title: "This folder is empty", message: "Create its first file.", actionTitle: "New File"
+                    icon: "folder", title: "This folder is empty",
+                    message: "Create a file, or drop files here to copy them in.", actionTitle: "New File"
                 ) { model.beginNew(folder: false, in: "") }
+                .dropDestination(for: URL.self) { urls, _ in drop(urls, into: "") }
             }
         }
     }
@@ -135,8 +137,15 @@ struct ChangesList: View {
         }
         .scrollIndicators(.never)
         .overlay {
-            if workspace.changes.isEmpty {
-                Text(workspace.branch == nil ? "Not a git repository." : "No changes.")
+            if workspace.branch == nil, !workspace.isLoading {
+                // E6: what needs git, and the way to it; the rest of Forge works without.
+                AinkradEmptyState(
+                    icon: "arrow.triangle.branch", title: "Not a git repository",
+                    message: "Changes, gutter marks and blame need git. The rest works as usual.",
+                    actionTitle: "Initialize Repository"
+                ) { model.initializeRepository() }
+            } else if workspace.changes.isEmpty {
+                Text("No changes.")
                     .font(skin.font(AinkradFontToken(sizeKey: "t12")))
                     .foregroundStyle(skin.color(skin.text.faint))
             }

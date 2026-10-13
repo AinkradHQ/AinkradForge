@@ -50,6 +50,8 @@ private struct PaneView: View {
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
 
+    @Environment(\.ainkradReduceMotion) private var reduceMotion
+
     private var tabs: Tabs { model.panes[index] }
     private var isActive: Bool { model.activePane == index || model.panes.count == 1 }
 
@@ -74,15 +76,23 @@ private struct PaneView: View {
                                 .padding(.horizontal, skin.size.s10)
                                 .padding(.bottom, skin.size.s6)
                         }
+                        // Slides in and pushes the code down; no overlay jump (E6).
+                        if let bar = model.serverBar(for: path) {
+                            ServerBarView(model: model, bar: bar)
+                                .padding(.horizontal, skin.size.s10)
+                                .padding(.bottom, skin.size.s6)
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                        }
                         DocumentView(
                             model: model, pane: index, path: path, document: document, palette: palette,
                             goToLine: model.activePane == index ? model.pendingLine : nil)
                         // A wholesale buffer change (reload, line endings) rebuilds the editor so it re-parses.
                         .id("\(path)#\(document.revision)")
                     }
+                    .animation(reduceMotion ? nil : skin.animation(skin.motion.present), value: model.serverBar(for: path))
                 } else if model.workspace?.files.isEmpty == true {
-                    // Nothing to pick in an empty folder (E1D1 FD32).
-                    AinkradEmptyState(icon: "doc.text", title: "No file open", message: "This folder has no files yet. New File (⌘N) creates one.")
+                    // Nothing to pick in an empty folder (E1D1 FD32): the ways in instead of a blank pane (E6).
+                    AinkradEmptyState(icon: "hammer", title: "No file open", message: "⌘N new file · ⇧⌘P commands · ⌘O open folder")
                 } else {
                     AinkradEmptyState(
                         icon: "doc.text", title: "No file open",

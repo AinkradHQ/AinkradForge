@@ -1,4 +1,5 @@
 import Foundation
+import LanguageServerProtocol
 import Testing
 
 @testable import ForgeLanguage
@@ -33,6 +34,38 @@ struct LanguageCoreTests {
         // One server per extension.
         let extensions = LanguageRegistry.servers.flatMap(\.languageIDs.keys)
         #expect(extensions.count == Set(extensions).count)
+    }
+
+    /// E6: one silent restart; a second crash within five minutes stops the server; an older crash has aged out.
+    @Test func aSecondCrashWithinFiveMinutesStopsTheServer() {
+        let start = Date()
+        var policy = CrashPolicy()
+        let restarts = [0, 299].map { policy.crashed(at: start.addingTimeInterval($0)) }
+        #expect(restarts == [true, false])
+        var later = CrashPolicy()
+        let spaced = [0, 301, 400].map { later.crashed(at: start.addingTimeInterval($0)) }
+        #expect(spaced == [true, true, false])
+        later.reset()
+        let afterReset = later.crashed(at: start.addingTimeInterval(401))
+        #expect(afterReset)
+        #expect(CrashPolicy.describe(status: 3, bySignal: false) == "exit 3")
+        #expect(CrashPolicy.describe(status: 11, bySignal: true) == "signal 11 (SEGV)")
+        #expect(CrashPolicy.describe(status: 99, bySignal: true) == "signal 99")
+    }
+
+    /// `$/progress` folds into one status-bar line: the newest unfinished task, nil once all have ended.
+    @Test func progressReportsFoldIntoOneLine() {
+        var tracker = ProgressTracker()
+        func kind(_ kind: String, _ fields: [String: LSPAny] = [:]) -> LSPAny { .hash(fields.merging(["kind": .string(kind)]) { a, _ in a }) }
+        let lines = [
+            tracker.update(token: "1", value: kind("begin", ["title": .string("Indexing")])),
+            tracker.update(token: "1", value: kind("report", ["message": .string("412 / 1280")])),
+            tracker.update(token: "2", value: kind("begin", ["title": .string("Loading"), "percentage": .number(40)])),
+            tracker.update(token: "2", value: kind("end")),
+            tracker.update(token: "9", value: .string("not progress")),
+            tracker.update(token: "1", value: kind("end")),
+        ]
+        #expect(lines == ["Indexing", "Indexing 412 / 1280", "Loading 40%", "Indexing 412 / 1280", "Indexing 412 / 1280", nil])
     }
 
     @Test func positionsAreUTF16AndClamped() {

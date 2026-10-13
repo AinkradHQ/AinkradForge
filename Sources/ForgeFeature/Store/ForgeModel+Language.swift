@@ -32,6 +32,7 @@ extension ForgeModel {
         switch languages.statuses[spec.id] {
         case .notInstalled: return "\(spec.command) is not installed — \(spec.installHint)"
         case .failed(let why): return "\(spec.command) failed: \(why)"
+        case .crashed(let how): return "\(spec.command) stopped (\(how)). Restart it from the status bar."
         default: return nil
         }
     }

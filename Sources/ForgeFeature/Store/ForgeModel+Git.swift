@@ -5,6 +5,19 @@ import Foundation
 
 /// Git in the editor: gutter marks, the peek with Revert / Stage, blame on demand.
 extension ForgeModel {
+    /// Initialize Repository (the Changes tab of a folder that is not one, E6): `git init`, then a refresh.
+    func initializeRepository() {
+        guard let workspace else { return }
+        Task {
+            do {
+                _ = try await Git(directory: workspace.root).run(["init"])
+                await workspace.refresh()
+            } catch {
+                notice = "Could not initialize a repository: \(error.localizedDescription)"
+            }
+        }
+    }
+
     /// The buffer of `path` changed (or loaded): recompute its marks.
     func gitChanged(_ path: String) {
         guard let workspace, let document = documents[path], document.state == .ready else { return }

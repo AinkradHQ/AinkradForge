@@ -29,6 +29,8 @@ struct ForgeDocument: Codable, Equatable, Sendable {
     var lastWorkspace: String?
     /// Editor settings; nil = defaults. Optional so state saved before it existed still decodes.
     var editor: EditorSettings?
+    /// Languages whose "no language server" hint was turned off for good ("Not for Ruby", E6).
+    var quietLanguages: [String]?
 }
 
 /// The editor settings page. Decoded field by field, each falling back to its default, so a setting added

@@ -63,6 +63,8 @@ final class ForgeModel {
     }
     /// The workspace's language servers: diagnostics now; hover, completion and the rest as E5 lands.
     let languages = LanguageHub()
+    /// Languages whose server hint was closed (✕) for this session (E6).
+    var dismissedHints: Set<String> = []
     let terminals = TerminalDrawer()
     let git = EditorGit()
     let tasks = TaskRunner()

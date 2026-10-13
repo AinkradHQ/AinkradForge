@@ -1,0 +1,107 @@
+import AinkradAppKit
+import ForgeLanguage
+import SwiftUI
+
+/// The language-server bar under the breadcrumb (E6, screen 19 B and D). A hint is a quiet fill (a capsule under
+/// Glass); a stopped server's bar is washed red. Told apart by fill, never by a line.
+/// In a narrow pane (a split) the actions move under the message and keep only the essential ones — Set Server
+/// Path… and Show Log stay in the status bar's server menu — so the bar never widens the pane.
+struct ServerBarView: View {
+    let model: ForgeModel
+    let bar: ServerBar
+    @State private var isNarrow = false
+    @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
+    @Environment(\.ainkradStatusColors) private var status
+
+    /// Below this the message and its actions no longer share a line.
+    private static let oneLineWidth: CGFloat = 640
+
+    var body: some View {
+        Group {
+            if isNarrow {
+                VStack(alignment: .leading, spacing: skin.size.s4) {
+                    HStack(alignment: .firstTextBaseline, spacing: skin.size.s10) { icon; message }
+                    HStack(spacing: skin.size.s10) {
+                        Spacer(minLength: 0)
+                        actions(compact: true)
+                    }
+                }
+            } else {
+                HStack(spacing: skin.size.s10) {
+                    icon
+                    message
+                    Spacer(minLength: skin.size.s4)
+                    actions(compact: false)
+                }
+            }
+        }
+        .font(skin.font(AinkradFontToken(sizeKey: "t11")))
+        .padding(.vertical, skin.size.s4)
+        .padding(.horizontal, skin.size.s10)
+        // Sized by the pane, never by its content: the width decides the layout.
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+        .background(background)
+        .onGeometryChange(for: Bool.self) { $0.size.width < Self.oneLineWidth } action: { isNarrow = $0 }
+    }
+
+    private var icon: some View {
+        Image(systemName: bar.kind == .stopped ? "xmark.octagon" : "info.circle")
+            .foregroundStyle(bar.kind == .stopped ? status.danger : theme.accentSecondary)
+    }
+
+    private var message: some View {
+        Text(bar.message)
+            .foregroundStyle(skin.color(skin.text.muted))
+            .lineLimit(3)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder private func actions(compact: Bool) -> some View {
+        switch bar.kind {
+        case .missing:
+            if let spec = bar.spec, !compact {
+                AinkradButton(title: "Set Server Path…", style: .secondary) {
+                    if let path = ServerPathPicker.choose(spec) { model.setServerPath(spec.id, path) }
+                }
+                .fixedSize()
+            }
+            AinkradButton(title: "Not for \(bar.language)", style: .ghost) {
+                model.dismissServerHint(bar.language, forever: true)
+            }
+            .fixedSize()
+            AinkradIconButton(systemName: "xmark", size: skin.size.s18, tooltip: "Hide for this session") {
+                model.dismissServerHint(bar.language, forever: false)
+            }
+        case .stopped:
+            if let spec = bar.spec {
+                if !compact {
+                    AinkradButton(title: "Show Log", style: .ghost) { model.showServerLog(spec.id) }.fixedSize()
+                }
+                AinkradButton(title: "Restart Server", style: .primary) { model.languages.restart(spec.id) }.fixedSize()
+            }
+        }
+    }
+
+    @ViewBuilder private var background: some View {
+        let fill = bar.kind == .stopped ? status.danger.opacity(skin.opacity.o10) : theme.foreground.opacity(skin.opacity.o05)
+        // A capsule only around one line; two lines (narrow) take the rounded rectangle.
+        if skin.usesNativeGlass, !isNarrow {
+            Capsule().fill(fill)
+        } else {
+            RoundedRectangle(cornerRadius: skin.size.s8, style: .continuous).fill(fill)
+        }
+    }
+}
+
+/// Asks for a language server's executable.
+enum ServerPathPicker {
+    @MainActor static func choose(_ spec: ServerSpec) -> String? {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.message = "Choose the \(spec.command) executable for \(spec.language)."
+        panel.prompt = "Use"
+        return panel.runModal() == .OK ? panel.url?.path : nil
+    }
+}
