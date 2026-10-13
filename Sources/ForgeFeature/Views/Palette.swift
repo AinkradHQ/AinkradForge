@@ -46,6 +46,8 @@ struct Palette: View {
     @FocusState private var focused: Bool
     /// Takes the key press that becomes the new shortcut while `model.rebinding` is set.
     @State private var recorder = NextKey()
+    /// The pane's width: a narrow one gets a narrower panel (FD49).
+    @State private var available: CGFloat?
     @Environment(\.ainkradPaneIsFocused) private var paneFocused
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
@@ -59,6 +61,7 @@ struct Palette: View {
                 .accessibilityHidden(true)
             panel.padding(.top, skin.size.s64)
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { available = $0 }
         // Through the responder chain (the field has focus), not a key-equivalent claim on Esc.
         .onExitCommand { model.palette = nil }
         .onChange(of: model.paletteSymbols) { _, _ in highlight = items.isEmpty ? nil : 0 }
@@ -127,7 +130,8 @@ struct Palette: View {
             .padding(.horizontal, skin.size.s14)
             .padding(.bottom, skin.size.s10)
         }
-        .frame(width: skin.size.s560)
+        // 560 pt, or the pane's width less a 16 pt margin each side when that is narrower (FD49).
+        .frame(width: min(skin.size.s560, max(0, (available ?? .infinity) - 2 * skin.size.s16)))
         .fixedSize(horizontal: false, vertical: true)
         .ainkradPanel()
         .onAppear {
