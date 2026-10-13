@@ -18,7 +18,10 @@ final class TaskRunner {
     private(set) var running: [String: Int] = [:]
     private(set) var results: [String: Result] = [:]
     private(set) var last: WorkspaceTask?
-    @ObservationIgnored private var started: [String: Date] = [:]
+    /// Task id → when it started, while it runs.
+    @ObservationIgnored private(set) var started: [String: Date] = [:]
+    /// The clock (tests freeze it).
+    @ObservationIgnored var now: () -> Date = Date.init
 
     func reset() {
         tasks = []
@@ -38,7 +41,7 @@ final class TaskRunner {
         if let tab = running[task.id], drawer.tabs.contains(where: { $0.id == tab }) { return drawer.select(tab) }
         guard let tab = drawer.add(command: task.command, title: task.shows) else { return }
         running[task.id] = tab
-        started[task.id] = Date()
+        started[task.id] = now()
         last = task
     }
 
@@ -58,13 +61,23 @@ final class TaskRunner {
     func ended(tab: Int, exitCode: Int32?) {
         guard let id = running.first(where: { $0.value == tab })?.key else { return }
         running[id] = nil
-        let seconds = Int(Date().timeIntervalSince(started.removeValue(forKey: id) ?? Date()))
-        results[id] = Result(succeeded: exitCode == 0, exitCode: exitCode, seconds: seconds, at: Date())
+        let seconds = Int(now().timeIntervalSince(started.removeValue(forKey: id) ?? now()))
+        results[id] = Result(succeeded: exitCode == 0, exitCode: exitCode, seconds: seconds, at: now())
     }
 
     /// The task's tab was closed by hand while it ran: it stopped.
     func tabClosed(_ tab: Int) {
         if let id = running.first(where: { $0.value == tab })?.key { running[id] = nil }
+    }
+}
+
+extension TaskRunner {
+    /// How long a running task has run: `0:18`, `12:05`, `1:02:03`; nil when it is not running.
+    func elapsed(_ id: String) -> String? {
+        guard let start = started[id] else { return nil }
+        let total = max(0, Int(now().timeIntervalSince(start)))
+        let (h, m, s) = (total / 3_600, total / 60 % 60, total % 60)
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
     }
 }
 
