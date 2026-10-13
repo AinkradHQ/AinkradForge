@@ -291,8 +291,42 @@ private struct TabStrip: View {
             .padding(.horizontal, skin.size.s14)
         }
         .scrollIndicators(.never)
+        // No scroll bar: an edge with tabs past it fades out instead, so more tabs read as there (E1D1 FD29).
+        .modifier(OverflowFade())
         .padding(.top, skin.size.s12)
         .frame(height: skin.size.s44, alignment: .bottom)
+    }
+}
+
+/// Fades a horizontal scroll view's edge while content is scrolled out past it. macOS 15+ (scroll geometry);
+/// earlier, no fade.
+private struct OverflowFade: ViewModifier {
+    /// Leading, trailing.
+    @State private var hidden = [false, false]
+    @Environment(\.ainkradSkin) private var skin
+    @Environment(\.ainkradTheme) private var theme
+
+    func body(content: Content) -> some View {
+        if #available(macOS 15, *) {
+            content
+                .onScrollGeometryChange(for: [Bool].self) { geometry in
+                    let offset = geometry.contentOffset.x
+                    return [offset > 1, offset + geometry.containerSize.width < geometry.contentSize.width - 1]
+                } action: { _, edges in
+                    hidden = edges
+                }
+                .mask {
+                    HStack(spacing: 0) {
+                        LinearGradient(colors: [.clear, theme.foreground], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: hidden[0] ? skin.size.s28 : 0)
+                        Rectangle()
+                        LinearGradient(colors: [theme.foreground, .clear], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: hidden[1] ? skin.size.s28 : 0)
+                    }
+                }
+        } else {
+            content
+        }
     }
 }
 
