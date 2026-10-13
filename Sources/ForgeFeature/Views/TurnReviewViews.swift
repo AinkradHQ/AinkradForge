@@ -166,16 +166,12 @@ private struct TurnGroupView: View {
     private var header: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: skin.size.s10) {
-                marks
-                titleLines(meta: false).frame(minWidth: 0, idealWidth: skin.size.s160, maxWidth: .infinity, alignment: .leading)
+                foldButton(meta: false).frame(minWidth: 0, idealWidth: skin.size.s160, maxWidth: .infinity, alignment: .leading)
                 metaText.fixedSize()
                 actions(icons: false)
             }
             VStack(alignment: .trailing, spacing: skin.size.s4) {
-                HStack(spacing: skin.size.s10) {
-                    marks
-                    titleLines(meta: true).frame(maxWidth: .infinity, alignment: .leading)
-                }
+                foldButton(meta: true).frame(maxWidth: .infinity, alignment: .leading)
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: skin.size.s10) { actions(icons: false) }
                     HStack(spacing: skin.size.s4) { actions(icons: true) }
@@ -186,6 +182,27 @@ private struct TurnGroupView: View {
         .padding(.horizontal, skin.size.s6)
         .contentShape(Rectangle())
         .onTapGesture { if !group.kept { toggle() } }
+    }
+
+    /// The chevron, dot and title: a plain button, so Full Keyboard Access reaches the fold (Space), and ←/→
+    /// fold and open it (E1D2 FD40).
+    private func foldButton(meta: Bool) -> some View {
+        Button { if !group.kept { toggle() } } label: {  // design-lint: allow raw-control keyboard-reachable fold (kit has no row button)
+            HStack(spacing: skin.size.s10) {
+                marks
+                titleLines(meta: meta)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onKeyPress(.leftArrow) { fold(open: false) }
+        .onKeyPress(.rightArrow) { fold(open: true) }
+    }
+
+    private func fold(open: Bool) -> KeyPress.Result {
+        guard !group.kept, isOpen != open else { return .ignored }
+        toggle()
+        return .handled
     }
 
     private var marks: some View {
@@ -232,13 +249,15 @@ private struct TurnGroupView: View {
                 if icons {
                     AinkradIconButton(systemName: "arrow.turn.down.right", tooltip: "Ask about this turn…") { ask() }
                 } else {
-                    Label("Ask about this turn…", systemImage: "arrow.turn.down.right")
-                        .font(skin.font(AinkradFontToken(sizeKey: "t11")))
-                        .foregroundStyle(theme.accentSecondary)
-                        .opacity(hovering || asking == group.id ? 1 : skin.opacity.o70)
-                        .fixedSize()
-                        .onTapGesture { ask() }
-                        .help("Ask about this turn in the same Grimoire thread")
+                    Button(action: ask) {  // design-lint: allow raw-control keyboard-reachable link label (FD40)
+                        Label("Ask about this turn…", systemImage: "arrow.turn.down.right")
+                            .font(skin.font(AinkradFontToken(sizeKey: "t11")))
+                            .foregroundStyle(theme.accentSecondary)
+                            .opacity(hovering || asking == group.id ? 1 : skin.opacity.o70)
+                            .fixedSize()
+                    }
+                    .buttonStyle(.plain)
+                    .help("Ask about this turn in the same Grimoire thread")
                 }
             }
             let undoTitle = group.turn == nil ? "Undo" : "Undo turn", keepTitle = group.turn == nil ? "Keep" : "Keep turn"
@@ -300,32 +319,35 @@ private struct TurnGroupView: View {
         // to it — as Review All does (E1D1 FD13).
         let note = file.before == nil ? "new file" : file.after == nil ? "deleted" : isShown ? nil : folder.isEmpty ? "·" : folder
         return VStack(alignment: .leading, spacing: skin.size.s4) {
-            HStack(spacing: skin.size.s8) {
-                Image(systemName: isShown ? "chevron.down" : "doc.text").foregroundStyle(skin.color(skin.text.faint))
-                if !isShown {
-                    Text((file.path as NSString).lastPathComponent).font(skin.font(AinkradFontToken(sizeKey: "t12")))
-                        .lineLimit(1).truncationMode(.middle).layoutPriority(1)
-                }
-                if let note {
-                    Text(note)
-                        .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "system")))
-                        .foregroundStyle(skin.color(skin.text.faint))
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                }
-                Spacer(minLength: skin.size.s8)
-                Text("+\(counts.added)").foregroundStyle(status.success).fixedSize()
-                Text("−\(counts.removed)").foregroundStyle(status.danger).fixedSize()
-            }
-            .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "system")))
-            .padding(.vertical, skin.size.s3)
-            .padding(.horizontal, skin.size.s6)
-            .contentShape(Rectangle())
-            .onTapGesture {
+            // A plain button: Full Keyboard Access shows or hides the diff with Space (E1D2 FD40).
+            Button {  // design-lint: allow raw-control keyboard-reachable row (kit has no row button)
                 var next = shown
                 if next.remove(file.path) == nil { next.insert(file.path) }
                 shownFiles = next
+            } label: {
+                HStack(spacing: skin.size.s8) {
+                    Image(systemName: isShown ? "chevron.down" : "doc.text").foregroundStyle(skin.color(skin.text.faint))
+                    if !isShown {
+                        Text((file.path as NSString).lastPathComponent).font(skin.font(AinkradFontToken(sizeKey: "t12")))
+                            .lineLimit(1).truncationMode(.middle).layoutPriority(1)
+                    }
+                    if let note {
+                        Text(note)
+                            .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "system")))
+                            .foregroundStyle(skin.color(skin.text.faint))
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                    }
+                    Spacer(minLength: skin.size.s8)
+                    Text("+\(counts.added)").foregroundStyle(status.success).fixedSize()
+                    Text("−\(counts.removed)").foregroundStyle(status.danger).fixedSize()
+                }
+                .font(skin.font(AinkradFontToken(sizeKey: "t11", mono: "system")))
+                .padding(.vertical, skin.size.s3)
+                .padding(.horizontal, skin.size.s6)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             if isShown {
                 let key = group.id + "|" + file.path
                 AinkradDiffReview(

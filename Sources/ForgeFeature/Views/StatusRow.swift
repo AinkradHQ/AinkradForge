@@ -81,14 +81,17 @@ private struct IssueCounts: View {
     var body: some View {
         let known = model.languages.statuses.values.contains(.ready)
         if known || activeServerStarting {
-            HStack(spacing: skin.size.s6) {
-                Label(known ? "\(model.languages.errorCount)" : "–", systemImage: "xmark.octagon")
-                    .foregroundStyle(model.languages.errorCount > 0 ? status.danger : skin.color(skin.text.muted))
-                Label(known ? "\(model.languages.warningCount)" : "–", systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(model.languages.warningCount > 0 ? status.warning : skin.color(skin.text.muted))
+            // A plain button, so Full Keyboard Access reaches it (E1D2 FD40).
+            Button { model.sideTab = .problems } label: {  // design-lint: allow raw-control keyboard-reachable status item
+                HStack(spacing: skin.size.s6) {
+                    Label(known ? "\(model.languages.errorCount)" : "–", systemImage: "xmark.octagon")
+                        .foregroundStyle(model.languages.errorCount > 0 ? status.danger : skin.color(skin.text.muted))
+                    Label(known ? "\(model.languages.warningCount)" : "–", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(model.languages.warningCount > 0 ? status.warning : skin.color(skin.text.muted))
+                }
+                .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
-            .onTapGesture { model.sideTab = .problems }
+            .buttonStyle(.plain)
             .help("Show issues")
         }
     }

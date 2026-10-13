@@ -12,11 +12,12 @@ struct Shortcut: Equatable {
         if modifiers.contains(.option) { text += "⌥" }
         if modifiers.contains(.shift) { text += "⇧" }
         if modifiers.contains(.command) { text += "⌘" }
-        return text + (key == "\r" ? "↵" : key == Self.backspace ? "⌫" : key == Self.escape ? "Esc" : key == Self.f12 ? "F12" : key == Self.f2 ? "F2" : String(key).uppercased())
+        return text + (key == "\r" ? "↵" : key == Self.backspace ? "⌫" : key == Self.escape ? "Esc" : key == Self.f12 ? "F12" : key == Self.f2 ? "F2" : key == Self.f8 ? "F8" : String(key).uppercased())
     }
 
     /// AppKit's private-use characters for the function keys.
     static let f2 = Character("\u{F705}")
+    static let f8 = Character("\u{F70B}")
     static let backspace = Character("\u{7F}")
     static let escape = Character("\u{1B}")
     static let f12 = Character("\u{F70F}")
@@ -37,6 +38,7 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
     case goToDefinition, findReferences, renameSymbol, codeActions, formatDocument
     case toggleTerminal, newTerminal, maximiseTerminal, toggleBlame, runTask, rerunLastTask
     case keepChange, undoChange, keepAllChanges, undoAllChanges, askAgent, showHover, closeHints
+    case reviewOutside, showIssues, nextProblem, previousProblem
 
     var id: String { rawValue }
 
@@ -93,6 +95,10 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .askAgent: "Ask Agent…"
         case .showHover: "Show Hover"
         case .closeHints: "Close Hint"
+        case .reviewOutside: "Review Changes Made Outside Forge"
+        case .showIssues: "Show Issues"
+        case .nextProblem: "Go to Next Problem"
+        case .previousProblem: "Go to Previous Problem"
         }
     }
 
@@ -142,6 +148,10 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .askAgent: "sparkles"
         case .showHover: "text.bubble"
         case .closeHints: "xmark"
+        case .reviewOutside: "sparkle"
+        case .showIssues: "exclamationmark.triangle"
+        case .nextProblem: "arrow.down.to.line"
+        case .previousProblem: "arrow.up.to.line"
         }
     }
 
@@ -187,8 +197,11 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         case .askAgent: Shortcut(key: "i", modifiers: .command)
         // Claimed only while a hint shows (`.hint`): Esc reaches the editor otherwise.
         case .closeHints: Shortcut(key: Shortcut.escape, modifiers: [])
+        case .nextProblem: Shortcut(key: Shortcut.f8, modifiers: [])
+        case .previousProblem: Shortcut(key: Shortcut.f8, modifiers: .shift)
         case .closeWorkspace, .revealInTree, .refresh, .openTerminal, .splitDown, .closePane, .renameActiveFile,
-            .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8, .keepAllChanges, .undoAllChanges, .showHover:
+            .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8, .keepAllChanges, .undoAllChanges, .showHover,
+            .reviewOutside, .showIssues:
             nil
         }
     }
@@ -197,7 +210,8 @@ enum ForgeCommand: String, CaseIterable, Identifiable {
         switch self {
         case .quickOpen, .commandPalette, .openFolder: .none
         case .closeWorkspace, .saveAll, .showFiles, .showChanges, .refresh, .openTerminal, .newFile, .newFolder,
-            .findInFiles, .replaceAll, .toggleTerminal, .newTerminal, .maximiseTerminal, .runTask, .rerunLastTask:
+            .findInFiles, .replaceAll, .toggleTerminal, .newTerminal, .maximiseTerminal, .runTask, .rerunLastTask,
+            .reviewOutside, .showIssues, .nextProblem, .previousProblem:
             .workspace
         case .goToLine, .save, .closeTab, .nextTab, .previousTab, .revealInTree, .copyPath, .splitRight, .splitDown,
             .renameActiveFile, .revealInFinder, .trashActiveFile, .lineEndingsLF, .lineEndingsCRLF, .saveAsUTF8,
