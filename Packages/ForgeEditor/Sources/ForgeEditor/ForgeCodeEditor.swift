@@ -31,11 +31,13 @@ public struct EditorLanguage: Equatable, Sendable {
 public struct EditorColors: Equatable, Sendable {
     public var text, insertionPoint, selection, lineHighlight: NSColor
     public var keywords, commands, types, attributes, variables, values, numbers, strings, comments: NSColor
+    /// The completion panel's finish; nil keeps CodeEdit's default.
+    public var completionPanel: EditorPanelStyle?
 
     public init(
         text: NSColor, insertionPoint: NSColor, selection: NSColor, lineHighlight: NSColor, keywords: NSColor,
         commands: NSColor, types: NSColor, attributes: NSColor, variables: NSColor, values: NSColor, numbers: NSColor,
-        strings: NSColor, comments: NSColor
+        strings: NSColor, comments: NSColor, completionPanel: EditorPanelStyle? = nil
     ) {
         self.text = text
         self.insertionPoint = insertionPoint
@@ -50,6 +52,7 @@ public struct EditorColors: Equatable, Sendable {
         self.numbers = numbers
         self.strings = strings
         self.comments = comments
+        self.completionPanel = completionPanel
     }
 
     var theme: EditorTheme {
@@ -62,6 +65,22 @@ public struct EditorColors: Equatable, Sendable {
             attributes: .init(color: attributes), variables: .init(color: variables), values: .init(color: values),
             numbers: .init(color: numbers), strings: .init(color: strings), characters: .init(color: strings),
             comments: .init(color: comments, italic: true))
+    }
+}
+
+/// A floating panel's finish: its fill, the selected row's fill and its corner radius.
+public struct EditorPanelStyle: Equatable, Sendable {
+    public var background, selection: NSColor
+    public var cornerRadius: CGFloat
+
+    public init(background: NSColor, selection: NSColor, cornerRadius: CGFloat) {
+        self.background = background
+        self.selection = selection
+        self.cornerRadius = cornerRadius
+    }
+
+    var suggestionPanelStyle: SuggestionPanelStyle {
+        SuggestionPanelStyle(background: background, selectedRowBackground: selection, cornerRadius: cornerRadius)
     }
 }
 
@@ -281,7 +300,8 @@ struct EditorHost: View {
             configuration: SourceEditorConfiguration(
                 appearance: .init(
                     theme: colors.theme, font: .monospacedSystemFont(ofSize: options.fontSize, weight: .regular),
-                    lineHeightMultiple: 1.45, wrapLines: options.wrapLines, tabWidth: options.tabWidth),
+                    lineHeightMultiple: 1.45, wrapLines: options.wrapLines, tabWidth: options.tabWidth,
+                    suggestionPanelStyle: colors.completionPanel?.suggestionPanelStyle),
                 behavior: .init(indentOption: options.insertSpaces ? .spaces(count: options.tabWidth) : .tab),
                 layout: .init(contentInsets: insets),
                 peripherals: .init(
