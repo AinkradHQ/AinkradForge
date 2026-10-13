@@ -149,9 +149,14 @@ private struct DocumentView: View {
 
     var body: some View {
         switch document.state {
-        case .loading: AinkradLoadingState(label: "Opening \(document.url.lastPathComponent)…")
+        // Filling the pane: under Glass the kit's states are Apple's content-unavailable view, only as wide as its
+        // text, and the breadcrumb above them followed it to the middle (E1D1 FD30).
+        case .loading:
+            AinkradLoadingState(label: "Opening \(document.url.lastPathComponent)…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .unreadable(let why):
             AinkradEmptyState(icon: "doc.questionmark", title: "Can't show this file", message: why)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .ready:
             let review = model.agent.files[path]
             let agentMarks = model.agentMarks(path, color: NSColor(theme.accentSecondary))
