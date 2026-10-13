@@ -8,6 +8,8 @@ import SwiftUI
 struct WelcomeView: View {
     let model: ForgeModel
     @State private var servers: (found: [String], missing: [String])?
+    /// Clone Repository… while its dialog is up.
+    @State private var clone: GitClone?
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
 
@@ -25,6 +27,8 @@ struct WelcomeView: View {
                     if let url = FolderPicker.choose() { model.request(.open(url)) }
                 }
                 .fixedSize()
+                AinkradButton(title: "Clone Repository…", style: .secondary) { clone = GitClone(parent: cloneParent) }
+                    .secondaryAccent().fixedSize()
                 AinkradButton(title: "New File", style: .secondary, action: newFile).secondaryAccent().fixedSize()
             }
             if !recents.isEmpty {
@@ -49,6 +53,17 @@ struct WelcomeView: View {
         }
         .padding(skin.size.s40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ainkradModal(
+            isPresented: Binding(get: { clone != nil }, set: { if !$0 { closeClone() } }), contentWidth: CloneDialog.width
+        ) {
+            if let clone {
+                CloneDialog(clone: clone, opened: { url in
+                    self.clone = nil
+                    // The guarded way in (FD37), as Open Folder.
+                    model.request(.open(url))
+                }, close: closeClone)
+            }
+        }
         .task {
             let overrides = model.editorSettings.serverPaths
             servers = await Task.detached { LanguageHub.availability(overrides: overrides) }.value
@@ -84,6 +99,18 @@ struct WelcomeView: View {
             }
         }
         Task { await model.start(launch: url.path) }
+    }
+
+    /// Closing the dialog (Esc, the scrim, Cancel) stops a clone still running.
+    private func closeClone() {
+        clone?.cancel()
+        clone = nil
+    }
+
+    /// Where a clone goes by default: beside the newest recent workspace, else the home folder.
+    private var cloneParent: URL {
+        recents.first.map { URL(fileURLWithPath: $0.path).deletingLastPathComponent() }
+            ?? FileManager.default.homeDirectoryForCurrentUser
     }
 
     /// Recents whose folder still exists.
