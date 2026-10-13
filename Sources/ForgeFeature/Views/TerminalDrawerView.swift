@@ -39,7 +39,9 @@ struct TerminalDrawerView: View {
                     systemName: drawer.isMaximised ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
                     tooltip: model.titled(drawer.isMaximised ? "Restore" : "Maximise", .maximiseTerminal)
                 ) { drawer.isMaximised.toggle() }
+                .textGlyph(drawer.isMaximised ? "⤡" : "⤢", size: skin.size.s14)
                 AinkradIconButton(systemName: "xmark", tooltip: model.titled("Hide", .toggleTerminal)) { drawer.isOpen = false }
+                    .textGlyph("✕", size: skin.size.s14)
             }
             .padding(.horizontal, skin.size.s10)
             .padding(.top, skin.size.s8)
