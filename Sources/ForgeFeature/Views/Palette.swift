@@ -46,6 +46,7 @@ struct Palette: View {
     @FocusState private var focused: Bool
     /// Takes the key press that becomes the new shortcut while `model.rebinding` is set.
     @State private var recorder = NextKey()
+    @Environment(\.ainkradPaneIsFocused) private var paneFocused
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
 
@@ -64,6 +65,7 @@ struct Palette: View {
         .task(id: symbolTask) { await model.loadPaletteSymbols(for: prefix + query) }
         .background { openKeys }
         .background { rebindKey }
+        .onChange(of: paneFocused) { _, focused in recorder.paneFocused = focused }
         .onDisappear {
             recorder.stop()
             model.rebinding = nil
@@ -163,7 +165,8 @@ struct Palette: View {
     private func rebindHighlighted() {
         guard let index = highlight, items.indices.contains(index), case .command(let command) = items[index].payload else { return }
         model.rebinding = command
-        recorder.listen { event in
+        recorder.paneFocused = paneFocused
+        recorder.listen(onRelease: { model.rebinding = nil }) { event in
             let bare = event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty
             if bare, event.keyCode == 53 {
                 model.rebinding = nil

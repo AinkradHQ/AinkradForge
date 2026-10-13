@@ -162,7 +162,8 @@ private struct ShortcutLayer: View {
                 if model.palette == nil, available.contains(where: { model.shortcut(for: $0)?.afterCommandK == true }) {
                     Button("Chord") {  // design-lint: allow raw-control key-equivalent claim
                         model.awaitingChord = true
-                        chord.listen { event in
+                        chord.paneFocused = isFocused
+                        chord.listen(onRelease: { model.awaitingChord = false }) { event in
                             model.awaitingChord = false
                             let second = Shortcut(event: event, afterCommandK: true)
                             if let command = model.availableCommands.first(where: { second != nil && model.shortcut(for: $0) == second }) {
@@ -178,5 +179,6 @@ private struct ShortcutLayer: View {
         .opacity(0)
         .frame(width: 0, height: 0)
         .accessibilityHidden(true)
+        .onChange(of: isFocused) { _, focused in chord.paneFocused = focused }
     }
 }
