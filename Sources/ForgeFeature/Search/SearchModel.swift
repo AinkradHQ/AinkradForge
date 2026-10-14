@@ -13,22 +13,23 @@ final class SearchModel {
         var id: String { path }
     }
 
-    /// A file's result lines dismissed with ✕: 0-based indexes into `lines`, the file's lines (hashed) when they
-    /// were last placed. They are placed in the file as it is now by a line diff, so lines added or removed above —
-    /// identical ones included — can't move a dismissal onto another match (FD44, E1D4 FD54). A dismissed line
-    /// that was itself edited is dismissed no more: it is listed again, never replaced unseen.
-    struct Dismissed: Equatable, Sendable {
+    /// Some of a file's lines — dismissed results, or the lines an unticked preview hunk changes: 0-based indexes
+    /// into `lines`, the file's lines (hashed) when they were last placed. They are placed in the file as it is now
+    /// by a line diff, so lines added or removed above — identical ones included — can't move a dismissal or an
+    /// untick onto another match (FD44, E1D4 FD54, FD55). A line that was itself edited is no longer tracked: a
+    /// dismissed one is listed again, never replaced unseen.
+    struct TrackedLines: Equatable, Sendable {
         var lines: [Int]
         var indexes: Set<Int> = []
 
         /// The dismissals placed in `now` (a file's `TextSearch.lineHashes`).
-        func placed(in now: [Int]) -> Dismissed {
+        func placed(in now: [Int]) -> TrackedLines {
             guard now != lines else { return self }
             let map = TextSearch.lineMap(from: lines, to: now)
-            return Dismissed(lines: now, indexes: Set(indexes.compactMap { map[$0] }))
+            return TrackedLines(lines: now, indexes: Set(indexes.compactMap { map[$0] }))
         }
 
-        /// The dismissed lines, 1-based.
+        /// The tracked lines, 1-based.
         var lineNumbers: Set<Int> { Set(indexes.map { $0 + 1 }) }
     }
 
@@ -58,14 +59,14 @@ final class SearchModel {
     /// the selected row, with its ⇄ showing (mockup 08).
     var previewPath: String?
     var previewLine: Int?
-    /// Per file, the preview hunks the user unticked: Replace leaves those lines as they are. Hunk ids are positions,
-    /// so a new query, new globs or a dismissed line (which re-cut the hunks) forget them.
-    var rejected: [String: Set<Int>] = [:]
+    /// Per file, the preview hunks the user unticked, as the lines they change: Replace leaves those lines as they are
+    /// (`ReplacePlan.rejected(_:)`). A new query, new globs or a dismissed line (which re-cut the hunks) forget them.
+    var rejected: [String: TrackedLines] = [:]
     /// Replace All was asked for; the window confirms first.
     var confirmingReplaceAll = false
     /// Result lines and whole files dismissed with ✕: out of the list and out of Replace, until the query or the
     /// globs change. The files themselves are untouched.
-    private(set) var dismissedMatches: [String: Dismissed] = [:]
+    private(set) var dismissedMatches: [String: TrackedLines] = [:]
     private(set) var dismissedFiles: Set<String> = []
     @ObservationIgnored private var running: Task<Void, Never>?
 
@@ -121,7 +122,7 @@ final class SearchModel {
         rejected[path] = nil
         if let line, results[index].matches.contains(where: { $0.line == line }) {
             let lines = results[index].lines
-            var dismissed = dismissedMatches[path]?.placed(in: lines) ?? Dismissed(lines: lines)
+            var dismissed = dismissedMatches[path]?.placed(in: lines) ?? TrackedLines(lines: lines)
             dismissed.indexes.insert(line - 1)
             dismissedMatches[path] = dismissed
             results[index].matches.removeAll { $0.line == line }
@@ -154,7 +155,7 @@ final class SearchModel {
         for batch in stride(from: 0, to: files.count, by: 64).map({ Array(files[$0..<min($0 + 64, files.count)]) }) {
             guard !Task.isCancelled else { return }
             let hits = await Task.detached(priority: .userInitiated) {
-                batch.compactMap { path -> (FileResult, Dismissed?)? in
+                batch.compactMap { path -> (FileResult, TrackedLines?)? in
                     guard !skipped.contains(path),
                         let text = buffers[path] ?? Self.readText(root.appending(path: path))
                     else { return nil }

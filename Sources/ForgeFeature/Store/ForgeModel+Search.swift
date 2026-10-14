@@ -114,7 +114,7 @@ extension ForgeModel {
     @discardableResult
     func replace(in path: String, rerun: Bool = true) -> Int {
         guard let plan = replacePlan(for: path), plan.count > 0, let workspace else { return 0 }
-        guard write(plan.text(rejecting: search.rejected[path] ?? []), to: path, in: workspace) else { return 0 }
+        guard write(plan.text(rejecting: plan.rejected(search.rejected[path])), to: path, in: workspace) else { return 0 }
         search.rejected[path] = nil
         if search.previewPath == path { search.previewPath = nil }
         if rerun { rerunSearch() }
