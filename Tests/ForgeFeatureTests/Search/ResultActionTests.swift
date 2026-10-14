@@ -188,6 +188,23 @@ struct ResultActionTests {
         #expect(model.search.results.first?.matches.map(\.line) == [2])
     }
 
+    @Test func filesTooLargeToSearchAreListedAsSkippedAndLargeBinariesAreNot() async throws {
+        // E1D5 FD70: a 9.5 MB log with 500,000 matches gave "1 result in 1 file", with no note it was left out.
+        let line = Data("isSelected in a log line\n".utf8)
+        var log = Data(capacity: 9_000_000)
+        while log.count < 9_000_000 { log.append(line) }
+        var binary = Data(repeating: 0, count: 9_000_000)
+        binary.replaceSubrange(100..<(100 + line.count), with: line)
+        let (model, root) = try await workspace(["A.swift": Data("isSelected\n".utf8), "logs/big.log": log, "dump.bin": binary])
+        defer { try? FileManager.default.removeItem(at: root) }
+        try await search(model, "isSelected")
+        #expect(model.search.results.map(\.path) == ["A.swift"])
+        #expect(model.search.tooLarge == [SearchModel.SkippedFile(path: "logs/big.log", bytes: log.count)])
+        model.search.query.text = ""
+        model.rerunSearch()
+        #expect(model.search.tooLarge.isEmpty)
+    }
+
     @Test func dismissalsDoNotFollowTheSearchIntoAnotherWorkspace() async throws {
         // E1D5 FD67: dismissals are keyed by relative path, and they outlived a switch to another worktree of the
         // same repo — its B.swift stayed hidden and Replace All skipped its A.swift line 2.

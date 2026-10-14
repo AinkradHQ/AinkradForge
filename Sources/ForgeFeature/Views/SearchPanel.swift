@@ -91,12 +91,15 @@ struct SearchPanel: View {
         case .searching: return ("Searching… \(search.lineCount) so far", "")
         case .done(let lines, let files, let ms, let capped):
             let timing = " · \(ms) ms · respects .gitignore"
-            if lines == 0 { return ("No results", timing) }
-            if capped { return ("\(SearchModel.cap)+ results — refine the search", timing) }
+            // Never silently (E1D5 FD70): files too large to search are counted, and listed under the results.
+            let large = search.tooLarge.count
+            let skipped = large == 0 ? "" : " · \(large) \(large == 1 ? "file" : "files") too large to search"
+            if lines == 0 { return ("No results" + skipped, timing) }
+            if capped { return ("\(SearchModel.cap)+ results — refine the search" + skipped, timing) }
             let place = "in \(files) \(files == 1 ? "file" : "files")"
             return search.isReplaceOpen
-                ? ("Replace \(lines) \(lines == 1 ? "match" : "matches") \(place)", timing)
-                : ("\(lines) \(lines == 1 ? "result" : "results") \(place)", timing)
+                ? ("Replace \(lines) \(lines == 1 ? "match" : "matches") \(place)" + skipped, timing)
+                : ("\(lines) \(lines == 1 ? "result" : "results") \(place)" + skipped, timing)
         case .failed(let message): return (message, "")
         case .references(let symbol, let lines, let files):
             return ("\(lines) \(lines == 1 ? "reference" : "references") to \(symbol) in \(files) \(files == 1 ? "file" : "files")", "")
@@ -141,6 +144,7 @@ struct SearchPanel: View {
                         }
                     }
                 }
+                ForEach(search.tooLarge) { SkippedFileRow(file: $0) }
             }
         }
         .scrollIndicators(.never)
