@@ -78,9 +78,13 @@ struct ReplacePreview: View {
             )
             .padding(.horizontal, skin.size.s14)
         }
-        // Recomputed only when the file, query or replacement changes — the diff is real work on long files.
+        // Recomputed only when the file, query or replacement changes, and diffed off the main thread — the diff
+        // is real work on long files (E1D5 FD62: 1.4 s for one 3,000-line file).
         .task(id: "\(path)\u{0}\(search.query.text)\u{0}\(search.replacement)\u{0}\(search.preserveCase)\u{0}\(search.query.regex)") {
-            plan = model.replacePlan(for: path)
+            plan = nil
+            guard let undiffed = model.replacePlan(for: path) else { return }
+            let diffed = await Task.detached(priority: .userInitiated) { undiffed.diffed() }.value
+            if !Task.isCancelled { plan = diffed }
         }
     }
 

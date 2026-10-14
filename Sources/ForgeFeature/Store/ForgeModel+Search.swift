@@ -65,14 +65,16 @@ extension ForgeModel {
     /// What replacing in `path` would do, from its open buffer or its file — only the matches still listed
     /// (none dismissed with ✕), or with `line`, only the first match of that listed row. Listed and dismissed lines
     /// are placed in the text as it is now by a line diff (FD44, E1D4 FD54), so lines that moved since the search —
-    /// or identical ones added or removed above — can't swap places.
-    func replacePlan(for path: String, line: Int? = nil) -> ReplacePlan? {
+    /// or identical ones added or removed above — can't swap places. `keepingUnticked` also leaves out the lines of
+    /// the preview's unticked hunks, placed the same way: no diff needed to replace (E1D5 FD62).
+    func replacePlan(for path: String, line: Int? = nil, keepingUnticked: Bool = false) -> ReplacePlan? {
         guard let workspace, let regex = try? search.query.compile() else { return nil }
         let text: String? = documents[path].flatMap { $0.state == .ready ? $0.storage.string : nil }
             ?? SearchModel.readText(workspace.url(for: path))
         guard let text else { return nil }
         let now = TextSearch.lineHashes(text)
-        let dismissed = search.dismissedMatches[path]?.placed(in: now).lineNumbers ?? []
+        var dismissed = search.dismissedMatches[path]?.placed(in: now).lineNumbers ?? []
+        if keepingUnticked, let unticked = search.rejected[path] { dismissed.formUnion(unticked.placed(in: now).lineNumbers) }
         // ⇄'s row, as it was listed, placed in the text now; a row no longer listed, or since edited, has nothing.
         var target: Int?
         if let line {
@@ -113,8 +115,8 @@ extension ForgeModel {
     /// Replaces in one file, leaving the preview's unticked hunks alone.
     @discardableResult
     func replace(in path: String, rerun: Bool = true) -> Int {
-        guard let plan = replacePlan(for: path), plan.count > 0, let workspace else { return 0 }
-        guard write(plan.text(rejecting: plan.rejected(search.rejected[path])), to: path, in: workspace) else { return 0 }
+        guard let plan = replacePlan(for: path, keepingUnticked: true), plan.count > 0, let workspace else { return 0 }
+        guard write(plan.updated, to: path, in: workspace) else { return 0 }
         search.rejected[path] = nil
         if search.previewPath == path { search.previewPath = nil }
         if rerun { rerunSearch() }

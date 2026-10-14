@@ -177,6 +177,38 @@ final class PerfBaselineTests: XCTestCase {
         XCTAssertLessThan(cached, 1_000, "a render of cached diffs blocked the main thread \(Self.format(cached)) ms")
     }
 
+    /// Replace All over 20 closed 3,000-line files with 91 matches each (E1D5 FD62: 27 s on the main thread, every
+    /// file diffed with the kit's quadratic diff although no hunk was unticked). Replace never diffs now; the
+    /// preview diffs off the main thread.
+    func testReplaceAllDoesNotDiffOnTheMainThread() throws {
+        for file in 0..<20 {
+            let lines = (0..<3_000).map { $0 % 33 == 0 ? "let isSelected\($0) = \($0) // file \(file)" : "let value\($0) = \($0)" }
+            try (lines.joined(separator: "\n") + "\n").write(
+                to: root.appendingPathComponent("File\(file).swift"), atomically: true, encoding: .utf8)
+        }
+        let model = Self.model(opening: root)
+        model.search.query.text = "isSelected"
+        model.search.replacement = "isActive"
+        model.rerunSearch()
+        SweepSupport.spin(until: 10) { if case .done = model.search.status { true } else { false } }
+        XCTAssertEqual(model.search.lineCount, 1_820)
+
+        let planStart = ContinuousClock.now
+        let plan = model.replacePlan(for: "File0.swift")
+        let planned = Self.milliseconds(ContinuousClock.now - planStart)
+        XCTAssertNil(plan?.diff, "the preview's plan was diffed on the main thread")
+        let start = ContinuousClock.now
+        model.replaceAll()
+        let replaced = Self.milliseconds(ContinuousClock.now - start)
+        let written = try (0..<20).filter {
+            try String(contentsOf: root.appendingPathComponent("File\($0).swift"), encoding: .utf8).contains("isActive2970 ")
+        }
+        print("PERF replace-all files=20 matches=1820 plan=\(Self.format(planned))ms replace-all-main=\(Self.format(replaced))ms")
+        XCTAssertEqual(written.count, 20)
+        XCTAssertLessThan(planned, 500, "one file's plan blocked the main thread \(Self.format(planned)) ms")
+        XCTAssertLessThan(replaced, 3_000, "Replace All blocked the main thread \(Self.format(replaced)) ms")
+    }
+
     // MARK: - Support
 
     /// Opens `folder` with no language server (a server's start-up is not what these time).

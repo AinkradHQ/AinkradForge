@@ -11,12 +11,14 @@ struct ReplaceTests {
         let text = (1...20).map { $0 == 3 || $0 == 17 ? "let isSelected = \($0)" : "line \($0)" }.joined(separator: "\n")
         let regex = try #require(try SearchQuery(text: "isSelected").compile())
         let plan = ReplacePlan.make(path: "a.swift", text: text, regex: regex, replacement: "isActive", isRegex: false, preserveCase: false)
-        #expect(plan.count == 2)
-        let hunks = try #require(plan.diff?.hunks)
+        // Replace never diffs (E1D5 FD62); the preview asks for it.
+        #expect(plan.count == 2 && plan.diff == nil)
+        let diffed = plan.diffed()
+        let hunks = try #require(diffed.diff?.hunks)
         #expect(hunks.count == 2)
-        let partial = plan.text(rejecting: [hunks[1].id])
+        let partial = diffed.text(rejecting: [hunks[1].id])
         #expect(partial.contains("let isActive = 3") && partial.contains("let isSelected = 17"))
-        #expect(plan.text(rejecting: []) == plan.updated)
+        #expect(diffed.text(rejecting: []) == plan.updated)
     }
 
     private func workspace(_ files: [String: Data]) async throws -> (ForgeModel, URL) {
@@ -46,7 +48,7 @@ struct ReplaceTests {
         model.search.replacement = "isActive"
         model.rerunSearch()
         try await settle(model)
-        let plan = try #require(model.replacePlan(for: "A.swift"))
+        let plan = try #require(model.replacePlan(for: "A.swift")).diffed()
         let hunks = try #require(plan.diff?.hunks)
         #expect(hunks.count == 2)
 
@@ -74,7 +76,7 @@ struct ReplaceTests {
         model.search.replacement = "isActive"
         model.rerunSearch()
         try await settle(model)
-        let plan = try #require(model.replacePlan(for: "A.swift"))
+        let plan = try #require(model.replacePlan(for: "A.swift")).diffed()
         let hunks = try #require(plan.diff?.hunks)
         #expect(hunks.count == 3)
         model.search.rejected["A.swift"] = plan.unticked([hunks[1].id])
