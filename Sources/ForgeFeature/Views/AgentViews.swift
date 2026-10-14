@@ -194,14 +194,27 @@ struct ReviewAllPane: View {
                     ForEach(entries, id: \.path) { entry in
                         let counts = entry.diff.map(ReviewFileRow.counts) ?? (added: 0, removed: 0)
                         ReviewFileRow(
-                            path: entry.path, note: entry.isNew ? "new file" : entry.isDeleted ? "deleted" : nil,
+                            path: entry.path,
+                            note: entry.isTooLarge ? "too large to diff" : entry.isNew ? "new file" : entry.isDeleted ? "deleted" : nil,
                             added: counts.added, removed: counts.removed
                         ) {
                             var next = open
                             if next.remove(entry.path) == nil { next.insert(entry.path) }
                             shown = next
                         }
-                        if open.contains(entry.path), let diff = entry.diff {
+                        if entry.isTooLarge {
+                            // No diff to tick (the kit's is quadratic): the whole file is kept or undone (FD53).
+                            HStack(spacing: skin.size.s8) {
+                                Text("Too large to diff — keep or undo the whole file")
+                                    .font(skin.font(AinkradFontToken(sizeKey: "t11")))
+                                    .foregroundStyle(skin.color(skin.text.muted))
+                                Spacer(minLength: skin.size.s8)
+                                AinkradButton(title: "Undo whole file", style: .secondary) { model.settleOutside(entry.path, undo: true) }
+                                    .secondaryAccent().fixedSize()
+                                AinkradButton(title: "Keep", style: .secondary) { model.settleOutside(entry.path, undo: false) }.secondaryAccent().fixedSize()
+                            }
+                            .padding(.leading, skin.size.s22)
+                        } else if open.contains(entry.path), let diff = entry.diff {
                             AinkradDiffReview(
                                 fileDiff: diff,
                                 rejectedHunkIDs: Binding(
@@ -209,7 +222,7 @@ struct ReviewAllPane: View {
                                     set: { model.agent.unticked[entry.path] = $0 })
                             )
                             .reviewStyle()
-                        } else if open.contains(entry.path) {
+                        } else if open.contains(entry.path), entry.diff == nil {
                             // Still being diffed, off the main thread (FD52).
                             AinkradSpinner(size: skin.size.s14).padding(.leading, skin.size.s22)
                         }

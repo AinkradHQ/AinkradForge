@@ -47,12 +47,13 @@ extension ForgeModel {
     }
 
     /// A file in review. `diff` is nil while a closed file is still being diffed, or for good when it is too long
-    /// to diff.
+    /// to diff (`isTooLarge`) — then it is kept or undone whole (FD53).
     struct ReviewEntry {
         let path: String
         let diff: AinkradFileDiff?
         var isNew = false
         var isDeleted = false
+        var isTooLarge = false
     }
 
     /// Every file in review with its diff (baseline → now), sorted by path. Cheap: closed files' diffs are cached
@@ -63,7 +64,8 @@ extension ForgeModel {
             let cached = agent.otherDiffs[path]
             entries.append(
                 ReviewEntry(
-                    path: path, diff: cached?.diff, isNew: other.baseline == nil, isDeleted: other.current == nil))
+                    path: path, diff: cached?.diff, isNew: other.baseline == nil, isDeleted: other.current == nil,
+                    isTooLarge: cached != nil && cached?.diff == nil))
         }
         return entries.sorted { $0.path < $1.path }
     }
@@ -101,6 +103,14 @@ extension ForgeModel {
         agent.reviewingAll = false
         agent.turns.clear()
         Task { await workspace.refresh() }
+    }
+
+    /// A closed file's Keep or Undo, whole — the way out for a file too long to diff (FD53).
+    func settleOutside(_ path: String, undo: Bool) {
+        guard let workspace, let other = agent.others[path] else { return }
+        if undo { undoWhole(path, other, in: workspace) }
+        agent.settled(path)
+        if undo { Task { await workspace.refresh() } }
     }
 
     /// Puts a closed file back as it was: a new one goes to the Trash, a deleted one comes back.

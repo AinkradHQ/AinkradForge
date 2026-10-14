@@ -79,6 +79,45 @@ struct ReviewAllTests {
         #expect(ForgeModel.inHiddenFolder(".build/x.o") && !ForgeModel.inHiddenFolder(".gitignore"))
     }
 
+    /// A closed file past the diff's line limit is listed — too large to diff — and kept or undone whole: Undo All
+    /// puts it back and the chip clears (E1D4 FD53).
+    @Test func aFileTooLargeToDiffIsListedAndSettledWhole() async throws {
+        let big = (1...5_000).map { "line \($0)" }.joined(separator: "\n") + "\n"
+        let (model, root) = try await workspace(["Big.txt": big, "Small.txt": "let a = 1\n"])
+        defer { try? FileManager.default.removeItem(at: root) }
+        model.agent.saw("Big.txt", text: big)
+        model.agent.saw("Small.txt", text: "let a = 1\n")
+        try big.replacingOccurrences(of: "line 7\n", with: "line seven\n").write(to: root.appending(path: "Big.txt"), atomically: true, encoding: .utf8)
+        try "let a = 2\n".write(to: root.appending(path: "Small.txt"), atomically: true, encoding: .utf8)
+        await model.diskChanged(paths: ["Big.txt", "Small.txt"].map { root.appending(path: $0).path })
+        await model.agent.diffsReady()
+
+        #expect(model.agent.count == 2)
+        #expect(model.reviewEntries.map(\.path) == ["Big.txt", "Small.txt"])
+        #expect(model.reviewEntries.first?.isTooLarge == true && model.reviewEntries.first?.diff == nil)
+        model.finishReview(undoAll: true)
+        #expect(try String(contentsOf: root.appending(path: "Big.txt"), encoding: .utf8) == big)
+        #expect(try String(contentsOf: root.appending(path: "Small.txt"), encoding: .utf8) == "let a = 1\n")
+        #expect(model.agent.count == 0)
+
+        // Done keeps one; the row's own Undo puts it back.
+        let other = root.appending(path: "Other.txt")
+        try big.write(to: other, atomically: true, encoding: .utf8)
+        model.agent.saw("Other.txt", text: big)
+        try "changed\n\(big)".write(to: other, atomically: true, encoding: .utf8)
+        await model.diskChanged(paths: [other.path])
+        #expect(model.agent.count == 1)
+        model.finishReview()
+        #expect(model.agent.count == 0)
+        #expect(try String(contentsOf: other, encoding: .utf8).hasPrefix("changed\n"))
+        try "changed again\n\(big)".write(to: other, atomically: true, encoding: .utf8)
+        await model.diskChanged(paths: [other.path])
+        #expect(model.agent.count == 1)
+        model.settleOutside("Other.txt", undo: true)
+        #expect(try String(contentsOf: other, encoding: .utf8) == big)
+        #expect(model.agent.count == 0)
+    }
+
     @Test func forgesOwnWritesAreNotOutsideChanges() async throws {
         let (model, root) = try await workspace(["A.txt": lines])
         defer { try? FileManager.default.removeItem(at: root) }
