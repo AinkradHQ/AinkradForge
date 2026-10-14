@@ -1,7 +1,8 @@
 import AinkradAppKit
 import SwiftUI
 
-/// The clock text the turn review shows. Goldens freeze it: "1:38 PM" and "12:35 PM" differ in width and move the layout.
+/// The clock text the reviews show (by turn, and Review All's "since"). Goldens freeze it: "1:38 PM" and
+/// "12:35 PM" differ in width and move the layout, and a mask sized for one misses the other (E1D4 FD57).
 @MainActor enum TurnReviewClock {
     static var time: (Date) -> String = { $0.formatted(date: .omitted, time: .shortened) }
     static var ago: (Date) -> String = { ShortAgo.text($0) }

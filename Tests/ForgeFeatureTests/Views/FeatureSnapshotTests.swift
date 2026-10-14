@@ -22,7 +22,8 @@ final class FeatureSnapshotTests: XCTestCase {
     /// Mockup 05: Open Folder…, Clone Repository…, New File.
     func testWelcome() throws {
         let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
-        model.store.update { $0.recents = [.init(path: repo.path, opened: .distantPast)] }
+        // Noon UTC: the recent's date ("1 Jan 1") is the same day in any time zone from −11 to +11 (FD57).
+        model.store.update { $0.recents = [.init(path: repo.path, opened: .distantPast.addingTimeInterval(12 * 3_600))] }
         var settings = EditorSettings()
         settings.serverPaths = Dictionary(uniqueKeysWithValues: LanguageRegistry.servers.map { ($0.id, "/nonexistent/forge-snapshot") })
         model.editorSettings = settings

@@ -240,7 +240,7 @@ struct ReviewAllPane: View {
         let unticked = model.agent.unticked.values.reduce(0) { $0 + $1.count }
         let since = (model.agent.files.values.map(\.since) + model.agent.others.values.map(\.since)).min()
         return "\(entries.count) file\(entries.count == 1 ? "" : "s") · \(changes) change\(changes == 1 ? "" : "s")"
-            + (since.map { " · since " + $0.formatted(date: .omitted, time: .shortened) } ?? "")
+            + (since.map { " · since " + TurnReviewClock.time($0) } ?? "")
             + (unticked > 0 ? " · \(unticked) change\(unticked == 1 ? "" : "s") unticked — Done undoes \(unticked == 1 ? "it" : "them")" : "")
     }
 }
