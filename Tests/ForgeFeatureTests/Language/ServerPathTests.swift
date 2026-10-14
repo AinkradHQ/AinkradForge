@@ -1,3 +1,4 @@
+import AppKit
 import ForgeEditor
 import Foundation
 import Testing
@@ -39,6 +40,17 @@ struct ServerPathTests {
         model.setServerPath("sourcekit-lsp", "")
         try await Task.sleep(for: .milliseconds(250))
         #expect(model.serverPathField("sourcekit-lsp") == "" && model.editorSettings.serverPaths["sourcekit-lsp"] == nil)
+    }
+
+    /// E1D5 FD71: quitting (or closing the window) within the pause lost the path typed.
+    @Test func aPathTypedJustBeforeQuittingIsSaved() async throws {
+        let docs = MemoryDocs()
+        let model = ForgeModel(store: ForgeStore(documents: docs))
+        model.typeServerPath("gopls", "~/go/bin/gopls ", after: .seconds(30))
+        NotificationCenter.default.post(name: NSApplication.willTerminateNotification, object: nil)
+        #expect(model.editorSettings.serverPaths["gopls"] == NSHomeDirectory() + "/go/bin/gopls")
+        // Saved to the store, so the next launch has it.
+        #expect(ForgeModel(store: ForgeStore(documents: docs)).editorSettings.serverPaths["gopls"] == NSHomeDirectory() + "/go/bin/gopls")
     }
 
     /// With no server for the file, or its server missing, the window says so instead of "0 issues" (E1D1 FD33).

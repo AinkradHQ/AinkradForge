@@ -18,6 +18,13 @@ extension ForgeModel {
 
     /// Hot exit: every dirty buffer's text goes where `restoreUnsaved` finds it when the file next loads.
     /// Backups of files not loaded this time (tabs never shown) are kept.
+    /// The app quits or this window's Forge goes: what is still pending is saved — unsaved buffers backed up and
+    /// a server path typed within its pause set (E1D5 FD71).
+    func leave() {
+        flushServerPaths()
+        backupUnsaved()
+    }
+
     func backupUnsaved() {
         guard let key = workspace?.root.path(percentEncoded: false) else { return }
         var buffers = store.unsaved(in: key).filter { documents[$0.key]?.state != .ready }

@@ -23,7 +23,7 @@ public struct ForgeApp: AinkradApp, AinkradAppTeardown {
     }
 
     public static func teardown(instance: PluginInstanceID) {
-        models.remove(instance)?.backupUnsaved()
+        models.remove(instance)?.leave()
     }
 
     public static func makeRootView(host: HostServices) -> AnyView {
