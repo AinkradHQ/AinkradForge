@@ -36,13 +36,14 @@ struct ReviewAllTests {
         await model.diskChanged(paths: ["A.txt", "B.txt", "C.txt"].map { root.appending(path: $0).path })
 
         #expect(Set(model.agent.others.keys) == ["A.txt", "C.txt"])
-        let entry = try #require(model.reviewEntries.first { $0.path == "A.txt" })
-        #expect(entry.diff.hunks.count == 2)
+        await model.agent.diffsReady()
+        let diff = try #require(model.reviewEntries.first { $0.path == "A.txt" }?.diff)
+        #expect(diff.hunks.count == 2)
         #expect(model.reviewEntries.first { $0.path == "C.txt" }?.isNew == true)
 
         // Untick A's second change and C (new): Done undoes those and keeps A's first.
-        model.agent.unticked["A.txt"] = [entry.diff.hunks[1].id]
-        model.agent.unticked["C.txt"] = Set(model.reviewEntries.first { $0.path == "C.txt" }?.diff.hunks.map(\.id) ?? [])
+        model.agent.unticked["A.txt"] = [diff.hunks[1].id]
+        model.agent.unticked["C.txt"] = Set(model.reviewEntries.first { $0.path == "C.txt" }?.diff?.hunks.map(\.id) ?? [])
         model.finishReview()
         let written = try String(contentsOf: root.appending(path: "A.txt"), encoding: .utf8)
         #expect(written.contains("line two") && written.contains("line 11\n"))

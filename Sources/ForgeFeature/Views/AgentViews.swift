@@ -156,7 +156,7 @@ struct WasCard: View {
 /// untick to undo it. Done undoes the unticked ones and clears the review.
 struct ReviewAllPane: View {
     let model: ForgeModel
-    /// Files whose diff is showing; until the first click, only the first file's (mockup 16).
+    /// Files whose diff is showing; until the first click, only the first file's (mockup 16) unless it is long.
     @State private var shown: Set<String>?
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
@@ -168,7 +168,10 @@ struct ReviewAllPane: View {
 
     @ViewBuilder private var list: some View {
         let entries = model.reviewEntries
-        let open = shown ?? Set(entries.first.map { [$0.path] } ?? [])
+        // The first file opens by itself only when its diff is short: the kit lays every row out at once, and a
+        // file rewritten whole would hold the main thread for seconds (FD52) — a long one shows on a click.
+        let first = entries.first.flatMap { ($0.diff?.hunks.reduce(0) { $0 + $1.lines.count } ?? 0) <= 400 ? $0.path : nil }
+        let open = shown ?? Set(first.map { [$0] } ?? [])
         VStack(alignment: .leading, spacing: skin.size.s12) {
             HStack(spacing: skin.size.s10) {
                 VStack(alignment: .leading, spacing: skin.size.s2) {
@@ -189,7 +192,7 @@ struct ReviewAllPane: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: skin.size.s12) {
                     ForEach(entries, id: \.path) { entry in
-                        let counts = ReviewFileRow.counts(entry.diff)
+                        let counts = entry.diff.map(ReviewFileRow.counts) ?? (added: 0, removed: 0)
                         ReviewFileRow(
                             path: entry.path, note: entry.isNew ? "new file" : entry.isDeleted ? "deleted" : nil,
                             added: counts.added, removed: counts.removed
@@ -198,14 +201,17 @@ struct ReviewAllPane: View {
                             if next.remove(entry.path) == nil { next.insert(entry.path) }
                             shown = next
                         }
-                        if open.contains(entry.path) {
+                        if open.contains(entry.path), let diff = entry.diff {
                             AinkradDiffReview(
-                                fileDiff: entry.diff,
+                                fileDiff: diff,
                                 rejectedHunkIDs: Binding(
                                     get: { model.agent.unticked[entry.path] ?? [] },
                                     set: { model.agent.unticked[entry.path] = $0 })
                             )
                             .reviewStyle()
+                        } else if open.contains(entry.path) {
+                            // Still being diffed, off the main thread (FD52).
+                            AinkradSpinner(size: skin.size.s14).padding(.leading, skin.size.s22)
                         }
                     }
                 }
@@ -216,8 +222,8 @@ struct ReviewAllPane: View {
     }
 
     /// "5 files · 9 changes · since 10:42 · 1 change unticked — Done undoes it".
-    private func subtitle(_ entries: [(path: String, diff: AinkradFileDiff, isNew: Bool, isDeleted: Bool)]) -> String {
-        let changes = entries.reduce(0) { $0 + $1.diff.hunks.count }
+    private func subtitle(_ entries: [ForgeModel.ReviewEntry]) -> String {
+        let changes = entries.reduce(0) { $0 + ($1.diff?.hunks.count ?? 0) }
         let unticked = model.agent.unticked.values.reduce(0) { $0 + $1.count }
         let since = (model.agent.files.values.map(\.since) + model.agent.others.values.map(\.since)).min()
         return "\(entries.count) file\(entries.count == 1 ? "" : "s") · \(changes) change\(changes == 1 ? "" : "s")"

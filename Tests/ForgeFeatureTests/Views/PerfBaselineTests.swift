@@ -137,6 +137,46 @@ final class PerfBaselineTests: XCTestCase {
         XCTAssertLessThan(elapsed, 15_000, "loading a 20k-file tree took \(Self.format(elapsed)) ms")
     }
 
+    /// Review All over 20 closed 3,000-line files, every third line changed outside (E1D4 FD52: 27 s of main-thread
+    /// diffing per render). Diffs are computed once, off the main thread; a render only reads them. Measured
+    /// 2026-10-14, Debug: a render 150–270 ms (a fresh window included), the 20 diffs 6–7 s off the main thread.
+    func testReviewAllDoesNotDiffOnTheMainThread() throws {
+        let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
+        for file in 0..<20 {
+            let old = (0..<3_000).map { "let value\($0) = \($0) // file \(file)" }
+            let new = old.enumerated().map { $0.offset % 3 == 0 ? $0.element + " changed" : $0.element }
+            model.agent.outside(
+                "File\(file).swift", baseline: old.joined(separator: "\n") + "\n", current: new.joined(separator: "\n") + "\n")
+        }
+        model.agent.reviewingAll = true
+        /// One render's main-thread cost: the entries, then the pane laid out and drawn.
+        func render() -> Double {
+            let start = ContinuousClock.now
+            XCTAssertEqual(model.reviewEntries.count, 20)
+            let window = Self.window(ReviewAllPane(model: model))
+            if let host = window.contentView, let canvas = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                host.cacheDisplay(in: host.bounds, to: canvas)
+            }
+            return Self.milliseconds(ContinuousClock.now - start)
+        }
+        let pending = render()
+        XCTAssertTrue(model.agent.otherDiffs.count < 20, "the diffs were computed on the main thread, in the render")
+        let start = ContinuousClock.now
+        await_(model) { await $0.agent.diffsReady() }
+        let diffed = Self.milliseconds(ContinuousClock.now - start)
+        XCTAssertEqual(model.reviewEntries.compactMap(\.diff).count, 20)
+        let entriesStart = ContinuousClock.now
+        for _ in 0..<10 { _ = model.reviewEntries }
+        let entries = Self.milliseconds(ContinuousClock.now - entriesStart) / 10
+        let cached = render()
+        print(
+            "PERF review-all files=20 render-while-diffing=\(Self.format(pending))ms diffs-off-main=\(Self.format(diffed))ms entries=\(Self.format(entries))ms render-cached=\(Self.format(cached))ms"
+        )
+        XCTAssertLessThan(entries, 20, "reading 20 cached entries took \(Self.format(entries)) ms")
+        XCTAssertLessThan(pending, 1_000, "a render while diffing blocked the main thread \(Self.format(pending)) ms")
+        XCTAssertLessThan(cached, 1_000, "a render of cached diffs blocked the main thread \(Self.format(cached)) ms")
+    }
+
     // MARK: - Support
 
     /// Opens `folder` with no language server (a server's start-up is not what these time).

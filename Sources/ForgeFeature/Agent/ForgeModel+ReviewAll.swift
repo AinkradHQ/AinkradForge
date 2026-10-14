@@ -46,49 +46,71 @@ extension ForgeModel {
         path.split(separator: "/").dropLast().contains { $0.hasPrefix(".") }
     }
 
-    /// Every file in review with its diff (baseline → now), sorted by path.
-    var reviewEntries: [(path: String, diff: AinkradFileDiff, isNew: Bool, isDeleted: Bool)] {
-        var entries: [(String, AinkradFileDiff, Bool, Bool)] = []
-        for (path, file) in agent.files { entries.append((path, file.diff, false, false)) }
-        for (path, other) in agent.others {
-            let old = other.baseline ?? ""
-            let new = other.current ?? ""
-            let lines = { (text: String) in text.utf8.reduce(1) { $1 == 10 ? $0 + 1 : $0 } }
-            guard lines(old) <= AgentReview.lineLimit, lines(new) <= AgentReview.lineLimit else { continue }
-            entries.append((path, AinkradDiffEngine.compute(old: old, new: new, path: path, context: 2), other.baseline == nil, other.current == nil))
-        }
-        return entries.sorted { $0.0 < $1.0 }
+    /// A file in review. `diff` is nil while a closed file is still being diffed, or for good when it is too long
+    /// to diff.
+    struct ReviewEntry {
+        let path: String
+        let diff: AinkradFileDiff?
+        var isNew = false
+        var isDeleted = false
     }
 
-    /// Done: each file's unticked changes undone, the rest kept, the review cleared.
+    /// Every file in review with its diff (baseline → now), sorted by path. Cheap: closed files' diffs are cached
+    /// (`AgentReview.otherDiffs`), never computed here (E1D4 FD52).
+    var reviewEntries: [ReviewEntry] {
+        var entries = agent.files.map { ReviewEntry(path: $0.key, diff: $0.value.diff) }
+        for (path, other) in agent.others {
+            let cached = agent.otherDiffs[path]
+            entries.append(
+                ReviewEntry(
+                    path: path, diff: cached?.diff, isNew: other.baseline == nil, isDeleted: other.current == nil))
+        }
+        return entries.sorted { $0.path < $1.path }
+    }
+
+    /// Done: each file's unticked changes undone, the rest kept, the review cleared. Undo All undoes every
+    /// change — a file too long to diff included, whole.
     func finishReview(undoAll: Bool = false) {
         guard let workspace else { return }
-        for entry in reviewEntries {
-            let rejected = undoAll ? Set(entry.diff.hunks.map(\.id)) : agent.unticked[entry.path] ?? []
-            defer { agent.settled(entry.path) }
-            guard !rejected.isEmpty else {
-                agent.keepAll(entry.path)
+        for (path, file) in agent.files {
+            let rejected = undoAll ? Set(file.diff.hunks.map(\.id)) : agent.unticked[path] ?? []
+            // Open: through the editor, so it is undoable.
+            if !rejected.isEmpty, let document = documents[path] {
+                let text = ReplacePlan.reconstruct(file.diff, rejecting: rejected)
+                if let change = agent.undoAll(path, text: document.storage.string) {
+                    apply([path: [TextChange(start: change.start, end: change.end, newText: text)]])
+                }
+            }
+            agent.keepAll(path)
+            agent.settled(path)
+        }
+        for (path, other) in agent.others {
+            defer { agent.settled(path) }
+            if undoAll {
+                undoWhole(path, other, in: workspace)
                 continue
             }
-            if let document = documents[entry.path], agent.files[entry.path] != nil {
-                // Open: through the editor, so it is undoable.
-                let text = ReplacePlan.reconstruct(entry.diff, rejecting: rejected)
-                if let change = agent.undoAll(entry.path, text: document.storage.string) {
-                    apply([entry.path: [TextChange(start: change.start, end: change.end, newText: text)]])
-                }
-                agent.keepAll(entry.path)
-            } else if entry.isNew, rejected.count == entry.diff.hunks.count {
-                try? FileManager.default.trashItem(at: workspace.url(for: entry.path), resultingItemURL: nil)
+            guard let rejected = agent.unticked[path], !rejected.isEmpty, let diff = agent.otherDiffs[path]?.diff else { continue }
+            if rejected.count == diff.hunks.count {
+                undoWhole(path, other, in: workspace)
             } else {
-                let text = entry.isDeleted && rejected.count == entry.diff.hunks.count
-                    ? entry.diff.original : ReplacePlan.reconstruct(entry.diff, rejecting: rejected)
-                if entry.isDeleted { try? Data().write(to: workspace.url(for: entry.path)) }
-                _ = write(text, to: entry.path, in: workspace)
+                if other.current == nil { try? Data().write(to: workspace.url(for: path)) }
+                _ = write(ReplacePlan.reconstruct(diff, rejecting: rejected), to: path, in: workspace)
             }
         }
         agent.reviewingAll = false
         agent.turns.clear()
         Task { await workspace.refresh() }
+    }
+
+    /// Puts a closed file back as it was: a new one goes to the Trash, a deleted one comes back.
+    private func undoWhole(_ path: String, _ other: AgentReview.OtherFile, in workspace: Workspace) {
+        guard let baseline = other.baseline else {
+            try? FileManager.default.trashItem(at: workspace.url(for: path), resultingItemURL: nil)
+            return
+        }
+        if other.current == nil { try? Data().write(to: workspace.url(for: path)) }
+        _ = write(baseline, to: path, in: workspace)
     }
 
     func keepAllOutside() {

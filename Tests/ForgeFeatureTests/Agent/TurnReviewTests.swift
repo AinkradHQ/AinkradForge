@@ -130,7 +130,8 @@ struct TurnReviewTests {
         #expect(undone.contains("line 2\n") && undone.contains("line eleven\n"))
         // Turn 3 is still in review, against the original text.
         #expect(model.turnGroups.map(\.title) == ["Claude · turn 3 · 1 file"])
-        #expect(model.reviewEntries.first?.diff.hunks.count == 1)
+        await model.agent.diffsReady()
+        #expect(model.reviewEntries.first?.diff?.hunks.count == 1)
 
         // Keeping turn 3 folds it into the baseline: nothing is left to review.
         model.keep(group: try #require(model.turnGroups.first))

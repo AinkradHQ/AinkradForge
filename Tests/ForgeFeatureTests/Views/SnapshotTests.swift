@@ -181,7 +181,10 @@ final class SnapshotTests: XCTestCase {
         try "# Changelog\n\n- Sidebar: threads sort newest first.\n"
             .write(to: repo.appendingPathComponent("CHANGELOG.md"), atomically: true, encoding: .utf8)
         let paths = [sort, "CHANGELOG.md"].map { repo.appendingPathComponent($0).path }
-        await_(model) { await $0.diskChanged(paths: paths) }
+        await_(model) {
+            await $0.diskChanged(paths: paths)
+            await $0.agent.diffsReady()
+        }
         XCTAssertEqual(
             model.reviewEntries.map(\.path), ["CHANGELOG.md", sort], "Review All should list both changed files")
         model.agent.reviewingAll = true
