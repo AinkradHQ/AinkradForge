@@ -69,9 +69,11 @@ final class Workspace {
         marks.map { ($0.key, $0.value) }.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
     }
 
-    /// A folder that is not a repo: every non-hidden file, skipping package contents.
+    /// A folder that is not a repo: every non-hidden file, skipping package contents. The root may be a link: the
+    /// enumerator does not descend into one, so it walks the folder the link leads to (E1D5 FD65).
     /// ponytail: capped at 50k files; a smarter ignore list (node_modules, .build) when a non-git folder needs it.
-    nonisolated private static func listFolder(_ root: URL) -> [String] {
+    nonisolated private static func listFolder(_ link: URL) -> [String] {
+        let root = link.resolvingSymlinksInPath()
         guard let walker = FileManager.default.enumerator(
             at: root, includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants])
