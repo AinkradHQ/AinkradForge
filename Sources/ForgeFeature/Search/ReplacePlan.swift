@@ -33,6 +33,21 @@ struct ReplacePlan: Equatable {
         return Self.reconstruct(diff, rejecting: rejected)
     }
 
+    /// The hunks `unticked` covers in this plan's diff — those changing a line it tracks, placed in this plan's
+    /// text — however the file changed since the untick (E1D4 FD55).
+    func rejected(_ unticked: SearchModel.TrackedLines?) -> Set<Int> {
+        guard let diff, let unticked else { return [] }
+        let lines = unticked.placed(in: TextSearch.lineHashes(original)).indexes
+        return Set(diff.hunks.filter { $0.changedLines.contains { lines.contains($0) } }.map(\.id))
+    }
+
+    /// Unticked `hunks` of this plan's diff, as the original lines they change.
+    func unticked(_ hunks: Set<Int>) -> SearchModel.TrackedLines? {
+        guard let diff, !hunks.isEmpty else { return nil }
+        let lines = diff.hunks.filter { hunks.contains($0.id) }.flatMap(\.changedLines)
+        return SearchModel.TrackedLines(lines: TextSearch.lineHashes(original), indexes: Set(lines))
+    }
+
     /// The original with accepted hunks' new lines and rejected hunks' old lines; outside hunks, verbatim.
     /// (The host has the same rule in `PartialEdit` — a kit home for it is the proposal.)
     static func reconstruct(_ diff: AinkradFileDiff, rejecting rejected: Set<Int>) -> String {
@@ -48,4 +63,9 @@ struct ReplacePlan: Equatable {
         if cursor < original.count { out.append(contentsOf: original[cursor...]) }
         return out.joined(separator: "\n")
     }
+}
+
+extension AinkradDiffHunk {
+    /// The original's lines this hunk changes, 0-based.
+    fileprivate var changedLines: [Int] { lines.compactMap { $0.kind == .deletion ? $0.oldNumber.map { $0 - 1 } : nil } }
 }

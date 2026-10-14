@@ -110,7 +110,8 @@ final class SnapshotTests: XCTestCase {
     /// Welcome at 520 pt (three apps tiled): the recents card narrows with the window (E1D1 FD35).
     func testWelcomeNarrow() throws {
         let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
-        model.store.update { $0.recents = [.init(path: repo.path, opened: .distantPast)] }
+        // Noon UTC: the recent's date ("1 Jan 1") is the same day in any time zone from −11 to +11 (FD57).
+        model.store.update { $0.recents = [.init(path: repo.path, opened: .distantPast.addingTimeInterval(12 * 3_600))] }
         // The language-server line reads this Mac's PATH: point every server at nothing, so it is the same anywhere.
         var settings = EditorSettings()
         settings.serverPaths = Dictionary(uniqueKeysWithValues: LanguageRegistry.servers.map { ($0.id, "/nonexistent/forge-snapshot") })
@@ -181,12 +182,17 @@ final class SnapshotTests: XCTestCase {
         try "# Changelog\n\n- Sidebar: threads sort newest first.\n"
             .write(to: repo.appendingPathComponent("CHANGELOG.md"), atomically: true, encoding: .utf8)
         let paths = [sort, "CHANGELOG.md"].map { repo.appendingPathComponent($0).path }
-        await_(model) { await $0.diskChanged(paths: paths) }
+        await_(model) {
+            await $0.diskChanged(paths: paths)
+            await $0.agent.diffsReady()
+        }
         XCTAssertEqual(
             model.reviewEntries.map(\.path), ["CHANGELOG.md", sort], "Review All should list both changed files")
         model.agent.reviewingAll = true
-        // The subtitle's "since 2:31 PM" reads the clock.
-        try Snapshot.assertMatches(model, named: "review-all", masking: [CGRect(x: 420, y: 44, width: 200, height: 20)])
+        // A frozen clock, not a mask: the subtitle's "since 7:57 AM" ran past a mask sized for "2:31 PM" (FD57).
+        TurnReviewClock.time = { _ in "12:35 PM" }
+        defer { TurnReviewClock.time = { $0.formatted(date: .omitted, time: .shortened) } }
+        try Snapshot.assertMatches(model, named: "review-all")
     }
 
     /// The review by Grimoire turn (E5, screen 18): turn 3 open with its request and first diff, an outside edit

@@ -26,17 +26,7 @@ struct LineMatch: Equatable, Sendable, Identifiable {
     let line: Int
     let text: String
     let ranges: [NSRange]
-    /// How many earlier matching lines of the file have this same text: with `text`, the match's identity.
-    var occurrence = 0
     var id: Int { line }
-
-    /// Who this match is, whatever line it moves to (FD44): its text and which of the identical lines it is.
-    struct Key: Hashable, Sendable {
-        let text: String
-        let occurrence: Int
-    }
-
-    var key: Key { Key(text: text, occurrence: occurrence) }
 }
 
 /// Search and replace over text. Pure, so every rule is asserted directly.
@@ -46,7 +36,6 @@ enum TextSearch {
     static func matches(in text: String, regex: NSRegularExpression) -> [LineMatch] {
         var result: [LineMatch] = []
         var number = 0
-        var seen: [String: Int] = [:]
         text.enumerateLines { line, _ in
             number += 1
             let ns = line as NSString
@@ -55,11 +44,9 @@ enum TextSearch {
             guard !found.isEmpty else { return }
             let shown = ns.length > 2_000 ? ns.substring(to: 2_000) : line
             let limit = (shown as NSString).length
-            let occurrence = seen[shown, default: 0]
-            seen[shown] = occurrence + 1
             result.append(LineMatch(line: number, text: shown, ranges: found.map {
                 NSRange(location: min($0.location, limit), length: max(0, min($0.length, limit - min($0.location, limit))))
-            }, occurrence: occurrence))
+            }))
         }
         return result
     }
@@ -93,6 +80,36 @@ enum TextSearch {
             out.replaceCharacters(in: match.range, with: piece)
         }
         return (out as String, found.count)
+    }
+
+    /// Each line of `text`, hashed, numbered as `matches(in:)` numbers them — what a line diff compares.
+    static func lineHashes(_ text: String) -> [Int] {
+        var hashes: [Int] = []
+        text.enumerateLines { line, _ in hashes.append(line.hashValue) }
+        return hashes
+    }
+
+    /// Where each line of `old` is in `new` (0-based), by a line diff; a line that changed or went has no entry.
+    /// Identical lines added or removed around a line can't move it onto another (E1D4 FD54).
+    /// ponytail: Myers diff per call, O((n+m)·d); fine for edited files, slow only for a rewrite of a huge one.
+    static func lineMap(from old: [Int], to new: [Int]) -> [Int: Int] {
+        if old == new { return Dictionary(uniqueKeysWithValues: old.indices.map { ($0, $0) }) }
+        var removed = Set<Int>()
+        var inserted = Set<Int>()
+        for change in new.difference(from: old) {
+            switch change {
+            case .remove(let offset, _, _): removed.insert(offset)
+            case .insert(let offset, _, _): inserted.insert(offset)
+            }
+        }
+        var map: [Int: Int] = [:]
+        var next = 0
+        for index in old.indices where !removed.contains(index) {
+            while inserted.contains(next) { next += 1 }
+            map[index] = next
+            next += 1
+        }
+        return map
     }
 
     /// Line `index` (0-based) of `text`, without its line break; "" past the end.

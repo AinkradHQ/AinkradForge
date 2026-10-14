@@ -46,21 +46,46 @@ struct ReplaceTests {
         model.search.replacement = "isActive"
         model.rerunSearch()
         try await settle(model)
-        let hunks = try #require(model.replacePlan(for: "A.swift")?.diff?.hunks)
+        let plan = try #require(model.replacePlan(for: "A.swift"))
+        let hunks = try #require(plan.diff?.hunks)
         #expect(hunks.count == 2)
 
-        // An untick made under another query does not survive into this one: its hunk ids meant other lines.
-        model.search.rejected["A.swift"] = [hunks[0].id]
+        // An untick made under another query does not survive into this one: its hunks were other changes.
+        model.search.rejected["A.swift"] = plan.unticked([hunks[0].id])
         model.search.query.text = "isSelected "
         #expect(model.search.rejected.isEmpty)
         model.search.query.text = "isSelected"
 
-        model.search.rejected["A.swift"] = [hunks[1].id]
+        model.search.rejected["A.swift"] = plan.unticked([hunks[1].id])
         model.replaceAll()
         try await settle(model)
         let written = try String(contentsOf: root.appending(path: "A.swift"), encoding: .utf8)
         #expect(written.contains("let isActive = 3") && written.contains("let isSelected = 17"))
         #expect(model.search.rejected.isEmpty)
+    }
+
+    @Test func anUntickSurvivesAMatchAddedAboveFromOutside() async throws {
+        // E1D4 FD55: unticks were hunk positions; a match added above moved the untick onto the hunk before.
+        let text = (1...24).map { [4: "let a = isSelected", 12: "let b = isSelected", 20: "let c = isSelected"][$0] ?? "line \($0)" }
+            .joined(separator: "\n") + "\n"
+        let (model, root) = try await workspace(["A.swift": Data(text.utf8)])
+        defer { try? FileManager.default.removeItem(at: root) }
+        model.search.query.text = "isSelected"
+        model.search.replacement = "isActive"
+        model.rerunSearch()
+        try await settle(model)
+        let plan = try #require(model.replacePlan(for: "A.swift"))
+        let hunks = try #require(plan.diff?.hunks)
+        #expect(hunks.count == 3)
+        model.search.rejected["A.swift"] = plan.unticked([hunks[1].id])
+        #expect(plan.rejected(model.search.rejected["A.swift"]) == [hunks[1].id])
+
+        // An agent adds a match above everything; Replace in the file leaves b alone, still.
+        try Data(("let z = isSelected\nline 0\nline 0\nline 0\nline 0\n" + text).utf8).write(to: root.appending(path: "A.swift"))
+        model.replace(in: "A.swift")
+        let written = try String(contentsOf: root.appending(path: "A.swift"), encoding: .utf8)
+        let changed = written.split(separator: "\n").filter { $0.hasPrefix("let ") }
+        #expect(changed == ["let z = isActive", "let a = isActive", "let b = isSelected", "let c = isActive"])
     }
 
     @Test func aClosedFileIsWrittenInItsOwnEncodingAndAnOpenOneOnlyChangesInItsBuffer() async throws {

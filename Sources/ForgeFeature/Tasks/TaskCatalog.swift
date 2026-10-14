@@ -55,7 +55,8 @@ enum TaskCatalog {
     static func makeTargets(_ text: String) -> [String] {
         var seen: [String] = []
         let pattern = /^([A-Za-z0-9_][A-Za-z0-9_.\/-]*)\s*:(?![=:])/
-        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+        // By any line ending: "\r\n" is one Character, so a split on "\n" never cuts a CRLF file (E1D4 FD56).
+        for line in text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline) {
             guard let match = line.prefixMatch(of: pattern) else { continue }
             let target = String(match.1)
             if !seen.contains(target) { seen.append(target) }

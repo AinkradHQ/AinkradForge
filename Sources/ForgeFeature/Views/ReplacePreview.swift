@@ -43,7 +43,9 @@ struct ReplacePreview: View {
                         ScrollView {
                             AinkradDiffReview(
                                 fileDiff: diff,
-                                rejectedHunkIDs: Binding(get: { search.rejected[path] ?? [] }, set: { search.rejected[path] = $0 })
+                                rejectedHunkIDs: Binding(
+                                    get: { plan?.rejected(search.rejected[path]) ?? [] },
+                                    set: { search.rejected[path] = plan?.unticked($0) })
                             )
                             .hidesHeader()
                             .previewHunks(diff, width: diffWidth, skin: skin)
@@ -86,7 +88,7 @@ struct ReplacePreview: View {
     private var changes: String {
         guard let plan else { return " " }
         let hunks = plan.diff?.hunks.count ?? 0
-        let rejected = model.search.rejected[path]?.count ?? 0
+        let rejected = plan.rejected(model.search.rejected[path]).count
         let text = hunks == 0 ? "\(plan.count) match\(plan.count == 1 ? "" : "es")" : "\(hunks) change\(hunks == 1 ? "" : "s")"
         return text + (rejected > 0 ? " · \(rejected) left as is" : "")
     }

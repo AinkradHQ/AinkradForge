@@ -69,6 +69,7 @@ private struct TaskRow: View {
             }
             .textGlyph(isRunning ? "■" : "▶", size: skin.size.s10)
             .bare()
+            .accessibilityLabel(isRunning ? "Stop \(task.name)" : "Run \(task.name)")
             .frame(width: skin.size.s20)
             Text(task.name)
                 .font(skin.font(AinkradFontToken(size: 11.5, weight: "medium", mono: "family")))

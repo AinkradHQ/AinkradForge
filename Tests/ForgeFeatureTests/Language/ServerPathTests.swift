@@ -17,6 +17,30 @@ struct ServerPathTests {
         #expect(model.languages.overrides["gopls"] == nil)
     }
 
+    /// Settings' field saves when typing pauses, not per keystroke: a space typed mid-path stays, `~` stays as typed
+    /// in the field, and the server is pointed at the path once (E1D4 FD58).
+    @Test func typingAServerPathCommitsOnlyWhenTypingPauses() async throws {
+        let model = ForgeModel(store: ForgeStore(documents: MemoryDocs()))
+        var typed = ""
+        for character in "~/My Tools/sourcekit-lsp" {
+            typed.append(character)
+            model.typeServerPath("sourcekit-lsp", typed, after: .milliseconds(200))
+            #expect(model.serverPathField("sourcekit-lsp") == typed)
+            #expect(model.editorSettings.serverPaths["sourcekit-lsp"] == nil)
+        }
+        #expect(model.serverPathField("sourcekit-lsp") == "~/My Tools/sourcekit-lsp")
+        for _ in 0..<100 where model.editorSettings.serverPaths["sourcekit-lsp"] == nil { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(model.editorSettings.serverPaths["sourcekit-lsp"] == NSHomeDirectory() + "/My Tools/sourcekit-lsp")
+        #expect(model.languages.overrides["sourcekit-lsp"] == NSHomeDirectory() + "/My Tools/sourcekit-lsp")
+        #expect(model.serverPathField("sourcekit-lsp") == "~/My Tools/sourcekit-lsp")
+
+        // Reset clears the field at once, and a commit still pending can't bring the old text back.
+        model.typeServerPath("sourcekit-lsp", "/x ", after: .milliseconds(100))
+        model.setServerPath("sourcekit-lsp", "")
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(model.serverPathField("sourcekit-lsp") == "" && model.editorSettings.serverPaths["sourcekit-lsp"] == nil)
+    }
+
     /// With no server for the file, or its server missing, the window says so instead of "0 issues" (E1D1 FD33).
     @Test func aFileWithoutARunningServerSaysWhy() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("forge-gap-\(UUID().uuidString.prefix(8))")

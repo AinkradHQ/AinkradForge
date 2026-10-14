@@ -97,7 +97,7 @@ struct ServerBarView: View {
     }
 
     private var hide: some View {
-        RowAction(glyph: "✕", help: "Hide for this session") { model.dismissServerHint(bar.language, forever: false) }
+        RowAction(glyph: "✕", name: "Hide for this session") { model.dismissServerHint(bar.language, forever: false) }
     }
 
     @ViewBuilder private var background: some View {

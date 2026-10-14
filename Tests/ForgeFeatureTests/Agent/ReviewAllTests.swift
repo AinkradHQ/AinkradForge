@@ -36,13 +36,14 @@ struct ReviewAllTests {
         await model.diskChanged(paths: ["A.txt", "B.txt", "C.txt"].map { root.appending(path: $0).path })
 
         #expect(Set(model.agent.others.keys) == ["A.txt", "C.txt"])
-        let entry = try #require(model.reviewEntries.first { $0.path == "A.txt" })
-        #expect(entry.diff.hunks.count == 2)
+        await model.agent.diffsReady()
+        let diff = try #require(model.reviewEntries.first { $0.path == "A.txt" }?.diff)
+        #expect(diff.hunks.count == 2)
         #expect(model.reviewEntries.first { $0.path == "C.txt" }?.isNew == true)
 
         // Untick A's second change and C (new): Done undoes those and keeps A's first.
-        model.agent.unticked["A.txt"] = [entry.diff.hunks[1].id]
-        model.agent.unticked["C.txt"] = Set(model.reviewEntries.first { $0.path == "C.txt" }?.diff.hunks.map(\.id) ?? [])
+        model.agent.unticked["A.txt"] = [diff.hunks[1].id]
+        model.agent.unticked["C.txt"] = Set(model.reviewEntries.first { $0.path == "C.txt" }?.diff?.hunks.map(\.id) ?? [])
         model.finishReview()
         let written = try String(contentsOf: root.appending(path: "A.txt"), encoding: .utf8)
         #expect(written.contains("line two") && written.contains("line 11\n"))
@@ -76,6 +77,45 @@ struct ReviewAllTests {
 
         #expect(Set(model.agent.others.keys) == ["D.txt"])
         #expect(ForgeModel.inHiddenFolder(".build/x.o") && !ForgeModel.inHiddenFolder(".gitignore"))
+    }
+
+    /// A closed file past the diff's line limit is listed — too large to diff — and kept or undone whole: Undo All
+    /// puts it back and the chip clears (E1D4 FD53).
+    @Test func aFileTooLargeToDiffIsListedAndSettledWhole() async throws {
+        let big = (1...5_000).map { "line \($0)" }.joined(separator: "\n") + "\n"
+        let (model, root) = try await workspace(["Big.txt": big, "Small.txt": "let a = 1\n"])
+        defer { try? FileManager.default.removeItem(at: root) }
+        model.agent.saw("Big.txt", text: big)
+        model.agent.saw("Small.txt", text: "let a = 1\n")
+        try big.replacingOccurrences(of: "line 7\n", with: "line seven\n").write(to: root.appending(path: "Big.txt"), atomically: true, encoding: .utf8)
+        try "let a = 2\n".write(to: root.appending(path: "Small.txt"), atomically: true, encoding: .utf8)
+        await model.diskChanged(paths: ["Big.txt", "Small.txt"].map { root.appending(path: $0).path })
+        await model.agent.diffsReady()
+
+        #expect(model.agent.count == 2)
+        #expect(model.reviewEntries.map(\.path) == ["Big.txt", "Small.txt"])
+        #expect(model.reviewEntries.first?.isTooLarge == true && model.reviewEntries.first?.diff == nil)
+        model.finishReview(undoAll: true)
+        #expect(try String(contentsOf: root.appending(path: "Big.txt"), encoding: .utf8) == big)
+        #expect(try String(contentsOf: root.appending(path: "Small.txt"), encoding: .utf8) == "let a = 1\n")
+        #expect(model.agent.count == 0)
+
+        // Done keeps one; the row's own Undo puts it back.
+        let other = root.appending(path: "Other.txt")
+        try big.write(to: other, atomically: true, encoding: .utf8)
+        model.agent.saw("Other.txt", text: big)
+        try "changed\n\(big)".write(to: other, atomically: true, encoding: .utf8)
+        await model.diskChanged(paths: [other.path])
+        #expect(model.agent.count == 1)
+        model.finishReview()
+        #expect(model.agent.count == 0)
+        #expect(try String(contentsOf: other, encoding: .utf8).hasPrefix("changed\n"))
+        try "changed again\n\(big)".write(to: other, atomically: true, encoding: .utf8)
+        await model.diskChanged(paths: [other.path])
+        #expect(model.agent.count == 1)
+        model.settleOutside("Other.txt", undo: true)
+        #expect(try String(contentsOf: other, encoding: .utf8) == big)
+        #expect(model.agent.count == 0)
     }
 
     @Test func forgesOwnWritesAreNotOutsideChanges() async throws {

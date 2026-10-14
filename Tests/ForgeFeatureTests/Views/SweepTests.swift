@@ -297,7 +297,10 @@ final class SweepTests: XCTestCase {
         try sortText.replacingOccurrences(of: "        a < b\n", with: "        // Newest first.\n        a > b\n")
             .write(to: repo.appendingPathComponent(sort), atomically: true, encoding: .utf8)
         try "# Changelog\n\n- Sidebar: threads sort newest first.\n".write(to: repo.appendingPathComponent("CHANGELOG.md"), atomically: true, encoding: .utf8)
-        await_(reviewing) { await $0.diskChanged(paths: [sort, "CHANGELOG.md"].map { repo.appendingPathComponent($0).path }) }
+        await_(reviewing) {
+            await $0.diskChanged(paths: [sort, "CHANGELOG.md"].map { repo.appendingPathComponent($0).path })
+            await $0.agent.diffsReady()
+        }
         reviewing.agent.reviewingAll = true
 
         // E7 screen 17: ⌘I on a selection — the Ask Agent card.

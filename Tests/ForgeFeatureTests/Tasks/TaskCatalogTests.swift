@@ -21,6 +21,14 @@ struct TaskCatalogTests {
         #expect(TaskCatalog.makeTargets(makefile) == ["build", "test", "release/dmg"])
     }
 
+    @Test func aCRLFMakefileListsEveryTarget() {
+        // E1D4 FD56: split on "\n" left "\r\n" (one Character) whole, so only the first target was found.
+        #expect(TaskCatalog.makeTargets("build:\r\n\tswift build\r\ntest: build\r\n\tswift test\r\n") == ["build", "test"])
+        #expect(TaskCatalog.makeTargets("build:\r\tx\rtest:\r") == ["build", "test"])
+        let json = "{\r\n  \"scripts\": {\r\n    \"dev\": \"next dev\",\r\n    \"build\": \"next build\"\r\n  }\r\n}\r\n"
+        #expect(TaskCatalog.scripts(json: json).map(\.name) == ["dev", "build"])
+    }
+
     @Test func scriptsKeepTheirWrittenOrder() {
         let json = #"{"name": "site", "scripts": {"dev": "next dev", "build": "next build", "lint": ["eslint .", "tsc"]}}"#
         let scripts = TaskCatalog.scripts(json: json)

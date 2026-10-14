@@ -21,11 +21,11 @@ struct ReviewBar: View {
             }
             Spacer(minLength: skin.size.s8)
             HStack(spacing: skin.size.s4) {
-                RowAction(glyph: "‹", help: "Previous Change") { model.stepChange(path, by: -1) }
+                RowAction(glyph: "‹", name: "Previous change") { model.stepChange(path, by: -1) }
                 Text("\((model.agent.current[path] ?? 0) + 1) of \(count)")
                     .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
                     .foregroundStyle(skin.color(skin.text.faint))
-                RowAction(glyph: "›", help: "Next Change") { model.stepChange(path, by: 1) }
+                RowAction(glyph: "›", name: "Next change") { model.stepChange(path, by: 1) }
             }
             .fixedSize()
             AinkradButton(title: "Undo All", style: .secondary) { model.undoAllChanges(path) }.secondaryAccent().fixedSize()
@@ -156,7 +156,7 @@ struct WasCard: View {
 /// untick to undo it. Done undoes the unticked ones and clears the review.
 struct ReviewAllPane: View {
     let model: ForgeModel
-    /// Files whose diff is showing; until the first click, only the first file's (mockup 16).
+    /// Files whose diff is showing; until the first click, only the first file's (mockup 16) unless it is long.
     @State private var shown: Set<String>?
     @Environment(\.ainkradSkin) private var skin
     @Environment(\.ainkradTheme) private var theme
@@ -168,7 +168,10 @@ struct ReviewAllPane: View {
 
     @ViewBuilder private var list: some View {
         let entries = model.reviewEntries
-        let open = shown ?? Set(entries.first.map { [$0.path] } ?? [])
+        // The first file opens by itself only when its diff is short: the kit lays every row out at once, and a
+        // file rewritten whole would hold the main thread for seconds (FD52) — a long one shows on a click.
+        let first = entries.first.flatMap { ($0.diff?.hunks.reduce(0) { $0 + $1.lines.count } ?? 0) <= 400 ? $0.path : nil }
+        let open = shown ?? Set(first.map { [$0] } ?? [])
         VStack(alignment: .leading, spacing: skin.size.s12) {
             HStack(spacing: skin.size.s10) {
                 VStack(alignment: .leading, spacing: skin.size.s2) {
@@ -189,23 +192,39 @@ struct ReviewAllPane: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: skin.size.s12) {
                     ForEach(entries, id: \.path) { entry in
-                        let counts = ReviewFileRow.counts(entry.diff)
+                        let counts = entry.diff.map(ReviewFileRow.counts) ?? (added: 0, removed: 0)
                         ReviewFileRow(
-                            path: entry.path, note: entry.isNew ? "new file" : entry.isDeleted ? "deleted" : nil,
+                            path: entry.path,
+                            note: entry.isTooLarge ? "too large to diff" : entry.isNew ? "new file" : entry.isDeleted ? "deleted" : nil,
                             added: counts.added, removed: counts.removed
                         ) {
                             var next = open
                             if next.remove(entry.path) == nil { next.insert(entry.path) }
                             shown = next
                         }
-                        if open.contains(entry.path) {
+                        if entry.isTooLarge {
+                            // No diff to tick (the kit's is quadratic): the whole file is kept or undone (FD53).
+                            HStack(spacing: skin.size.s8) {
+                                Text("Too large to diff — keep or undo the whole file")
+                                    .font(skin.font(AinkradFontToken(sizeKey: "t11")))
+                                    .foregroundStyle(skin.color(skin.text.muted))
+                                Spacer(minLength: skin.size.s8)
+                                AinkradButton(title: "Undo whole file", style: .secondary) { model.settleOutside(entry.path, undo: true) }
+                                    .secondaryAccent().fixedSize()
+                                AinkradButton(title: "Keep", style: .secondary) { model.settleOutside(entry.path, undo: false) }.secondaryAccent().fixedSize()
+                            }
+                            .padding(.leading, skin.size.s22)
+                        } else if open.contains(entry.path), let diff = entry.diff {
                             AinkradDiffReview(
-                                fileDiff: entry.diff,
+                                fileDiff: diff,
                                 rejectedHunkIDs: Binding(
                                     get: { model.agent.unticked[entry.path] ?? [] },
                                     set: { model.agent.unticked[entry.path] = $0 })
                             )
                             .reviewStyle()
+                        } else if open.contains(entry.path), entry.diff == nil {
+                            // Still being diffed, off the main thread (FD52).
+                            AinkradSpinner(size: skin.size.s14).padding(.leading, skin.size.s22)
                         }
                     }
                 }
@@ -216,12 +235,12 @@ struct ReviewAllPane: View {
     }
 
     /// "5 files · 9 changes · since 10:42 · 1 change unticked — Done undoes it".
-    private func subtitle(_ entries: [(path: String, diff: AinkradFileDiff, isNew: Bool, isDeleted: Bool)]) -> String {
-        let changes = entries.reduce(0) { $0 + $1.diff.hunks.count }
+    private func subtitle(_ entries: [ForgeModel.ReviewEntry]) -> String {
+        let changes = entries.reduce(0) { $0 + ($1.diff?.hunks.count ?? 0) }
         let unticked = model.agent.unticked.values.reduce(0) { $0 + $1.count }
         let since = (model.agent.files.values.map(\.since) + model.agent.others.values.map(\.since)).min()
         return "\(entries.count) file\(entries.count == 1 ? "" : "s") · \(changes) change\(changes == 1 ? "" : "s")"
-            + (since.map { " · since " + $0.formatted(date: .omitted, time: .shortened) } ?? "")
+            + (since.map { " · since " + TurnReviewClock.time($0) } ?? "")
             + (unticked > 0 ? " · \(unticked) change\(unticked == 1 ? "" : "s") unticked — Done undoes \(unticked == 1 ? "it" : "them")" : "")
     }
 }

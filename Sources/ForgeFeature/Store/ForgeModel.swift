@@ -57,6 +57,9 @@ final class ForgeModel {
     var editorEdits: [String: EditorEdits] = [:]
     var actionMenu: EditorMenu?
     @ObservationIgnored var menuActions: [CodeActionItem] = []
+    /// Settings' server path fields as typed, committed once typing pauses (`typeServerPath`, E1D4 FD58).
+    var serverPathDrafts: [String: String] = [:]
+    @ObservationIgnored var serverPathCommits: [String: Task<Void, Never>] = [:]
     @ObservationIgnored var editSequence = 0
     /// One editor pane, or two side by side (or stacked). Each has its own tabs.
     private(set) var panes: [Tabs] = [Tabs()]

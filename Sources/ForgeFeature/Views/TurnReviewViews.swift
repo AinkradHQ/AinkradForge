@@ -1,7 +1,8 @@
 import AinkradAppKit
 import SwiftUI
 
-/// The clock text the turn review shows. Goldens freeze it: "1:38 PM" and "12:35 PM" differ in width and move the layout.
+/// The clock text the reviews show (by turn, and Review All's "since"). Goldens freeze it: "1:38 PM" and
+/// "12:35 PM" differ in width and move the layout, and a mask sized for one misses the other (E1D4 FD57).
 @MainActor enum TurnReviewClock {
     static var time: (Date) -> String = { $0.formatted(date: .omitted, time: .shortened) }
     static var ago: (Date) -> String = { ShortAgo.text($0) }
@@ -106,8 +107,11 @@ struct TurnReviewPane: View {
     @ViewBuilder private func headerButtons(icons: Bool) -> some View {
         if icons {
             AinkradIconButton(systemName: "arrow.uturn.backward", tooltip: "Undo All") { model.finishReview(undoAll: true) }
+                .accessibilityLabel("Undo all")
             AinkradIconButton(systemName: "checkmark.circle", tooltip: "Keep All") { model.keepAllOutside() }
+                .accessibilityLabel("Keep all")
             AinkradIconButton(systemName: "checkmark", tooltip: "Done") { model.finishTurnReview() }
+                .accessibilityLabel("Done")
         } else {
             AinkradButton(title: "Undo All", style: .secondary) { model.finishReview(undoAll: true) }.secondaryAccent().fixedSize()
             AinkradButton(title: "Keep All", style: .secondary) { model.keepAllOutside() }.secondaryAccent().fixedSize()
@@ -256,6 +260,7 @@ private struct TurnGroupView: View {
             if group.turn != nil {
                 if icons {
                     AinkradIconButton(systemName: "arrow.turn.down.right", tooltip: "Ask about this turn…") { ask() }
+                        .accessibilityLabel("Ask about this turn")
                 } else {
                     Button(action: ask) {  // design-lint: allow raw-control keyboard-reachable link label (FD40)
                         Label("Ask about this turn…", systemImage: "arrow.turn.down.right")
@@ -270,8 +275,8 @@ private struct TurnGroupView: View {
             }
             let undoTitle = group.turn == nil ? "Undo" : "Undo turn", keepTitle = group.turn == nil ? "Keep" : "Keep turn"
             if icons {
-                AinkradIconButton(systemName: "arrow.uturn.backward", tooltip: undoTitle, action: undo)
-                AinkradIconButton(systemName: "checkmark", tooltip: keepTitle) { model.keep(group: group) }
+                AinkradIconButton(systemName: "arrow.uturn.backward", tooltip: undoTitle, action: undo).accessibilityLabel(undoTitle)
+                AinkradIconButton(systemName: "checkmark", tooltip: keepTitle) { model.keep(group: group) }.accessibilityLabel(keepTitle)
             } else {
                 AinkradButton(title: "↶ " + undoTitle, style: .secondary, action: undo).secondaryAccent().fixedSize()
                 AinkradButton(title: "✓ " + keepTitle, style: .primary) { model.keep(group: group) }.fixedSize()

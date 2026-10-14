@@ -32,7 +32,18 @@ final class AgentReview {
     }
 
     /// Closed files changed from outside, since the last review.
-    private(set) var others: [String: OtherFile] = [:]
+    private(set) var others: [String: OtherFile] = [:] { didSet { diffOthers() } }
+
+    /// A closed file's diff, as of `file` (nil: too long to diff).
+    struct OtherDiff {
+        let file: OtherFile
+        let diff: AinkradFileDiff?
+    }
+
+    /// Closed files' diffs, each computed once per change and off the main thread — the kit's diff is quadratic,
+    /// and Review All reads them on every render (E1D4 FD52). A file missing here is still being diffed.
+    private(set) var otherDiffs: [String: OtherDiff] = [:]
+    @ObservationIgnored private var diffing: [String: (file: OtherFile, task: Task<Void, Never>)] = [:]
     /// The Review All pane is showing, and the changes unticked in it (to undo), per file.
     var reviewingAll = false
     var unticked: [String: Set<Int>] = [:]
@@ -50,7 +61,9 @@ final class AgentReview {
     var count: Int { files.count + others.count }
 
     /// A file this long is reloaded without review (the kit's diff is quadratic).
-    static let lineLimit = 4_000
+    nonisolated static let lineLimit = 4_000
+
+    nonisolated static func lineCount(_ text: String) -> Int { text.utf8.reduce(1) { $1 == 10 ? $0 + 1 : $0 } }
 
     func reset() {
         files = [:]
@@ -107,6 +120,31 @@ final class AgentReview {
         turns.drop(path)
     }
 
+    /// Drops diffs of changes gone by, and starts one off the main thread for each change not yet diffed.
+    private func diffOthers() {
+        for (path, cached) in otherDiffs where others[path] != cached.file { otherDiffs[path] = nil }
+        for (path, file) in others where otherDiffs[path] == nil && diffing[path]?.file != file {
+            let task = Task { [weak self] in
+                let diff = await Task.detached(priority: .userInitiated) { Self.diff(path, file) }.value
+                guard let self else { return }
+                if diffing[path]?.file == file { diffing[path] = nil }
+                if others[path] == file { otherDiffs[path] = OtherDiff(file: file, diff: diff) }
+            }
+            diffing[path] = (file, task)
+        }
+    }
+
+    /// Every diff started so far has landed.
+    func diffsReady() async {
+        while let next = diffing.values.first { await next.task.value }
+    }
+
+    nonisolated private static func diff(_ path: String, _ file: OtherFile) -> AinkradFileDiff? {
+        let old = file.baseline ?? "", new = file.current ?? ""
+        guard lineCount(old) <= lineLimit, lineCount(new) <= lineLimit else { return nil }
+        return AinkradDiffEngine.compute(old: old, new: new, path: path, context: 2)
+    }
+
     private func remember(_ path: String, _ text: String) {
         // ponytail: an unbounded cache of read files; cap it if a long session holds too many big ones.
         if text.utf8.count < 2_000_000 { seen[path] = text }
@@ -115,7 +153,7 @@ final class AgentReview {
     /// Forge reloaded a clean file someone else rewrote: `before` was its text. Edits in a row compare
     /// against the first one's baseline.
     func reloaded(_ path: String, before: String, after: String) {
-        guard after.utf8.reduce(1, { $1 == 10 ? $0 + 1 : $0 }) <= Self.lineLimit else { return }
+        guard Self.lineCount(after) <= Self.lineLimit else { return }
         let existing = files[path]
         turns.observe(path, before: before, after: after)
         set(path, baseline: existing?.baseline ?? before, text: after, since: existing?.since ?? Date())
