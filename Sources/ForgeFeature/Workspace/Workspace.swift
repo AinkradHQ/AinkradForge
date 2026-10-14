@@ -39,12 +39,8 @@ final class Workspace {
         let isRepo = (try? await git.run(["rev-parse", "--is-inside-work-tree"]))?.hasPrefix("true") == true
         if isRepo {
             let listed = (try? await git.run(["ls-files", "-co", "--exclude-standard", "-z"])) ?? ""
-            // A file deleted in the working tree is still "cached"; only list what exists.
             let root = root
-            files = await Task.detached {
-                listed.split(separator: "\0").map(String.init)
-                    .filter { FileManager.default.fileExists(atPath: root.appending(path: $0).path(percentEncoded: false)) }
-            }.value
+            files = await Task.detached { Self.existing(listed.split(separator: "\0").map(String.init), in: root) }.value
             // `git status` paths are repo-relative; the tree is relative to this folder, which may be a subfolder.
             let prefix = (try? await git.run(["rev-parse", "--show-prefix"]))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             marks = GitParse.relative(GitParse.status((try? await git.run(["--no-optional-locks", "status", "--porcelain=v1", "-z", "--untracked-files=all"])) ?? ""), to: prefix)
@@ -69,22 +65,57 @@ final class Workspace {
         marks.map { ($0.key, $0.value) }.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
     }
 
-    /// A folder that is not a repo: every non-hidden file, skipping package contents. The root may be a link: the
-    /// enumerator does not descend into one, so it walks the folder the link leads to (E1D5 FD65).
+    /// A folder that is not a repo: every non-hidden file, skipping package contents. The root may itself be a
+    /// link (E1D5 FD65), and links inside it are followed (FD66).
     /// ponytail: capped at 50k files; a smarter ignore list (node_modules, .build) when a non-git folder needs it.
-    nonisolated private static func listFolder(_ link: URL) -> [String] {
-        let root = link.resolvingSymlinksInPath()
-        guard let walker = FileManager.default.enumerator(
-            at: root, includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles, .skipsPackageDescendants])
-        else { return [] }
-        let prefix = root.path(percentEncoded: false).count + (root.path(percentEncoded: false).hasSuffix("/") ? 0 : 1)
+    nonisolated static func listFolder(_ root: URL) -> [String] {
         var files: [String] = []
-        for case let url as URL in walker {
-            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
-            files.append(String(url.standardizedFileURL.path(percentEncoded: false).dropFirst(prefix)))
-            if files.count >= 50_000 { break }
+        walk(root, prefix: "", ancestors: [], into: &files)
+        return files
+    }
+
+    /// What git listed that exists — a file deleted in the working tree is still "cached". Git lists a link to a
+    /// folder as one entry: its files are listed under it instead, never the link as a file (E1D5 FD66).
+    nonisolated static func existing(_ listed: [String], in root: URL) -> [String] {
+        var files: [String] = []
+        for path in listed {
+            let url = root.appending(path: path)
+            var isFolder: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false), isDirectory: &isFolder) else { continue }
+            guard isFolder.boolValue, (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true else {
+                files.append(path)
+                continue
+            }
+            // The real folders from the root down to the link: a link to one of them is a loop (`src/loop → ..`).
+            let parts = path.split(separator: "/").dropLast()
+            let parents = [root] + parts.indices.map { root.appending(path: parts[...$0].joined(separator: "/")) }
+            walk(url, prefix: path + "/", ancestors: Set(parents.map { $0.resolvingSymlinksInPath().path }), into: &files)
         }
         return files
+    }
+
+    /// Lists the non-hidden files under `folder` as `prefix` + their path in it, following links: a link to a file
+    /// is a file, a link to a folder is walked — unless it leads back to a folder above it (`ancestors`, real paths).
+    nonisolated private static func walk(_ folder: URL, prefix: String, ancestors: Set<String>, into files: inout [String]) {
+        let real = folder.resolvingSymlinksInPath()
+        guard files.count < 50_000, !ancestors.contains(real.path) else { return }
+        let ancestors = ancestors.union([real.path])
+        let keys: [URLResourceKey] = [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey, .isPackageKey]
+        guard let children = try? FileManager.default.contentsOfDirectory(at: real, includingPropertiesForKeys: keys, options: .skipsHiddenFiles)
+        else { return }
+        for child in children where files.count < 50_000 {
+            guard var values = try? child.resourceValues(forKeys: Set(keys)) else { continue }
+            // A link's own values describe the link; its target's say what it is (none: a dangling link).
+            if values.isSymbolicLink == true {
+                guard let target = try? child.resolvingSymlinksInPath().resourceValues(forKeys: Set(keys)) else { continue }
+                values = target
+            }
+            let path = prefix + child.lastPathComponent
+            if values.isRegularFile == true {
+                files.append(path)
+            } else if values.isDirectory == true, values.isPackage != true {
+                walk(child, prefix: path + "/", ancestors: ancestors, into: &files)
+            }
+        }
     }
 }
