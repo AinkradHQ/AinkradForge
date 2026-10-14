@@ -63,24 +63,30 @@ extension ForgeModel {
 /// their own encoding and line endings. Nothing with unsaved edits is ever overwritten on disk.
 extension ForgeModel {
     /// What replacing in `path` would do, from its open buffer or its file — only the matches still listed
-    /// (none dismissed with ✕), or with `line`, only the first match of that listed row. Matches are found by
-    /// identity in the text as it is now (FD44), so lines that moved since the search can't swap places.
+    /// (none dismissed with ✕), or with `line`, only the first match of that listed row. Listed and dismissed lines
+    /// are placed in the text as it is now by a line diff (FD44, E1D4 FD54), so lines that moved since the search —
+    /// or identical ones added or removed above — can't swap places.
     func replacePlan(for path: String, line: Int? = nil) -> ReplacePlan? {
         guard let workspace, let regex = try? search.query.compile() else { return nil }
         let text: String? = documents[path].flatMap { $0.state == .ready ? $0.storage.string : nil }
             ?? SearchModel.readText(workspace.url(for: path))
         guard let text else { return nil }
-        let dismissed = search.dismissedMatches[path] ?? []
-        // ⇄'s row, as it was listed; a row no longer listed has nothing to replace.
-        var target: LineMatch.Key?
+        let now = TextSearch.lineHashes(text)
+        let dismissed = search.dismissedMatches[path]?.placed(in: now).lineNumbers ?? []
+        // ⇄'s row, as it was listed, placed in the text now; a row no longer listed, or since edited, has nothing.
+        var target: Int?
         if let line {
-            guard let listed = search.results.first(where: { $0.path == path })?.matches.first(where: { $0.line == line }) else {
+            let listed = search.results.first { $0.path == path }
+            if let listed, listed.matches.contains(where: { $0.line == line }),
+                let index = TextSearch.lineMap(from: listed.lines, to: now)[line - 1]
+            {
+                target = index + 1
+            } else {
                 return ReplacePlan.make(path: path, original: text, updated: text, count: 0)
             }
-            target = listed.key
         }
         let current = search.dismissedFiles.contains(path) ? [] : TextSearch.matches(in: text, regex: regex)
-        let chosen = Set(current.filter { !dismissed.contains($0.key) && (target == nil || $0.key == target) }.map(\.line))
+        let chosen = Set(current.map(\.line).filter { !dismissed.contains($0) && (target == nil || $0 == target) })
         return ReplacePlan.make(
             path: path, text: text, regex: regex, replacement: search.replacement, isRegex: search.query.regex,
             preserveCase: search.preserveCase, limit: line == nil ? nil : 1, lines: chosen.contains)

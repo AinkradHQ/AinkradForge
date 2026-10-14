@@ -8,7 +8,28 @@ final class SearchModel {
     struct FileResult: Identifiable, Equatable {
         let path: String
         var matches: [LineMatch]
+        /// The file's lines as searched (`TextSearch.lineHashes`): where the listed line numbers point.
+        var lines: [Int] = []
         var id: String { path }
+    }
+
+    /// A file's result lines dismissed with ✕: 0-based indexes into `lines`, the file's lines (hashed) when they
+    /// were last placed. They are placed in the file as it is now by a line diff, so lines added or removed above —
+    /// identical ones included — can't move a dismissal onto another match (FD44, E1D4 FD54). A dismissed line
+    /// that was itself edited is dismissed no more: it is listed again, never replaced unseen.
+    struct Dismissed: Equatable, Sendable {
+        var lines: [Int]
+        var indexes: Set<Int> = []
+
+        /// The dismissals placed in `now` (a file's `TextSearch.lineHashes`).
+        func placed(in now: [Int]) -> Dismissed {
+            guard now != lines else { return self }
+            let map = TextSearch.lineMap(from: lines, to: now)
+            return Dismissed(lines: now, indexes: Set(indexes.compactMap { map[$0] }))
+        }
+
+        /// The dismissed lines, 1-based.
+        var lineNumbers: Set<Int> { Set(indexes.map { $0 + 1 }) }
     }
 
     enum Status: Equatable {
@@ -42,10 +63,9 @@ final class SearchModel {
     var rejected: [String: Set<Int>] = [:]
     /// Replace All was asked for; the window confirms first.
     var confirmingReplaceAll = false
-    /// Result lines (path → match identities) and whole files dismissed with ✕: out of the list and out of Replace,
-    /// until the query or the globs change. The files themselves are untouched. Keyed by the match, not its line
-    /// number, so an edit above it can't move the dismissal onto another match (FD44).
-    private(set) var dismissedMatches: [String: Set<LineMatch.Key>] = [:]
+    /// Result lines and whole files dismissed with ✕: out of the list and out of Replace, until the query or the
+    /// globs change. The files themselves are untouched.
+    private(set) var dismissedMatches: [String: Dismissed] = [:]
     private(set) var dismissedFiles: Set<String> = []
     @ObservationIgnored private var running: Task<Void, Never>?
 
@@ -99,8 +119,11 @@ final class SearchModel {
     func dismiss(_ path: String, line: Int? = nil) {
         guard let index = results.firstIndex(where: { $0.path == path }) else { return }
         rejected[path] = nil
-        if let line, let match = results[index].matches.first(where: { $0.line == line }) {
-            dismissedMatches[path, default: []].insert(match.key)
+        if let line, results[index].matches.contains(where: { $0.line == line }) {
+            let lines = results[index].lines
+            var dismissed = dismissedMatches[path]?.placed(in: lines) ?? Dismissed(lines: lines)
+            dismissed.indexes.insert(line - 1)
+            dismissedMatches[path] = dismissed
             results[index].matches.removeAll { $0.line == line }
         }
         if line == nil || results[index].matches.isEmpty {
@@ -125,23 +148,32 @@ final class SearchModel {
         results = []
         status = .searching
         var found = 0
+        let skipped = dismissedFiles
+        let dismissedBefore = dismissedMatches
         // Batches of files scanned off the main actor; each batch's hits are appended as it finishes.
         for batch in stride(from: 0, to: files.count, by: 64).map({ Array(files[$0..<min($0 + 64, files.count)]) }) {
             guard !Task.isCancelled else { return }
             let hits = await Task.detached(priority: .userInitiated) {
-                batch.compactMap { path -> FileResult? in
-                    guard let text = buffers[path] ?? Self.readText(root.appending(path: path)) else { return nil }
-                    let matches = TextSearch.matches(in: text, regex: regex)
-                    return matches.isEmpty ? nil : FileResult(path: path, matches: matches)
+                batch.compactMap { path -> (FileResult, Dismissed?)? in
+                    guard !skipped.contains(path),
+                        let text = buffers[path] ?? Self.readText(root.appending(path: path))
+                    else { return nil }
+                    var hit = FileResult(path: path, matches: TextSearch.matches(in: text, regex: regex))
+                    guard !hit.matches.isEmpty else { return nil }
+                    hit.lines = TextSearch.lineHashes(text)
+                    // The dismissals follow the lines they were made on, wherever those went.
+                    let dismissed = dismissedBefore[path]?.placed(in: hit.lines)
+                    if let lines = dismissed?.lineNumbers { hit.matches.removeAll { lines.contains($0.line) } }
+                    return (hit, dismissed)
                 }
             }.value
             guard !Task.isCancelled else { return }
-            for var hit in hits where !dismissedFiles.contains(hit.path) {
-                if let keys = dismissedMatches[hit.path] { hit.matches.removeAll { keys.contains($0.key) } }
+            for (hit, dismissed) in hits where !dismissedFiles.contains(hit.path) {
+                if let dismissed, dismissedMatches[hit.path] == dismissedBefore[hit.path] { dismissedMatches[hit.path] = dismissed }
                 guard !hit.matches.isEmpty else { continue }
                 let room = Self.cap - found
                 guard room > 0 else { break }
-                let kept = FileResult(path: hit.path, matches: Array(hit.matches.prefix(room)))
+                let kept = FileResult(path: hit.path, matches: Array(hit.matches.prefix(room)), lines: hit.lines)
                 results.append(kept)
                 found += kept.matches.count
             }

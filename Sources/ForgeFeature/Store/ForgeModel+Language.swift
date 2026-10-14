@@ -231,7 +231,7 @@ extension ForgeModel {
                     line: location.start.line + 1, text: TextSearch.line(location.start.line, of: text),
                     ranges: [NSRange(location: location.start.character, length: max(0, length))])
             }
-            results.append(SearchModel.FileResult(path: path, matches: matches))
+            results.append(SearchModel.FileResult(path: path, matches: matches, lines: TextSearch.lineHashes(text)))
         }
         return results
     }

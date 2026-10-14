@@ -135,6 +135,38 @@ struct ResultActionTests {
         #expect(model.search.results.isEmpty)
     }
 
+    @Test func aDismissedMatchStaysDismissedWhenAnIdenticalLineIsAddedAbove() async throws {
+        // E1D4 FD54: dismissals were keyed by (text, occurrence among identical lines); an identical line added
+        // above shifted the occurrence, so Replace All replaced the dismissed match and skipped another.
+        let (model, root) = try await workspace(["A.swift": Data("isSelected(1)\nisSelected(2)\nisSelected(1)\n".utf8)])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appending(path: "A.swift")
+        try await search(model, "isSelected")
+        model.search.dismiss("A.swift", line: 3)
+        try Data("isSelected(1)\nisSelected(1)\nisSelected(2)\nisSelected(1)\n".utf8).write(to: file)
+        model.replaceAll()
+        try await settle(model)
+        #expect(try String(contentsOf: file, encoding: .utf8) == "isActive(1)\nisActive(1)\nisActive(2)\nisSelected(1)\n")
+    }
+
+    @Test func aDismissedMatchStaysDismissedWhenAnIdenticalLineIsRemovedAbove() async throws {
+        let (model, root) = try await workspace(["A.swift": Data("isSelected(1)\nx\nisSelected(1)\n".utf8)])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appending(path: "A.swift")
+        try await search(model, "isSelected")
+        model.search.dismiss("A.swift", line: 3)
+        try Data("x\nisSelected(1)\n".utf8).write(to: file)
+        model.replaceAll()
+        try await settle(model)
+        #expect(try String(contentsOf: file, encoding: .utf8) == "x\nisSelected(1)\n")
+
+        // A re-run keeps following it: one more identical line above, and the list still leaves it out.
+        try Data("isSelected(1)\nx\nisSelected(1)\n".utf8).write(to: file)
+        model.rerunSearch()
+        try await settle(model)
+        #expect(model.search.results.first?.matches.map(\.line) == [1])
+    }
+
     @Test func aFocusedRowRunsItsActionFromTheKeyboard() {
         // FD46: the nested ✕ / ⇄ can't take Full Keyboard Access focus, so the focused row runs them: ⌫ and ⇧↵.
         let dismiss = RowAction(glyph: "✕", help: "Dismiss") {}
