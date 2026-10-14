@@ -109,11 +109,13 @@ final class SearchModel {
         status = .references(symbol: symbol, lines: found.reduce(0) { $0 + $1.matches.count }, files: found.count)
     }
 
-    /// Forgets the results (a new workspace, or an emptied query).
+    /// Forgets the results and the dismissals for a new workspace: the query stays, but a dismissal names a
+    /// relative path, which is another file in another root or worktree (E1D5 FD67).
     func clear() {
         running?.cancel()
         results = []
         status = .idle
+        forgetDismissed()
     }
 
     /// ✕ on a result: one line (`line`) or the whole file leaves the list — and Replace's scope.

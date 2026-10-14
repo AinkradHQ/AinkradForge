@@ -167,6 +167,27 @@ struct ResultActionTests {
         #expect(model.search.results.first?.matches.map(\.line) == [1])
     }
 
+    @Test func dismissalsDoNotFollowTheSearchIntoAnotherWorkspace() async throws {
+        // E1D5 FD67: dismissals are keyed by relative path, and they outlived a switch to another worktree of the
+        // same repo — its B.swift stayed hidden and Replace All skipped its A.swift line 2.
+        let files = ["A.swift": Data("isSelected(1)\nisSelected(2)\n".utf8), "B.swift": Data("isSelected(3)\n".utf8)]
+        let (model, first) = try await workspace(files)
+        let (_, second) = try await workspace(files)
+        defer { for root in [first, second] { try? FileManager.default.removeItem(at: root) } }
+        try await search(model, "isSelected")
+        model.search.dismiss("B.swift")
+        model.search.dismiss("A.swift", line: 2)
+
+        await model.open(folder: second)
+        model.rerunSearch()
+        try await settle(model)
+        #expect(model.search.results.map(\.path).sorted() == ["A.swift", "B.swift"])
+        model.replaceAll()
+        try await settle(model)
+        #expect(try String(contentsOf: second.appending(path: "A.swift"), encoding: .utf8) == "isActive(1)\nisActive(2)\n")
+        #expect(try String(contentsOf: second.appending(path: "B.swift"), encoding: .utf8) == "isActive(3)\n")
+    }
+
     @Test func aFocusedRowRunsItsActionFromTheKeyboard() {
         // FD46: the nested ✕ / ⇄ can't take Full Keyboard Access focus, so the focused row runs them: ⌫ and ⇧↵.
         let dismiss = RowAction(glyph: "✕", name: "Dismiss result", key: .delete) {}
