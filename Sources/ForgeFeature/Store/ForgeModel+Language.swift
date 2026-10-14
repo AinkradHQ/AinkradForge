@@ -44,10 +44,31 @@ extension ForgeModel {
         languages.begin(root: root)
     }
 
+    /// What a server's Settings field shows: the path as it is being typed, else the path set.
+    func serverPathField(_ specID: String) -> String { serverPathDrafts[specID] ?? editorSettings.serverPaths[specID] ?? "" }
+
+    /// A keystroke in a server's Settings field: kept as typed — spaces and `~` too — and set (trimmed, `~`
+    /// expanded, the server restarted) only once typing pauses for `delay`, never per keystroke (E1D4 FD58).
+    func typeServerPath(_ specID: String, _ text: String, after delay: Duration = .seconds(1)) {
+        serverPathDrafts[specID] = text
+        serverPathCommits[specID]?.cancel()
+        serverPathCommits[specID] = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self else { return }
+            setServerPath(specID, text)
+            serverPathDrafts[specID] = text  // the field keeps showing what was typed
+        }
+    }
+
     /// Settings changed a server's path: it restarts from there, with the open files that need it.
     func setServerPath(_ specID: String, _ path: String) {
+        serverPathCommits[specID]?.cancel()
+        serverPathCommits[specID] = nil
+        serverPathDrafts[specID] = nil
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
-        editorSettings.serverPaths[specID] = trimmed.isEmpty ? nil : (trimmed as NSString).expandingTildeInPath
+        let value = trimmed.isEmpty ? nil : (trimmed as NSString).expandingTildeInPath
+        guard value != editorSettings.serverPaths[specID] || languages.overrides[specID] != value else { return }
+        editorSettings.serverPaths[specID] = value
         languages.setOverride(specID, path: editorSettings.serverPaths[specID])
         for (file, document) in documents where document.state == .ready && languages.server(for: file)?.0.id == specID {
             languages.opened(path: file, text: document.storage.string)

@@ -90,8 +90,8 @@ public struct ForgeApp: AinkradApp, AinkradAppTeardown {
                             help: "Empty: found on your login shell's PATH (and ~/go/bin, ~/.cargo/bin, Homebrew). Install: \(spec.installHint)",
                             keywords: [spec.id, spec.command, spec.language, "language server", "lsp", "path"],
                             kind: .text(Binding(
-                                get: { model.editorSettings.serverPaths[spec.id] ?? "" },
-                                set: { model.setServerPath(spec.id, $0) })),
+                                get: { model.serverPathField(spec.id) },
+                                set: { model.typeServerPath(spec.id, $0) })),
                             defaultDescription: "Login PATH",
                             isModified: { model.editorSettings.serverPaths[spec.id] != nil },
                             reset: { model.setServerPath(spec.id, "") })
@@ -104,8 +104,8 @@ public struct ForgeApp: AinkradApp, AinkradAppTeardown {
                                 help: "Runs for .\(server.extensions.joined(separator: ", .")) files with arguments \"\(server.arguments.joined(separator: " "))\". Reset removes it.",
                                 keywords: [server.id, server.language, "language server", "lsp", "path", "custom"],
                                 kind: .text(Binding(
-                                    get: { model.editorSettings.serverPaths[server.id] ?? "" },
-                                    set: { model.setServerPath(server.id, $0) })),
+                                    get: { model.serverPathField(server.id) },
+                                    set: { model.typeServerPath(server.id, $0) })),
                                 defaultDescription: "None",
                                 isModified: { true },
                                 reset: { model.removeCustomServer(server.id) })
