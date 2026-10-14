@@ -65,14 +65,29 @@ extension ForgeModel {
         serverPathCommits[specID]?.cancel()
         serverPathCommits[specID] = nil
         serverPathDrafts[specID] = nil
-        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
-        let value = trimmed.isEmpty ? nil : (trimmed as NSString).expandingTildeInPath
+        let value = Self.serverPath(path)
         guard value != editorSettings.serverPaths[specID] || languages.overrides[specID] != value else { return }
         editorSettings.serverPaths[specID] = value
         languages.setOverride(specID, path: editorSettings.serverPaths[specID])
         for (file, document) in documents where document.state == .ready && languages.server(for: file)?.0.id == specID {
             languages.opened(path: file, text: document.storage.string)
         }
+    }
+
+    /// Saves every path still waiting for typing to pause: quitting or closing within that pause lost it
+    /// (E1D5 FD71). Saved only — no server is restarted on the way out.
+    func flushServerPaths() {
+        for (specID, commit) in serverPathCommits {
+            commit.cancel()
+            if let text = serverPathDrafts[specID] { editorSettings.serverPaths[specID] = Self.serverPath(text) }
+        }
+        serverPathCommits = [:]
+    }
+
+    /// A typed server path as it is set: trimmed, `~` expanded, empty for none.
+    private static func serverPath(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : (trimmed as NSString).expandingTildeInPath
     }
 
     /// The pointer rested on `offset` in `path` (or stopped resting, with nil). With ⌥ held, the quick help only:

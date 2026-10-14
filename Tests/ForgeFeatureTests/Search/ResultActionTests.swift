@@ -167,6 +167,65 @@ struct ResultActionTests {
         #expect(model.search.results.first?.matches.map(\.line) == [1])
     }
 
+    @Test func aDismissedLineEditedOutsideIsListedAgainAndNeverReplacedUnseen() async throws {
+        // E1D5 FD68: an edited dismissed line was no longer tracked, so Replace All replaced it, and nothing re-ran
+        // the search on a content-only change, so it was never listed again.
+        let (model, root) = try await workspace(["A.swift": Data("isSelected(1)\nisSelected(2)\nisSelected(3)\n".utf8)])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appending(path: "A.swift")
+        try await search(model, "isSelected")
+        model.search.dismiss("A.swift", line: 2)
+        try Data("isSelected(1)\nisSelected(2) // touched\nisSelected(3)\n".utf8).write(to: file)
+        await model.diskChanged(paths: [file.path])
+        try await settle(model)
+        #expect(model.search.results.first?.matches.map(\.line) == [1, 2, 3])
+
+        model.search.dismiss("A.swift", line: 2)
+        try Data("isSelected(1)\nisSelected(2) // again\nisSelected(3)\n".utf8).write(to: file)
+        model.replaceAll()
+        try await settle(model)
+        #expect(try String(contentsOf: file, encoding: .utf8) == "isActive(1)\nisSelected(2) // again\nisActive(3)\n")
+        #expect(model.search.results.first?.matches.map(\.line) == [2])
+    }
+
+    @Test func filesTooLargeToSearchAreListedAsSkippedAndLargeBinariesAreNot() async throws {
+        // E1D5 FD70: a 9.5 MB log with 500,000 matches gave "1 result in 1 file", with no note it was left out.
+        let line = Data("isSelected in a log line\n".utf8)
+        var log = Data(capacity: 9_000_000)
+        while log.count < 9_000_000 { log.append(line) }
+        var binary = Data(repeating: 0, count: 9_000_000)
+        binary.replaceSubrange(100..<(100 + line.count), with: line)
+        let (model, root) = try await workspace(["A.swift": Data("isSelected\n".utf8), "logs/big.log": log, "dump.bin": binary])
+        defer { try? FileManager.default.removeItem(at: root) }
+        try await search(model, "isSelected")
+        #expect(model.search.results.map(\.path) == ["A.swift"])
+        #expect(model.search.tooLarge == [SearchModel.SkippedFile(path: "logs/big.log", bytes: log.count)])
+        model.search.query.text = ""
+        model.rerunSearch()
+        #expect(model.search.tooLarge.isEmpty)
+    }
+
+    @Test func dismissalsDoNotFollowTheSearchIntoAnotherWorkspace() async throws {
+        // E1D5 FD67: dismissals are keyed by relative path, and they outlived a switch to another worktree of the
+        // same repo — its B.swift stayed hidden and Replace All skipped its A.swift line 2.
+        let files = ["A.swift": Data("isSelected(1)\nisSelected(2)\n".utf8), "B.swift": Data("isSelected(3)\n".utf8)]
+        let (model, first) = try await workspace(files)
+        let (_, second) = try await workspace(files)
+        defer { for root in [first, second] { try? FileManager.default.removeItem(at: root) } }
+        try await search(model, "isSelected")
+        model.search.dismiss("B.swift")
+        model.search.dismiss("A.swift", line: 2)
+
+        await model.open(folder: second)
+        model.rerunSearch()
+        try await settle(model)
+        #expect(model.search.results.map(\.path).sorted() == ["A.swift", "B.swift"])
+        model.replaceAll()
+        try await settle(model)
+        #expect(try String(contentsOf: second.appending(path: "A.swift"), encoding: .utf8) == "isActive(1)\nisActive(2)\n")
+        #expect(try String(contentsOf: second.appending(path: "B.swift"), encoding: .utf8) == "isActive(3)\n")
+    }
+
     @Test func aFocusedRowRunsItsActionFromTheKeyboard() {
         // FD46: the nested ✕ / ⇄ can't take Full Keyboard Access focus, so the focused row runs them: ⌫ and ⇧↵.
         let dismiss = RowAction(glyph: "✕", name: "Dismiss result", key: .delete) {}

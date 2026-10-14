@@ -44,9 +44,12 @@ final class AgentReview {
     /// and Review All reads them on every render (E1D4 FD52). A file missing here is still being diffed.
     private(set) var otherDiffs: [String: OtherDiff] = [:]
     @ObservationIgnored private var diffing: [String: (file: OtherFile, task: Task<Void, Never>)] = [:]
-    /// The Review All pane is showing, and the changes unticked in it (to undo), per file.
+    /// The Review All pane is showing, and the changes unticked in it (to undo), per file: hunk ids of the file's
+    /// diff now, re-placed from `untickedLines` each time the diff changes (`untick(_:_:in:)` sets both).
     var reviewingAll = false
-    var unticked: [String: Set<Int>] = [:]
+    private(set) var unticked: [String: Set<Int>] = [:]
+    /// What each file's unticks change, by content, so a later outside write can't move them (E1D5 FD63).
+    @ObservationIgnored private var untickedLines: [String: Untick] = [:]
     /// What Forge last saw of files it read or wrote — the baseline when one of them changes while closed.
     @ObservationIgnored private(set) var seen: [String: String] = [:]
     @ObservationIgnored private var ownWrites: [String: Date] = [:]
@@ -71,6 +74,7 @@ final class AgentReview {
         expecting = []
         others = [:]
         unticked = [:]
+        untickedLines = [:]
         reviewingAll = false
         seen = [:]
         ownWrites = [:]
@@ -117,18 +121,42 @@ final class AgentReview {
     func settled(_ path: String) {
         others[path] = nil
         unticked[path] = nil
+        untickedLines[path] = nil
         turns.drop(path)
+    }
+
+    /// Unticks `hunks` of `diff`, `path`'s diff now (none: ticks it all again).
+    func untick(_ path: String, _ hunks: Set<Int>, in diff: AinkradFileDiff) {
+        unticked[path] = hunks.isEmpty ? nil : hunks
+        untickedLines[path] = hunks.isEmpty ? nil : Untick(hunks, of: diff)
+    }
+
+    /// A closed file's diff now and its unticked hunks in it — diffed here if the latest change has not been yet:
+    /// a Done before the diff landed dropped the untick (E1D5 FD63). Nil when nothing is unticked or too long.
+    func untickedDiff(_ path: String) -> (diff: AinkradFileDiff, hunks: Set<Int>)? {
+        guard let untick = untickedLines[path], let file = others[path] else { return nil }
+        guard let diff = otherDiffs[path]?.file == file ? otherDiffs[path]?.diff : Self.diff(path, file) else { return nil }
+        return (diff, untick.hunks(in: diff))
     }
 
     /// Drops diffs of changes gone by, and starts one off the main thread for each change not yet diffed.
     private func diffOthers() {
         for (path, cached) in otherDiffs where others[path] != cached.file { otherDiffs[path] = nil }
         for (path, file) in others where otherDiffs[path] == nil && diffing[path]?.file != file {
+            let untick = untickedLines[path]
             let task = Task { [weak self] in
-                let diff = await Task.detached(priority: .userInitiated) { Self.diff(path, file) }.value
+                // The unticks are placed in the new diff off the main thread too: a rewrite makes that line diff slow.
+                let (diff, hunks) = await Task.detached(priority: .userInitiated) {
+                    let diff = Self.diff(path, file)
+                    return (diff, diff.flatMap { untick?.hunks(in: $0) })
+                }.value
                 guard let self else { return }
                 if diffing[path]?.file == file { diffing[path] = nil }
-                if others[path] == file { otherDiffs[path] = OtherDiff(file: file, diff: diff) }
+                guard others[path] == file else { return }
+                otherDiffs[path] = OtherDiff(file: file, diff: diff)
+                if let current = untickedLines[path], let diff {
+                    unticked[path] = current == untick ? hunks : current.hunks(in: diff)
+                }
             }
             diffing[path] = (file, task)
         }
@@ -258,6 +286,7 @@ final class AgentReview {
             forget(path)
         } else {
             files[path] = FileChanges(baseline: baseline, diff: diff, since: since)
+            if let untick = untickedLines[path] { unticked[path] = untick.hunks(in: diff) }
             current[path] = min(current[path] ?? 0, diff.hunks.count - 1)
         }
     }

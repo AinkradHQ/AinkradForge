@@ -17,7 +17,7 @@ final class SearchModel {
     /// into `lines`, the file's lines (hashed) when they were last placed. They are placed in the file as it is now
     /// by a line diff, so lines added or removed above — identical ones included — can't move a dismissal or an
     /// untick onto another match (FD44, E1D4 FD54, FD55). A line that was itself edited is no longer tracked: a
-    /// dismissed one is listed again, never replaced unseen.
+    /// dismissed one is listed again by the next search, and Replace leaves it alone until then (`guarded(in:)`).
     struct TrackedLines: Equatable, Sendable {
         var lines: [Int]
         var indexes: Set<Int> = []
@@ -27,6 +27,21 @@ final class SearchModel {
             guard now != lines else { return self }
             let map = TextSearch.lineMap(from: lines, to: now)
             return TrackedLines(lines: now, indexes: Set(indexes.compactMap { map[$0] }))
+        }
+
+        /// The tracked lines placed in `now`, 1-based — and, for each one edited since, every line where it may
+        /// have gone (the gap between its nearest lines still placed): Replace must not change an edited dismissed
+        /// line before a search has listed it again (E1D5 FD68).
+        func guarded(in now: [Int]) -> Set<Int> {
+            guard now != lines else { return lineNumbers }
+            let map = TextSearch.lineMap(from: lines, to: now)
+            var out = Set(indexes.compactMap { map[$0] })
+            for index in indexes where map[index] == nil {
+                let before = (0..<index).reversed().lazy.compactMap { map[$0] }.first ?? -1
+                let after = (index + 1..<lines.count).lazy.compactMap { map[$0] }.first ?? now.count
+                if before + 1 < after { out.formUnion(before + 1..<after) }
+            }
+            return Set(out.map { $0 + 1 })
         }
 
         /// The tracked lines, 1-based.
@@ -44,6 +59,14 @@ final class SearchModel {
 
     /// Lines, across all files, after which a search stops: a broad query stays fast.
     static let cap = 2_000
+    /// A file this size or more is not searched.
+    nonisolated static let sizeLimit = 8_000_000
+
+    struct SkippedFile: Identifiable, Equatable, Sendable {
+        let path: String
+        let bytes: Int
+        var id: String { path }
+    }
 
     var query = SearchQuery() { didSet { if query != oldValue { forgetDismissed() } } }
     var replacement = ""
@@ -52,6 +75,8 @@ final class SearchModel {
     var include = "" { didSet { if include != oldValue { forgetDismissed() } } }
     var exclude = "" { didSet { if exclude != oldValue { forgetDismissed() } } }
     private(set) var results: [FileResult] = []
+    /// Text files the search left out as too large (`sizeLimit`), listed under the results (E1D5 FD70).
+    private(set) var tooLarge: [SkippedFile] = []
     private(set) var status: Status = .idle
     /// Files whose rows are folded.
     var collapsed: Set<String> = []
@@ -80,12 +105,14 @@ final class SearchModel {
         do {
             guard let compiled = try query.compile() else {
                 results = []
+                tooLarge = []
                 status = .idle
                 return
             }
             regex = compiled
         } catch {
             results = []
+            tooLarge = []
             status = .failed(error.localizedDescription)
             return
         }
@@ -106,14 +133,18 @@ final class SearchModel {
         running?.cancel()
         forgetDismissed()
         results = found
+        tooLarge = []
         status = .references(symbol: symbol, lines: found.reduce(0) { $0 + $1.matches.count }, files: found.count)
     }
 
-    /// Forgets the results (a new workspace, or an emptied query).
+    /// Forgets the results and the dismissals for a new workspace: the query stays, but a dismissal names a
+    /// relative path, which is another file in another root or worktree (E1D5 FD67).
     func clear() {
         running?.cancel()
         results = []
+        tooLarge = []
         status = .idle
+        forgetDismissed()
     }
 
     /// ✕ on a result: one line (`line`) or the whole file leaves the list — and Replace's scope.
@@ -147,6 +178,7 @@ final class SearchModel {
     private func search(regex: NSRegularExpression, root: URL, files: [String], buffers: [String: String]) async {
         let started = ContinuousClock.now
         results = []
+        tooLarge = []
         status = .searching
         var found = 0
         let skipped = dismissedFiles
@@ -154,11 +186,15 @@ final class SearchModel {
         // Batches of files scanned off the main actor; each batch's hits are appended as it finishes.
         for batch in stride(from: 0, to: files.count, by: 64).map({ Array(files[$0..<min($0 + 64, files.count)]) }) {
             guard !Task.isCancelled else { return }
-            let hits = await Task.detached(priority: .userInitiated) {
-                batch.compactMap { path -> (FileResult, TrackedLines?)? in
-                    guard !skipped.contains(path),
-                        let text = buffers[path] ?? Self.readText(root.appending(path: path))
-                    else { return nil }
+            let (hits, large) = await Task.detached(priority: .userInitiated) {
+                var large: [SkippedFile] = []
+                let hits = batch.compactMap { path -> (FileResult, TrackedLines?)? in
+                    guard !skipped.contains(path) else { return nil }
+                    if buffers[path] == nil, let bytes = Self.tooLarge(root.appending(path: path)) {
+                        large.append(SkippedFile(path: path, bytes: bytes))
+                        return nil
+                    }
+                    guard let text = buffers[path] ?? Self.readText(root.appending(path: path)) else { return nil }
                     var hit = FileResult(path: path, matches: TextSearch.matches(in: text, regex: regex))
                     guard !hit.matches.isEmpty else { return nil }
                     hit.lines = TextSearch.lineHashes(text)
@@ -167,8 +203,10 @@ final class SearchModel {
                     if let lines = dismissed?.lineNumbers { hit.matches.removeAll { lines.contains($0.line) } }
                     return (hit, dismissed)
                 }
+                return (hits, large)
             }.value
             guard !Task.isCancelled else { return }
+            tooLarge += large
             for (hit, dismissed) in hits where !dismissedFiles.contains(hit.path) {
                 if let dismissed, dismissedMatches[hit.path] == dismissedBefore[hit.path] { dismissedMatches[hit.path] = dismissed }
                 guard !hit.matches.isEmpty else { continue }
@@ -189,8 +227,19 @@ final class SearchModel {
 
     /// Text of a file for searching: UTF-8 or the other encodings Forge reads; binary files are skipped.
     nonisolated static func readText(_ url: URL) -> String? {
-        guard let data = try? Data(contentsOf: url), data.count < 8_000_000 else { return nil }
+        guard let data = try? Data(contentsOf: url), data.count < sizeLimit else { return nil }
         if case .text(let text, _) = TextFile.decode(data) { return text }
         return nil
+    }
+
+    /// The size of a file too large to search that looks like text (no NUL in its first 8 KB, as git judges it);
+    /// nil for any other file. A large binary file is skipped silently, as a small one is.
+    nonisolated static func tooLarge(_ url: URL) -> Int? {
+        guard let bytes = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, bytes >= sizeLimit,
+            let handle = try? FileHandle(forReadingFrom: url)
+        else { return nil }
+        defer { try? handle.close() }
+        let head = (try? handle.read(upToCount: 8_000)) ?? Data()
+        return head.contains(0) ? nil : bytes
     }
 }

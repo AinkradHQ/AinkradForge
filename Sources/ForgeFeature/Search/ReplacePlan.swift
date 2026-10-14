@@ -1,30 +1,40 @@
 import AinkradAppKit
 import Foundation
 
-/// What a replace would do to one file: its text now, its text after, and the diff to preview.
-struct ReplacePlan: Equatable {
+/// What a replace would do to one file: its text now, its text after, and — once `diffed()` — the diff to preview.
+struct ReplacePlan: Equatable, Sendable {
     let path: String
     let original: String
     let updated: String
     let count: Int
-    /// `nil` for a file too long to diff interactively (the kit's diff is quadratic); it can still be replaced.
-    let diff: AinkradFileDiff?
+    /// The preview's diff; `nil` until `diffed()`, and for good for a file too long to diff interactively (the
+    /// kit's diff is quadratic). Replacing never needs it: unticked lines are left out of the replace itself.
+    private(set) var diff: AinkradFileDiff?
 
     static let previewLineLimit = 4_000
 
+    /// The plan without its diff: what Replace writes (E1D5 FD62 — Replace All diffed every file on the main thread).
     static func make(
         path: String, text: String, regex: NSRegularExpression, replacement: String, isRegex: Bool, preserveCase: Bool,
         limit: Int? = nil, lines: ((Int) -> Bool)? = nil
     ) -> ReplacePlan {
         let result = TextSearch.replace(
             in: text, regex: regex, with: replacement, isRegex: isRegex, preserveCase: preserveCase, limit: limit, lines: lines)
-        return make(path: path, original: text, updated: result.text, count: result.count)
+        return ReplacePlan(path: path, original: text, updated: result.text, count: result.count)
     }
 
     static func make(path: String, original: String, updated: String, count: Int) -> ReplacePlan {
+        ReplacePlan(path: path, original: original, updated: updated, count: count).diffed()
+    }
+
+    /// This plan with its diff — real work on a long file: the preview runs it off the main thread.
+    nonisolated func diffed() -> ReplacePlan {
+        var plan = self
         let lines = original.utf8.reduce(1) { $1 == 10 ? $0 + 1 : $0 }
-        let diff = lines <= previewLineLimit ? AinkradDiffEngine.compute(old: original, new: updated, path: path, context: 2) : nil
-        return ReplacePlan(path: path, original: original, updated: updated, count: count, diff: diff)
+        if lines <= Self.previewLineLimit {
+            plan.diff = AinkradDiffEngine.compute(old: original, new: updated, path: path, context: 2)
+        }
+        return plan
     }
 
     /// The text to write: every hunk applied except the rejected ones, which keep their original lines.
@@ -34,7 +44,8 @@ struct ReplacePlan: Equatable {
     }
 
     /// The hunks `unticked` covers in this plan's diff — those changing a line it tracks, placed in this plan's
-    /// text — however the file changed since the untick (E1D4 FD55).
+    /// text — however the file changed since the untick (E1D4 FD55). For the preview's ticks; Replace leaves the
+    /// unticked lines out of the replace instead (`ForgeModel.replacePlan(for:keepingUnticked:)`).
     func rejected(_ unticked: SearchModel.TrackedLines?) -> Set<Int> {
         guard let diff, let unticked else { return [] }
         let lines = unticked.placed(in: TextSearch.lineHashes(original)).indexes
@@ -67,5 +78,5 @@ struct ReplacePlan: Equatable {
 
 extension AinkradDiffHunk {
     /// The original's lines this hunk changes, 0-based.
-    fileprivate var changedLines: [Int] { lines.compactMap { $0.kind == .deletion ? $0.oldNumber.map { $0 - 1 } : nil } }
+    var changedLines: [Int] { lines.compactMap { $0.kind == .deletion ? $0.oldNumber.map { $0 - 1 } : nil } }
 }

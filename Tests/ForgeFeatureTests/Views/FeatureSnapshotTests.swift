@@ -75,4 +75,25 @@ final class FeatureSnapshotTests: XCTestCase {
         .frame(width: 280)
         try Snapshot.assertMatches(rows, named: "result-actions", size: CGSize(width: 300, height: 80))
     }
+
+    /// E1D5 FD70: a file too large to search is counted in the summary and listed, dimmed, under the results.
+    func testSearchListsFilesTooLargeToSearch() throws {
+        var log = Data(capacity: 8_500_000)
+        while log.count < 8_500_000 { log.append(Data("isSelected in a log line\n".utf8)) }
+        try FileManager.default.createDirectory(at: repo.appendingPathComponent("Logs"), withIntermediateDirectories: true)
+        try log.write(to: repo.appendingPathComponent("Logs/session.log"))
+        let model = try Snapshot.model(opening: repo)
+        let workspace = try XCTUnwrap(model.workspace)
+        model.search.query.text = "isSelected"
+        model.search.include = "Logs/**, *Row.swift"
+        model.search.schedule(root: repo, files: workspace.files, buffers: [:], delay: .zero)
+        SweepSupport.spin(until: 5) { if case .done = model.search.status { true } else { false } }
+        XCTAssertEqual(model.search.tooLarge.map(\.path), ["Logs/session.log"])
+        model.search.collapsed = Set(model.search.results.map(\.path))
+        try Snapshot.assertMatches(
+            SearchPanel(model: model, workspace: workspace).padding(12).frame(width: 300, height: 260, alignment: .top),
+            named: "search-too-large", size: CGSize(width: 300, height: 260),
+            // The summary's duration ("· 3 ms") is the clock, not the UI.
+            masking: [CGRect(x: 225, y: 128, width: 75, height: 24)])
+    }
 }

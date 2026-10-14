@@ -92,7 +92,7 @@ extension ForgeModel {
                 undoWhole(path, other, in: workspace)
                 continue
             }
-            guard let rejected = agent.unticked[path], !rejected.isEmpty, let diff = agent.otherDiffs[path]?.diff else { continue }
+            guard let (diff, rejected) = agent.untickedDiff(path), !rejected.isEmpty else { continue }
             if rejected.count == diff.hunks.count {
                 undoWhole(path, other, in: workspace)
             } else {

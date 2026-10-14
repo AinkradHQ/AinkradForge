@@ -72,9 +72,14 @@ final class EditorDocument {
         }
         switch decoded {
         case .text(let text, let format):
-            if state == .ready { revision += 1 }
             let buffer = format.lineEnding == .lf && !text.unicodeScalars.contains("\r") ? text : TextFile.convert(text, to: .lf)
-            storage.setAttributedString(NSAttributedString(string: buffer))
+            if state == .ready {
+                // A reload is one undoable step: ⌘Z takes the buffer back to before it (E1D5 FD61).
+                EditorUndo.replace(storage, with: buffer)
+                revision += 1
+            } else {
+                storage.setAttributedString(NSAttributedString(string: buffer))
+            }
             self.format = format
             diskStamp = stamp
             saved = (NSString(string: storage.string), format)
@@ -92,7 +97,7 @@ final class EditorDocument {
     /// re-parses. Saving writes it in the file's own encoding and line endings.
     func replaceText(_ text: String) {
         guard state == .ready, text != storage.string else { return }
-        storage.setAttributedString(NSAttributedString(string: text))
+        EditorUndo.replace(storage, with: text)
         revision += 1
         didEdit()
     }

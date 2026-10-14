@@ -118,7 +118,7 @@ final class ForgeModel {
         observeTurns()
         // The host's quit prompt knows nothing of an app's unsaved files: keep them for the next launch instead.
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) {
-            [weak self] _ in MainActor.assumeIsolated { self?.backupUnsaved() }
+            [weak self] _ in MainActor.assumeIsolated { self?.leave() }
         }
     }
 

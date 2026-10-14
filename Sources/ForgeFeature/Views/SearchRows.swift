@@ -60,6 +60,42 @@ struct ResultFileRow: View {
     }
 }
 
+/// A file the search left out as too large, under the results (E1D5 FD70): its name dimmed, and why.
+struct SkippedFileRow: View {
+    let file: SearchModel.SkippedFile
+    @Environment(\.ainkradSkin) private var skin
+
+    var body: some View {
+        let name = (file.path as NSString).lastPathComponent
+        let size = ByteCountFormatter.string(fromByteCount: Int64(file.bytes), countStyle: .file)
+        HStack(spacing: skin.size.s6) {
+            // Where a file row's ▸ / ▾ sits, so the names line up.
+            Text(" ").font(skin.font(AinkradFontToken(sizeKey: "t11"))).frame(width: skin.size.s10)
+            FileGlyph(name: name).opacity(skin.opacity.o45)
+            Text(name)
+                .font(skin.font(AinkradFontToken(sizeKey: "t12")))
+                .foregroundStyle(skin.color(skin.text.muted))
+                .lineLimit(1)
+                .layoutPriority(1)
+            Text((file.path as NSString).deletingLastPathComponent)
+                .font(skin.font(AinkradFontToken(sizeKey: "t10_5")))
+                .foregroundStyle(skin.color(skin.text.faint))
+                .lineLimit(1)
+            Spacer(minLength: skin.size.s4)
+            Text("skipped · \(size)")
+                .font(skin.font(AinkradFontToken(sizeKey: "t10_5")))
+                .foregroundStyle(skin.color(skin.text.faint))
+                .lineLimit(1)
+                .fixedSize()
+        }
+        .padding(.vertical, skin.size.s5)
+        .padding(.horizontal, skin.size.s8)
+        .help("\(file.path) — not searched: over 8 MB")
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(name), not searched, too large (\(size))")
+    }
+}
+
 /// The mockups' `.cnt`: a mono count on a round fill.
 struct CountPill: View {
     let count: Int

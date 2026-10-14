@@ -1,5 +1,5 @@
 {
-  "originHash" : "72cb93798bf16dcb687616e43d5cabaca38439ecd7ec17b0762e1f6cdf41f016",
+  "originHash" : "f8df4ee9eccb8860cb55548e1ec66ffc3b6b60fa8ee524a47ddb878065bb4fe1",
   "pins" : [
     {
       "identity" : "codeeditlanguages",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AhmedMElhalaby/CodeEditSourceEditor",
       "state" : {
-        "revision" : "347940b42315d8cb11b973f8ff8b696fb9935d6b",
-        "version" : "0.15.2-forge.13"
+        "revision" : "46bcc0c74db37f7b9e1460a2d79e662a3c83c4ab",
+        "version" : "0.15.2-forge.14"
       }
     },
     {
@@ -33,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AhmedMElhalaby/CodeEditTextView",
       "state" : {
-        "revision" : "b6fe80863b3c8ec620d92994e548a4b8a54d3d37",
-        "version" : "0.12.1-forge.4"
+        "revision" : "3bcf00134295e77755bd501c8a002282a8e59bd0",
+        "version" : "0.12.1-forge.5"
       }
     },
     {
