@@ -27,6 +27,21 @@ extension ForgeModel {
             }
         }
         await outsideChanges(paths, known: known)
+        researchIfListed(paths)
+    }
+
+    /// A listed or dismissed file changed outside: search again, so a dismissed line edited since is listed again
+    /// (E1D5 FD68) and the counts follow. The tree's own change re-runs it already (`SearchPanel`).
+    private func researchIfListed(_ paths: [String]) {
+        guard let workspace, !search.query.text.isEmpty, search.status != .idle else { return }
+        if case .references = search.status { return }
+        let base = workspace.root.resolvingSymlinksInPath().path + "/"
+        let watched = Set(search.results.map(\.path)).union(search.dismissedMatches.keys)
+        let changed = paths.contains { path in
+            let full = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+            return full.hasPrefix(base) && watched.contains(String(full.dropFirst(base.count)))
+        }
+        if changed { search.schedule(root: workspace.root, files: workspace.files, buffers: unsavedBuffers, delay: .milliseconds(600)) }
     }
 }
 
@@ -73,8 +88,8 @@ extension ForgeModel {
             ?? SearchModel.readText(workspace.url(for: path))
         guard let text else { return nil }
         let now = TextSearch.lineHashes(text)
-        var dismissed = search.dismissedMatches[path]?.placed(in: now).lineNumbers ?? []
-        if keepingUnticked, let unticked = search.rejected[path] { dismissed.formUnion(unticked.placed(in: now).lineNumbers) }
+        var dismissed = search.dismissedMatches[path]?.guarded(in: now) ?? []
+        if keepingUnticked, let unticked = search.rejected[path] { dismissed.formUnion(unticked.guarded(in: now)) }
         // ⇄'s row, as it was listed, placed in the text now; a row no longer listed, or since edited, has nothing.
         var target: Int?
         if let line {

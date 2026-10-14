@@ -167,6 +167,27 @@ struct ResultActionTests {
         #expect(model.search.results.first?.matches.map(\.line) == [1])
     }
 
+    @Test func aDismissedLineEditedOutsideIsListedAgainAndNeverReplacedUnseen() async throws {
+        // E1D5 FD68: an edited dismissed line was no longer tracked, so Replace All replaced it, and nothing re-ran
+        // the search on a content-only change, so it was never listed again.
+        let (model, root) = try await workspace(["A.swift": Data("isSelected(1)\nisSelected(2)\nisSelected(3)\n".utf8)])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appending(path: "A.swift")
+        try await search(model, "isSelected")
+        model.search.dismiss("A.swift", line: 2)
+        try Data("isSelected(1)\nisSelected(2) // touched\nisSelected(3)\n".utf8).write(to: file)
+        await model.diskChanged(paths: [file.path])
+        try await settle(model)
+        #expect(model.search.results.first?.matches.map(\.line) == [1, 2, 3])
+
+        model.search.dismiss("A.swift", line: 2)
+        try Data("isSelected(1)\nisSelected(2) // again\nisSelected(3)\n".utf8).write(to: file)
+        model.replaceAll()
+        try await settle(model)
+        #expect(try String(contentsOf: file, encoding: .utf8) == "isActive(1)\nisSelected(2) // again\nisActive(3)\n")
+        #expect(model.search.results.first?.matches.map(\.line) == [2])
+    }
+
     @Test func dismissalsDoNotFollowTheSearchIntoAnotherWorkspace() async throws {
         // E1D5 FD67: dismissals are keyed by relative path, and they outlived a switch to another worktree of the
         // same repo — its B.swift stayed hidden and Replace All skipped its A.swift line 2.
