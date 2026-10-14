@@ -284,6 +284,7 @@ struct EditorHost: View {
                     // Mockup 01's ▾ / ▸ on each fold's first line, not CodeEdit's ribbon.
                     foldIndicatorStyle: .arrows)),
             state: $state,
+            undoManager: EditorUndo.manager(for: storage),
             coordinators: [coordinator],
             completionDelegate: suggest == nil ? nil : coordinator,
             jumpToDefinitionDelegate: definitions == nil ? nil : coordinator
