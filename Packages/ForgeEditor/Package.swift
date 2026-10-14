@@ -10,8 +10,8 @@ let package = Package(
     products: [.library(name: "ForgeEditor", targets: ["ForgeEditor"])],
     dependencies: [
         // Forge's forks — E1 spike fixes; see Docs/Plans/2026-10-10-forge-plan.md.
-        .package(url: "https://github.com/AhmedMElhalaby/CodeEditSourceEditor", exact: "0.15.2-forge.12"),
-        .package(url: "https://github.com/AhmedMElhalaby/CodeEditTextView", exact: "0.12.1-forge.3"),
+        .package(url: "https://github.com/AhmedMElhalaby/CodeEditSourceEditor", exact: "0.15.2-forge.13"),
+        .package(url: "https://github.com/AhmedMElhalaby/CodeEditTextView", exact: "0.12.1-forge.4"),
         // History-free snapshot; upstream's history is >2.5 GB.
         .package(url: "https://github.com/AhmedMElhalaby/CodeEditLanguages", exact: "0.1.20-forge.4"),
     ],
