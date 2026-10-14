@@ -42,8 +42,9 @@ struct ReviewAllTests {
         #expect(model.reviewEntries.first { $0.path == "C.txt" }?.isNew == true)
 
         // Untick A's second change and C (new): Done undoes those and keeps A's first.
-        model.agent.unticked["A.txt"] = [diff.hunks[1].id]
-        model.agent.unticked["C.txt"] = Set(model.reviewEntries.first { $0.path == "C.txt" }?.diff?.hunks.map(\.id) ?? [])
+        model.agent.untick("A.txt", [diff.hunks[1].id], in: diff)
+        let new = try #require(model.reviewEntries.first { $0.path == "C.txt" }?.diff)
+        model.agent.untick("C.txt", Set(new.hunks.map(\.id)), in: new)
         model.finishReview()
         let written = try String(contentsOf: root.appending(path: "A.txt"), encoding: .utf8)
         #expect(written.contains("line two") && written.contains("line 11\n"))
@@ -116,6 +117,40 @@ struct ReviewAllTests {
         model.settleOutside("Other.txt", undo: true)
         #expect(try String(contentsOf: other, encoding: .utf8) == big)
         #expect(model.agent.count == 0)
+    }
+
+    /// E1D5 FD63: unticks were hunk positions. Changes at lines 20 and 40, line 40 unticked, then the agent edits
+    /// line 5: Done undid line 20 and kept 40 — or, before the new diff landed, dropped the untick.
+    @Test(arguments: [false, true])
+    func anUntickStaysOnItsChangeWhenTheFileIsWrittenAgain(waitForDiff: Bool) async throws {
+        let base = (1...50).map { "line \($0)" }.joined(separator: "\n") + "\n"
+        let (model, root) = try await workspace(["A.txt": base])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appending(path: "A.txt")
+        model.agent.saw("A.txt", text: base)
+        func agent(_ lines: [Int], on text: String) throws -> String {
+            let out = lines.reduce(text) { $0.replacingOccurrences(of: "line \($1)\n", with: "line \($1) AGENT\n") }
+            try out.write(to: file, atomically: true, encoding: .utf8)
+            return out
+        }
+        let first = try agent([20, 40], on: base)
+        await model.diskChanged(paths: [file.path])
+        await model.agent.diffsReady()
+        let diff = try #require(model.reviewEntries.first?.diff)
+        let line40 = try #require(diff.hunks.first { $0.lines.contains { $0.text == "line 40 AGENT" } })
+        model.agent.untick("A.txt", [line40.id], in: diff)
+
+        _ = try agent([5], on: first)
+        await model.diskChanged(paths: [file.path])
+        if waitForDiff {
+            await model.agent.diffsReady()
+            let now = try #require(model.reviewEntries.first?.diff)
+            #expect(now.hunks.count == 3)
+            #expect(model.agent.unticked["A.txt"] == Set(now.hunks.filter { $0.lines.contains { $0.text == "line 40 AGENT" } }.map(\.id)))
+        }
+        model.finishReview()
+        let written = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
+        #expect(written[4] == "line 5 AGENT" && written[19] == "line 20 AGENT" && written[39] == "line 40")
     }
 
     @Test func forgesOwnWritesAreNotOutsideChanges() async throws {

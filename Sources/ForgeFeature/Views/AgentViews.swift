@@ -219,7 +219,7 @@ struct ReviewAllPane: View {
                                 fileDiff: diff,
                                 rejectedHunkIDs: Binding(
                                     get: { model.agent.unticked[entry.path] ?? [] },
-                                    set: { model.agent.unticked[entry.path] = $0 })
+                                    set: { model.agent.untick(entry.path, $0, in: diff) })
                             )
                             .reviewStyle()
                         } else if open.contains(entry.path), entry.diff == nil {

@@ -78,5 +78,5 @@ struct ReplacePlan: Equatable, Sendable {
 
 extension AinkradDiffHunk {
     /// The original's lines this hunk changes, 0-based.
-    fileprivate var changedLines: [Int] { lines.compactMap { $0.kind == .deletion ? $0.oldNumber.map { $0 - 1 } : nil } }
+    var changedLines: [Int] { lines.compactMap { $0.kind == .deletion ? $0.oldNumber.map { $0 - 1 } : nil } }
 }
