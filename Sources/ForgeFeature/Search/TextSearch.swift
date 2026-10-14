@@ -91,25 +91,85 @@ enum TextSearch {
 
     /// Where each line of `old` is in `new` (0-based), by a line diff; a line that changed or went has no entry.
     /// Identical lines added or removed around a line can't move it onto another (E1D4 FD54).
-    /// ponytail: Myers diff per call, O((n+m)·d); fine for edited files, slow only for a rewrite of a huge one.
+    /// Common ends are matched first and a small middle by Myers. A large middle is cut at the lines found once on
+    /// each side (patience), recursively: a 20k-line rewrite took 8.5 s by Myers alone, O((n+m)·d) (E1D5 FD69).
     static func lineMap(from old: [Int], to new: [Int]) -> [Int: Int] {
-        if old == new { return Dictionary(uniqueKeysWithValues: old.indices.map { ($0, $0) }) }
+        var map: [Int: Int] = [:]
+        if old == new {
+            for index in old.indices { map[index] = index }
+        } else {
+            align(old, old.indices, new, new.indices, into: &map)
+        }
+        return map
+    }
+
+    private static func align(_ old: [Int], _ a: Range<Int>, _ new: [Int], _ b: Range<Int>, into map: inout [Int: Int]) {
+        var a = a, b = b
+        while let i = a.first, let j = b.first, old[i] == new[j] {
+            map[i] = j
+            a = a.dropFirst()
+            b = b.dropFirst()
+        }
+        while let i = a.last, let j = b.last, old[i] == new[j] {
+            map[i] = j
+            a = a.dropLast()
+            b = b.dropLast()
+        }
+        guard !a.isEmpty, !b.isEmpty else { return }
+        if a.count + b.count <= 4_000 { return myers(old, a, new, b, into: &map) }
+        // Lines found exactly once on each side, kept in an order both sides agree on (longest increasing run).
+        var seen: [Int: (old: Int, new: Int, inOld: Int, inNew: Int)] = [:]
+        for i in a { seen[old[i], default: (i, -1, 0, 0)].inOld += 1 }
+        for j in b { seen[new[j]]?.new = j; seen[new[j]]?.inNew += 1 }
+        let pairs = seen.values.filter { $0.inOld == 1 && $0.inNew == 1 }.map { ($0.old, $0.new) }.sorted { $0.0 < $1.0 }
+        // ponytail: no line unique to both (a wholesale reformat): nothing in this stretch is placed — a tracked line
+        // there is dropped, and a dismissed one guarded until searched again (FD68).
+        var previous = (a.lowerBound, b.lowerBound)
+        for (i, j) in increasingRun(pairs) {
+            align(old, previous.0..<i, new, previous.1..<j, into: &map)
+            map[i] = j
+            previous = (i + 1, j + 1)
+        }
+        if previous != (a.lowerBound, b.lowerBound) { align(old, previous.0..<a.upperBound, new, previous.1..<b.upperBound, into: &map) }
+    }
+
+    /// The longest run of `pairs` (sorted by their first) whose second also increases, O(k log k).
+    private static func increasingRun(_ pairs: [(Int, Int)]) -> [(Int, Int)] {
+        var tails: [Int] = []  // index into pairs ending the best run of each length
+        var before = [Int](repeating: -1, count: pairs.count)
+        for (index, pair) in pairs.enumerated() {
+            var low = 0, high = tails.count
+            while low < high {
+                let mid = (low + high) / 2
+                if pairs[tails[mid]].1 < pair.1 { low = mid + 1 } else { high = mid }
+            }
+            if low > 0 { before[index] = tails[low - 1] }
+            if low == tails.count { tails.append(index) } else { tails[low] = index }
+        }
+        var run: [(Int, Int)] = []
+        var index = tails.last ?? -1
+        while index >= 0 {
+            run.append(pairs[index])
+            index = before[index]
+        }
+        return run.reversed()
+    }
+
+    private static func myers(_ old: [Int], _ a: Range<Int>, _ new: [Int], _ b: Range<Int>, into map: inout [Int: Int]) {
         var removed = Set<Int>()
         var inserted = Set<Int>()
-        for change in new.difference(from: old) {
+        for change in new[b].difference(from: old[a]) {
             switch change {
             case .remove(let offset, _, _): removed.insert(offset)
             case .insert(let offset, _, _): inserted.insert(offset)
             }
         }
-        var map: [Int: Int] = [:]
         var next = 0
-        for index in old.indices where !removed.contains(index) {
+        for index in 0..<a.count where !removed.contains(index) {
             while inserted.contains(next) { next += 1 }
-            map[index] = next
+            map[a.lowerBound + index] = b.lowerBound + next
             next += 1
         }
-        return map
     }
 
     /// Line `index` (0-based) of `text`, without its line break; "" past the end.

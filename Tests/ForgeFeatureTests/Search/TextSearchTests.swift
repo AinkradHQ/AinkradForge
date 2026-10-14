@@ -92,4 +92,19 @@ struct TextSearchTests {
         }
         #expect(String(prose.characters) == "Adds one.")
     }
+
+    /// E1D5 FD69: past 4,000 lines in the middle, lines are placed at lines unique to both sides, not by Myers.
+    @Test func aLongFileStillPlacesLinesAcrossIdenticalOnesAddedAbove() {
+        let old = (0..<12_000).map { $0 % 100 == 0 ? "isSelected()" : "line \($0)" }
+        var new = old
+        new.insert("isSelected()", at: 0)
+        new[6_000] = "line 6000 edited"
+        new.insert(contentsOf: (0..<3_000).map { "added \($0)" }, at: 9_000)
+        let map = TextSearch.lineMap(from: old.map(\.hashValue), to: new.map(\.hashValue))
+        #expect(map[100] == 101 && map[5_000] == 5_001 && map[11_900] == 14_901)
+        #expect(map.allSatisfy { old[$0.key] == new[$0.value] })
+        // A whole-file reformat leaves nothing to place, at once.
+        let reformatted = old.map { "    " + $0 }
+        #expect(TextSearch.lineMap(from: old.map(\.hashValue), to: reformatted.map(\.hashValue)).isEmpty)
+    }
 }

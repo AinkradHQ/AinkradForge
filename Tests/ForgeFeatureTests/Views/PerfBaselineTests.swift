@@ -209,6 +209,28 @@ final class PerfBaselineTests: XCTestCase {
         XCTAssertLessThan(replaced, 3_000, "Replace All blocked the main thread \(Self.format(replaced)) ms")
     }
 
+    /// A 20k-line file with one dismissed match, reformatted outside (every line re-indented), then Replace's plan
+    /// (E1D5 FD69: 8.5 s on the main thread, Myers line diff of a rewrite).
+    func testReplacePlanAfterAWholeFileRewrite() throws {
+        let lines = (0..<20_000).map { $0 % 1_000 == 0 ? "let isSelected\($0) = \($0)" : "let value\($0) = \($0)" }
+        let file = root.appendingPathComponent("Big.swift")
+        try (lines.joined(separator: "\n") + "\n").write(to: file, atomically: true, encoding: .utf8)
+        let model = Self.model(opening: root)
+        model.search.query.text = "isSelected"
+        model.search.replacement = "isActive"
+        model.rerunSearch()
+        SweepSupport.spin(until: 10) { if case .done = model.search.status { true } else { false } }
+        model.search.dismiss("Big.swift", line: 5_001)
+        try (lines.map { "    " + $0 }.joined(separator: "\n") + "\n").write(to: file, atomically: true, encoding: .utf8)
+
+        let start = ContinuousClock.now
+        let plan = model.replacePlan(for: "Big.swift", keepingUnticked: true)
+        let elapsed = Self.milliseconds(ContinuousClock.now - start)
+        print("PERF replace-plan-rewrite lines=20000 plan=\(Self.format(elapsed))ms")
+        XCTAssertNotNil(plan)
+        XCTAssertLessThan(elapsed, 1_000, "the plan after a rewrite blocked the main thread \(Self.format(elapsed)) ms")
+    }
+
     // MARK: - Support
 
     /// Opens `folder` with no language server (a server's start-up is not what these time).
