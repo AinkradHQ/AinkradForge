@@ -89,10 +89,15 @@ private struct TabRowActions: View {
         HStack(spacing: skin.size.s6) {
             if model.availableCommands.contains(.splitRight) {
                 AinkradIconButton(systemName: "rectangle.split.2x1", tooltip: model.titled("Split right", .splitRight)) { model.run(.splitRight) }
+                    .accessibilityLabel("Split right")
+                    .accessibilityHint(model.shortcutHint(.splitRight))
             }
             AinkradIconButton(systemName: "keyboard", tooltip: model.titled("Terminal", .toggleTerminal)) { model.run(.toggleTerminal) }
+                .accessibilityLabel("Terminal")
+                .accessibilityHint(model.shortcutHint(.toggleTerminal))
             AinkradMenuButton(items: moreItems) { IconMenuLabel(systemName: "ellipsis") }
                 .help("More")
+                .accessibilityLabel("More")
         }
         .fixedSize()
     }
@@ -203,6 +208,8 @@ struct EditorTab: View {
                     .buttonStyle(.plain)
                     .opacity(isHovered || isActive ? 1 : 0)
                     .help("Close (⌘W)")
+                    .accessibilityLabel("Close \(name)")
+                    .accessibilityHint("Shortcut ⌘W")
                 }
             }
             .frame(width: skin.size.s10, height: skin.size.s10)

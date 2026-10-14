@@ -21,11 +21,11 @@ struct ReviewBar: View {
             }
             Spacer(minLength: skin.size.s8)
             HStack(spacing: skin.size.s4) {
-                RowAction(glyph: "‹", help: "Previous Change") { model.stepChange(path, by: -1) }
+                RowAction(glyph: "‹", name: "Previous change") { model.stepChange(path, by: -1) }
                 Text("\((model.agent.current[path] ?? 0) + 1) of \(count)")
                     .font(skin.font(AinkradFontToken(sizeKey: "t11", monospacedDigits: true)))
                     .foregroundStyle(skin.color(skin.text.faint))
-                RowAction(glyph: "›", help: "Next Change") { model.stepChange(path, by: 1) }
+                RowAction(glyph: "›", name: "Next change") { model.stepChange(path, by: 1) }
             }
             .fixedSize()
             AinkradButton(title: "Undo All", style: .secondary) { model.undoAllChanges(path) }.secondaryAccent().fixedSize()

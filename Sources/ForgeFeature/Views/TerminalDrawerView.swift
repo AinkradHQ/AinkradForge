@@ -33,6 +33,8 @@ struct TerminalDrawerView: View {
                 }
                 .buttonStyle(.plain)
                 .help(model.titled("New Terminal", .newTerminal))
+                .accessibilityLabel("New terminal")
+                .accessibilityHint(model.shortcutHint(.newTerminal))
                 Spacer(minLength: skin.size.s8)
                 TasksPill(isActive: drawer.showsTasks, help: model.titled("Tasks — run one", .runTask)) { drawer.showsTasks = true }
                 AinkradIconButton(
@@ -41,9 +43,13 @@ struct TerminalDrawerView: View {
                 ) { drawer.isMaximised.toggle() }
                 .textGlyph(drawer.isMaximised ? "⤡" : "⤢", size: skin.size.s14)
                 .outlineBox()
+                .accessibilityLabel(drawer.isMaximised ? "Restore terminal" : "Maximise terminal")
+                .accessibilityHint(model.shortcutHint(.maximiseTerminal))
                 AinkradIconButton(systemName: "xmark", tooltip: model.titled("Hide", .toggleTerminal)) { drawer.isOpen = false }
                     .textGlyph("✕", size: skin.size.s14)
                     .outlineBox()
+                    .accessibilityLabel("Hide terminal")
+                    .accessibilityHint(model.shortcutHint(.toggleTerminal))
             }
             .padding(.horizontal, skin.size.s10)
             .padding(.top, skin.size.s8)
@@ -161,6 +167,7 @@ private struct DrawerTab: View {
             }
             .buttonStyle(.plain)
             .help("Close Terminal")
+            .accessibilityLabel("Close \(tab.title)")
             .opacity(isHovered || !tab.ended || tab.command == nil ? 1 : 0)
         }
         .padding(.vertical, skin.size.s4)

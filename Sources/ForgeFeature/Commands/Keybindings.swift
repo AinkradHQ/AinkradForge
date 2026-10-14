@@ -36,6 +36,11 @@ extension ForgeModel {
         shortcut(for: command).map { "\(title) (\($0.display))" } ?? title
     }
 
+    /// VoiceOver's hint for a control: its shortcut, which stays out of the control's name (E1D4 FD60).
+    func shortcutHint(_ command: ForgeCommand) -> String {
+        shortcut(for: command).map { "Shortcut \($0.display)" } ?? ""
+    }
+
     /// "✓ Keep ⌘↵": a label with the chord after it, the user's after a rebind.
     func labelled(_ title: String, _ command: ForgeCommand) -> String {
         shortcut(for: command).map { "\(title) \($0.display)" } ?? title

@@ -27,8 +27,8 @@ struct ResultFileRow: View {
 
     /// The row's ⇄ or ✕, also run from the keyboard when the row has focus.
     private var action: RowAction? {
-        if let onReplace { return RowAction(glyph: "⇄", help: "Replace in this file (⇧↵)", action: onReplace) }
-        return onDismiss.map { RowAction(glyph: "✕", help: "Dismiss this file's results (⌫)", action: $0) }
+        if let onReplace { return RowAction(glyph: "⇄", name: "Replace in this file", key: .shiftReturn, action: onReplace) }
+        return onDismiss.map { RowAction(glyph: "✕", name: "Dismiss this file's results", key: .delete, action: $0) }
     }
 
     private var label: some View {
@@ -80,10 +80,25 @@ struct CountPill: View {
 /// it: the focused row runs it from the keyboard instead (FD46) — ⌫ for ✕, ⇧↵ for ⇄ — and VoiceOver lists it
 /// as the row's action.
 struct RowAction: View {
+    /// The key a focused row runs it on.
+    enum Key {
+        case delete, shiftReturn
+
+        var symbol: String { self == .delete ? "⌫" : "⇧↵" }
+        var spoken: String { self == .delete ? "Delete" : "Shift-Return" }
+    }
+
     let glyph: String
-    let help: String
+    /// What VoiceOver calls it: words, never the glyph or the key ("Dismiss result") — E1D4 FD60.
+    let name: String
+    var key: Key?
     let action: () -> Void
     @Environment(\.ainkradSkin) private var skin
+
+    /// The tooltip: the name, then the key ("Dismiss result (⌫)").
+    var help: String { key.map { "\(name) (\($0.symbol))" } ?? name }
+    /// VoiceOver's hint: the key, in words.
+    var hint: String { key.map { "Or press \($0.spoken) on the row" } ?? "" }
 
     var body: some View {
         Button(action: action) {  // design-lint: allow raw-control row text action (mockup .act; kit icon buttons are boxed)
@@ -94,15 +109,17 @@ struct RowAction: View {
         }
         .buttonStyle(.plain)
         .help(help)
+        .accessibilityLabel(name)
+        .accessibilityHint(hint)
     }
 
     /// Whether a focused row runs it on this key: ⌫ dismisses, ⇧↵ replaces now (as ⇧↵ renames now).
-    func runs(on key: KeyEquivalent, modifiers: EventModifiers) -> Bool {
+    func runs(on pressed: KeyEquivalent, modifiers: EventModifiers) -> Bool {
         let modifiers = modifiers.intersection([.command, .option, .control, .shift])
-        switch glyph {
-        case "✕": return key == .delete && modifiers.isEmpty
-        case "⇄": return key == .return && modifiers == .shift
-        default: return false
+        switch key {
+        case .delete: return pressed == .delete && modifiers.isEmpty
+        case .shiftReturn: return pressed == .return && modifiers == .shift
+        case nil: return false
         }
     }
 }
@@ -116,7 +133,7 @@ extension View {
                 action.action()
                 return .handled
             }
-            .accessibilityAction(named: action.help, action.action)
+            .accessibilityAction(named: action.name, action.action)
         } else {
             self
         }

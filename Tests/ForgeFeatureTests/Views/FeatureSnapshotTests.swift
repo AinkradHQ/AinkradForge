@@ -66,11 +66,11 @@ final class FeatureSnapshotTests: XCTestCase {
         let match = LineMatch(line: 19, text: "            if isSelected { Capsule().glassEffect(.regular) }", ranges: [NSRange(location: 15, length: 10)])
         let rows = VStack(spacing: 0) {
             ResultLineRow(
-                match: match, isSelected: true, replacement: nil, action: RowAction(glyph: "✕", help: "Dismiss") {},
+                match: match, isSelected: true, replacement: nil, action: RowAction(glyph: "✕", name: "Dismiss result", key: .delete) {},
                 onClick: {}, onDoubleClick: {})
             ResultLineRow(
                 match: match, isSelected: true, replacement: { _, _ in "isActive" },
-                action: RowAction(glyph: "⇄", help: "Replace this one") {}, onClick: {}, onDoubleClick: {})
+                action: RowAction(glyph: "⇄", name: "Replace this match", key: .shiftReturn) {}, onClick: {}, onDoubleClick: {})
         }
         .frame(width: 280)
         try Snapshot.assertMatches(rows, named: "result-actions", size: CGSize(width: 300, height: 80))

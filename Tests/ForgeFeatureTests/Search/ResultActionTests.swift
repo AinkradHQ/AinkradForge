@@ -169,12 +169,16 @@ struct ResultActionTests {
 
     @Test func aFocusedRowRunsItsActionFromTheKeyboard() {
         // FD46: the nested ✕ / ⇄ can't take Full Keyboard Access focus, so the focused row runs them: ⌫ and ⇧↵.
-        let dismiss = RowAction(glyph: "✕", help: "Dismiss") {}
+        let dismiss = RowAction(glyph: "✕", name: "Dismiss result", key: .delete) {}
         #expect(dismiss.runs(on: .delete, modifiers: []))
         #expect(!dismiss.runs(on: .delete, modifiers: .command) && !dismiss.runs(on: .return, modifiers: .shift))
-        let replace = RowAction(glyph: "⇄", help: "Replace this one") {}
+        let replace = RowAction(glyph: "⇄", name: "Replace this match", key: .shiftReturn) {}
         #expect(replace.runs(on: .return, modifiers: .shift))
         #expect(!replace.runs(on: .return, modifiers: []) && !replace.runs(on: .delete, modifiers: []))
-        #expect(!RowAction(glyph: "‹", help: "Previous") {}.runs(on: .delete, modifiers: []))
+        #expect(!RowAction(glyph: "‹", name: "Previous change") {}.runs(on: .delete, modifiers: []))
+        // E1D4 FD60: VoiceOver names are words; the key goes to the tooltip and the hint, never the name.
+        #expect(dismiss.help == "Dismiss result (⌫)" && dismiss.hint == "Or press Delete on the row")
+        #expect(RowAction(glyph: "✕", name: "Hide for this session") {}.help == "Hide for this session")
+        for action in [dismiss, replace] { #expect(!action.name.contains(where: { "✕⇄⌫⇧↵".contains($0) })) }
     }
 }
